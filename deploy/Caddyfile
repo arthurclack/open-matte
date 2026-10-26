@@ -1,0 +1,30 @@
+# Caddy gets and renews the HTTPS certificate for $DOMAIN by itself.
+# The domain's DNS must point at this server before the first start.
+
+{$DOMAIN} {
+	# Compress pages and API responses. Video is already compressed.
+	encode {
+		zstd
+		gzip
+		match {
+			header Content-Type text/*
+			header Content-Type application/json*
+			header Content-Type application/javascript*
+			header Content-Type application/vnd.apple.mpegurl*
+			header Content-Type image/svg+xml*
+		}
+	}
+
+	reverse_proxy app:3000
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}
+
+# To send another name here as well (say the bare domain to www), add a block:
+#
+# example.com {
+# 	redir https://{$DOMAIN}{uri} permanent
+# }

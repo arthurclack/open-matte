@@ -1,0 +1,41 @@
+# Open Matte behind Caddy. Run from this directory:
+#   docker compose up -d --build
+# Settings come from .env next to this file (see .env.example).
+
+services:
+  app:
+    build: ..
+    restart: unless-stopped
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in deploy/.env}
+      PUBLIC_URL: https://${DOMAIN:?Set DOMAIN in deploy/.env}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      BACKUP_DIR: /backups
+    volumes:
+      - ${DATA_PATH:-/srv/open-matte/data}:/data
+      # Daily database backups. Create the folder first, owned by uid 1000.
+      - ${BACKUP_PATH:-/srv/open-matte/backups}:/backups
+      # Read-only: the app never writes to your films.
+      - ${MEDIA_PATH:-/srv/open-matte/media}:/media:ro
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

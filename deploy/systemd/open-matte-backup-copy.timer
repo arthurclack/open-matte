@@ -1,0 +1,10 @@
+# Runs the copy every day, after the app's 04:00 UTC backup.
+[Unit]
+Description=Copy Open Matte backups to the Storage Box daily
+
+[Timer]
+OnCalendar=*-*-* 04:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

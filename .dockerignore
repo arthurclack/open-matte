@@ -1,0 +1,12 @@
+node_modules
+dist
+data
+media
+deploy
+test
+scripts
+docs
+.env
+.git
+.claude
+*.md

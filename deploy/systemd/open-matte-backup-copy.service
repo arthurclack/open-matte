@@ -1,0 +1,15 @@
+# Copies Open Matte's database backups to network storage (a Hetzner Storage
+# Box mounted at /srv/open-matte/media, here). See docs/deploying.md.
+[Unit]
+Description=Copy Open Matte backups to the Storage Box
+# Mount the storage first, and don't run (or copy into an empty mount point) without it.
+RequiresMountsFor=/srv/open-matte/media
+After=network-online.target
+
+[Service]
+Type=oneshot
+# The user that owns /srv/open-matte (uid 1000 matches the app's container user).
+User=arthur
+# Network shares often can't store Unix permissions, so copy contents and times only.
+# The leading dot keeps the folder out of the film scan.
+ExecStart=/usr/bin/rsync -rt --delete --no-perms /srv/open-matte/backups/ /srv/open-matte/media/.open-matte-backups/
