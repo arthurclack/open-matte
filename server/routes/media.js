@@ -1,3 +1,4 @@
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
 import { filmMedia } from '../films.js';
@@ -45,7 +46,7 @@ export function mediaRoutes({ db, sessions, access, mediaDir, metadata }) {
   const router = express.Router();
   const filmBySlug = db.prepare('SELECT * FROM films WHERE slug = ?');
 
-  router.get('/media/:slug/*rest', (req, res) => {
+  router.get('/media/:slug/*rest', async (req, res) => {
     const film = filmBySlug.get(req.params.slug);
     const rel = path.posix.normalize([].concat(req.params.rest).join('/'));
     const ext = path.extname(rel).toLowerCase();
@@ -63,15 +64,38 @@ export function mediaRoutes({ db, sessions, access, mediaDir, metadata }) {
     const root = path.join(mediaDir, film.slug);
     const file = path.resolve(root, rel);
     if (!file.startsWith(root + path.sep)) return res.status(404).end();
+    // Where the file really is must be inside the film folder too, so a
+    // symlink can't serve something from elsewhere on the server.
+    let real;
+    let realRoot;
+    try {
+      [real, realRoot] = await Promise.all([fsp.realpath(file), fsp.realpath(root)]);
+    } catch (err) {
+      // Anything but a missing file (permissions, network storage briefly
+      // unavailable) is the server's problem, and players retry those.
+      const missing = ['ENOENT', 'ENOTDIR', 'ENAMETOOLONG'].includes(err.code);
+      logDenied(req, missing ? 404 : 500, missing ? 'file missing from the film folder' : err.message);
+      return res.status(missing ? 404 : 500).end();
+    }
+    if (!real.startsWith(realRoot + path.sep)) {
+      logDenied(req, 404, 'symlink to a file outside the film folder');
+      return res.status(404).end();
+    }
 
     res.set('Content-Type', TYPES[ext]);
     // Playlists may change when a film is re-imported; segment files don't.
     // Either way, only the viewer's own browser may cache them.
     res.set('Cache-Control', ext === '.m3u8' || ext === '.vtt' ? 'private, no-cache' : 'private, max-age=86400');
-    res.sendFile(file, { dotfiles: 'deny' }, (err) => {
-      if (!err || res.headersSent) return;
-      const status = err.statusCode === 404 || err.code === 'ENOENT' ? 404 : 500;
-      logDenied(req, status, status === 404 ? 'file missing from the film folder' : err.message);
+    res.sendFile(path.relative(realRoot, real), { root: realRoot, dotfiles: 'deny' }, (err) => {
+      // Done, or the viewer went away mid-download (seeking, closing the tab).
+      if (!err || err.code === 'ECONNABORTED' || res.headersSent) return;
+      // send's own refusals (a range past the end, a hidden file) keep their
+      // 4xx; failing to read the file is a 500, which players retry.
+      const hidden = err.statusCode === 403;
+      const status = hidden || err.code === 'ENOENT' ? 404 : err.statusCode >= 400 && err.statusCode < 500 ? err.statusCode : 500;
+      logDenied(req, status, hidden ? 'hidden file' : status === 404 ? 'file missing from the film folder' : err.message);
+      // The error isn't the file: don't describe or cache it as if it were.
+      for (const h of ['Content-Type', 'Content-Length', 'Cache-Control']) res.removeHeader(h);
       res.status(status).end();
     });
   });

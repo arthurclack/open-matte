@@ -79,6 +79,27 @@ test('an incomplete upload is caught segment by segment', () => {
   assert.ok(r.errors.some((e) => /Audio "French".*first: init.mp4/.test(e)), r.errors.join('\n'));
 });
 
+test('symlinks are fine inside the folder and an error when they lead out of it', () => {
+  const { mediaDir, dir } = fresh();
+  // A poster linked to another file in the folder is fine.
+  fs.renameSync(path.join(dir, 'poster.jpg'), path.join(dir, 'poster-original.jpg'));
+  fs.symlinkSync(path.join(dir, 'poster-original.jpg'), path.join(dir, 'poster.jpg'));
+  assert.deepEqual(inspectFilm(dir, 'arrival').errors, []);
+
+  // An audio rendition and a subtitle file kept elsewhere and linked in are not:
+  // the server would refuse to serve them.
+  const shared = path.join(mediaDir, '_shared');
+  fs.mkdirSync(shared);
+  fs.renameSync(path.join(dir, 'hls', 'a_fr'), path.join(shared, 'a_fr'));
+  fs.symlinkSync(path.join(shared, 'a_fr'), path.join(dir, 'hls', 'a_fr'));
+  fs.renameSync(path.join(dir, 'subtitles', 'en.vtt'), path.join(shared, 'en.vtt'));
+  fs.symlinkSync(path.join(shared, 'en.vtt'), path.join(dir, 'subtitles', 'en.vtt'));
+  const r = inspectFilm(dir, 'arrival');
+  assert.equal(r.status, 'error');
+  assert.ok(r.errors.some((e) => /Audio "French": hls\/a_fr\/index.m3u8 is a symlink to somewhere outside/.test(e)), r.errors.join('\n'));
+  assert.ok(r.errors.some((e) => /subtitles\[0\].file: "subtitles\/en.vtt" is a symlink to somewhere outside/.test(e)), r.errors.join('\n'));
+});
+
 test('an unfinished playlist is an error', () => {
   const { dir } = fresh();
   const p = path.join(dir, 'hls', 'v_hevc_1080', 'index.m3u8');

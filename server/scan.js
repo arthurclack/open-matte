@@ -180,6 +180,16 @@ export function inspectFilm(dir, slug, previous = null) {
   let tmdbId = null;
   const inside = (p) => p.startsWith(dir + path.sep);
   const rel = (abs) => path.relative(dir, abs).split(path.sep).join('/');
+  // Symlinks are fine while they stay inside the folder: the server won't
+  // serve a file that really lives anywhere else (see routes/media.js).
+  const realDir = fs.realpathSync(dir);
+  const leaves = (abs) => {
+    try {
+      return !fs.realpathSync(abs).startsWith(realDir + path.sep);
+    } catch {
+      return false; // Missing files are reported elsewhere.
+    }
+  };
 
   // What the folder's contents looked like: playlists and how full each segment folder is.
   const signature = [];
@@ -234,6 +244,10 @@ export function inspectFilm(dir, slug, previous = null) {
     const abs = path.resolve(dir, norm);
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
       errors.push(`${field}: "${rel}" does not exist`);
+      return null;
+    }
+    if (leaves(abs)) {
+      errors.push(`${field}: "${rel}" is a symlink to somewhere outside the film folder`);
       return null;
     }
     return norm;
@@ -382,6 +396,10 @@ export function inspectFilm(dir, slug, previous = null) {
       errors.push(`${what}: ${rel(abs)} is missing`);
       return null;
     }
+    if (leaves(abs)) {
+      errors.push(`${what}: ${rel(abs)} is a symlink to somewhere outside the film folder`);
+      return null;
+    }
     noteFile(abs);
     const pl = parseMediaPlaylist(fs.readFileSync(abs, 'utf8'));
     if (!pl.ended) errors.push(`${what}: ${rel(abs)} is not a complete video-on-demand playlist (no #EXT-X-ENDLIST)`);
@@ -394,6 +412,9 @@ export function inspectFilm(dir, slug, previous = null) {
       return !inside(p) || !exists(p);
     });
     if (missing.length) errors.push(`${what}: ${missing.length} of ${files.size} segment files are missing (first: ${missing[0]})`);
+    // Too many segments to resolve one by one, but only a few folders hold them.
+    const away = [...new Set([...files].map((f) => path.dirname(path.resolve(base, f.split('?')[0]))))].filter((d) => inside(d) && leaves(d));
+    if (away.length) errors.push(`${what}: the segment folder ${rel(away[0])} is a symlink to somewhere outside the film folder`);
     return pl;
   }
 

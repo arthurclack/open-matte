@@ -2,10 +2,18 @@
 #   docker compose up -d --build
 # Settings come from .env next to this file (see .env.example).
 
+# Docker keeps container logs forever unless told otherwise.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
 services:
   app:
     build: ..
     restart: unless-stopped
+    logging: *logging
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in deploy/.env}
       PUBLIC_URL: https://${DOMAIN:?Set DOMAIN in deploy/.env}
@@ -23,6 +31,7 @@ services:
   caddy:
     image: caddy:2
     restart: unless-stopped
+    logging: *logging
     depends_on:
       - app
     ports:

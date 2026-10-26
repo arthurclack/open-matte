@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 process.env.ADMIN_PASSWORD ??= 'test-password-123';
-process.env.COOKIE_SECURE = 'false';
+process.env.COOKIE_SECURE ??= 'false';
 
 const { openDb } = await import('../server/db.js');
 const { createApp } = await import('../server/app.js');

@@ -38,11 +38,13 @@ The data directory must be writable by uid 1000 (the container's `node` user).
 ## Adding a film
 
 ```bash
-rsync -av --partial --progress media/arrival/ my-server:/srv/open-matte/media/arrival/
+rsync -av --partial-dir=.rsync-partial --progress media/arrival/ my-server:/srv/open-matte/media/arrival/
 ```
 
 Then press **Scan media folder** in the admin. If the scan reports missing
-segments, the copy didn't finish: run the same `rsync` again.
+segments, the copy didn't finish: run the same `rsync` again. `--partial-dir`
+keeps a half-copied file out of sight until it's complete (plain `--partial`
+would leave it under its real name, where a scan could take it for a whole one).
 
 ## Updating
 
@@ -98,8 +100,21 @@ docker compose start app
 Viewers stay signed in, because their sessions are in the backup too, unless
 the backup is older than their sign-in.
 
+**Restoring onto a new server.** Follow **First install** up to the point where
+`docker compose up` would run, copy the films back into `media`, and put the
+database (and `artwork`) in place as above before the first start. With the old
+server gone, take them from the off-server copy (`.open-matte-backups` on the
+Storage Box, if you set up the timer below). Use the same
+`DOMAIN`, or every ticket link you've sent stops working. The admin password
+isn't in the backup: it lives only in `deploy/.env`, so set a new one if the old
+`.env` is gone. A TMDB key saved in the admin is in the backup; one set in `.env`
+is not.
+
 ## Logs
 
 ```bash
 cd /srv/open-matte/app/deploy && docker compose logs -f app
 ```
+
+Each container keeps at most 50 MB of logs (five files of 10 MB), set in
+`deploy/compose.yml`.

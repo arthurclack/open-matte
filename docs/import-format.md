@@ -118,5 +118,14 @@ the metadata. Each later scan compares field by field:
 Media (playlists, artwork, subtitles) always follows the folder. New films are
 always unpublished. A film whose folder disappears is marked missing, not deleted.
 
+Don't rename a film's folder once tickets are out. Tickets belong to the film,
+not its address, but a renamed folder imports as a new, unpublished film, and the
+old one (with its tickets) is marked missing. Renaming it back restores it, and
+leaves the film created under the new name behind, marked missing.
+
+Symlinks inside a film folder are fine if they point to something in the same
+folder. The server never serves a file that really lives anywhere else, and the
+scan reports a listed file, playlist or segment folder that does.
+
 A value TMDB filled in counts as the file's, not yours: if you later add that
 field to `film.json`, the file's value replaces it. See [metadata.md](metadata.md).

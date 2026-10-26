@@ -45,6 +45,8 @@ session and no "opened" event. The code is never used again after the exchange.
 | Switch device | The new device takes the screening over once the old one has paused, closed the tab, or gone quiet for about 75 seconds. Two devices can't play one screening at once. |
 | Reach the limit | No new screenings; an open one can still be resumed. |
 | Revoke the ticket | Page and media requests fail from the next request on. |
+| Unpublish the film | The page disappears and playback under way stops, for every ticket. Publishing again restores both; open screenings keep their place, and their resume windows keep running meanwhile. |
+| The film's folder goes missing, or a scan finds errors in it | The page stays and says the film isn't available right now; nothing plays and no screening can start. Resume windows keep running meanwhile. |
 
 A screening can be resumed for a fixed window after it starts: **48 hours** by
 default, set in the admin under Settings. Changing it affects new screenings only.
@@ -64,10 +66,28 @@ Every request under `/media/<film>/` is checked:
   this browser currently holds
 
 So knowing a file's URL is not enough, and neither is holding a ticket without
-pressing Play. Revocation stops future requests; it can't take back what is
+pressing Play. A ticket for one film unlocks nothing of another, and a file in a
+film folder that is really a symlink to somewhere outside it is never served.
+Media responses are marked `private`, so only the viewer's own browser caches them. Revocation stops future requests; it can't take back what is
 already in the player's buffer (typically under a minute of video).
 
 A browser signed in to the admin plays in preview mode and never uses a screening.
+
+## Secrets and sessions
+
+- Ticket codes are about 64 random bits. They're stored as they are, so the admin
+  can copy a link again later; anyone who can read the database could use them.
+- Session cookies are 256 random bits, HttpOnly, SameSite=Lax, and Secure over
+  HTTPS. The database keeps only their SHA-256 hash. Admin sign-out, session
+  expiry, ticket revocation and signing out every viewer (in Settings) take
+  effect on the server, from the next request.
+- The API accepts changes only as JSON, and refuses them when the browser says
+  they come from another site (`Sec-Fetch-Site: cross-site`).
+- The app never logs ticket codes, cookies or the admin password, and Caddy
+  keeps no access log. Pages send no Referer, so the code in a `/t/<code>`
+  address goes no further than that one request. The exception: if the app is
+  down or restarting when someone opens their link, Caddy's error log records
+  the address, code included.
 
 ## What is recorded
 

@@ -24,17 +24,20 @@ export function createApp({ db, mediaDir = config.mediaDir, webDist = config.web
   app.locals.backups = backups;
 
   app.use((req, res, next) => {
-    res.set('Referrer-Policy', 'same-origin');
+    // Nothing here needs a Referer, and from /t/<code> it would carry the ticket code.
+    res.set('Referrer-Policy', 'no-referrer');
     res.set('X-Frame-Options', 'DENY');
     res.set('X-Content-Type-Options', 'nosniff');
     next();
   });
 
-  // Mutating API calls must be JSON. Together with SameSite=Lax cookies this
-  // stops other sites from submitting forms against the API.
+  // Mutating API calls must be JSON, and browsers mustn't be sending them from
+  // another site (Sec-Fetch-Site). Together with SameSite=Lax cookies this stops
+  // other sites from acting with a viewer's or the admin's session.
   app.use('/api', (req, res, next) => {
-    if (req.method !== 'GET' && req.method !== 'HEAD' && !req.is('application/json')) {
-      return res.status(415).json({ error: 'json-required' });
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      if (req.get('sec-fetch-site') === 'cross-site') return res.status(403).json({ error: 'cross-site' });
+      if (!req.is('application/json')) return res.status(415).json({ error: 'json-required' });
     }
     next();
   });
