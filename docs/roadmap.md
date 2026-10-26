@@ -31,6 +31,8 @@ desktop, and how the tone-mapped SDR renditions look on a non-HDR screen.
 
 ## Milestone 2: people and passkeys
 
+Planned in [milestone-2.md](milestone-2.md), to be built in six slices.
+
 - People, and claiming a ticket into a person's account (an admin toggle per ticket)
 - Passkey enrollment and sign-in; HTTPS with a stable WebAuthn relying-party ID
 - Identity-enforced tickets, which require signing in as the assigned person,
@@ -49,7 +51,34 @@ desktop, and how the tone-mapped SDR renditions look on a non-HDR screen.
 
 ## Later
 
-- Upload tools and automated encoding
+- Upload tools and automated encoding: upload an original in the admin (resumable),
+  inspect it, encode it in the background with the existing recipe in a separate worker,
+  preview, then publish. Its own milestone; it needs a film's identity separated from
+  its folder name, and a benchmark on the server first
 - AV1 renditions
 - Collections
 - Serving media straight from Caddy with forward auth, if Node becomes the bottleneck
+
+## Ideas
+
+Things to consider once people and passkeys exist. None of them grants playback on its
+own: a programme, a note or a collection is presentation, and watching still needs a
+ticket.
+
+- A personal programme for each friend: "Start with this one, then these two", with a
+  note for each film
+- A sealed note for after the film, opened when the viewer says they've finished (not
+  tied to the 92% "finished" event), with an optional question back
+- Double bills and short seasons, curated by hand
+- A "surprise me" ticket that hides the title until the viewer reveals it, while the
+  running time, content notes, limits and expiry stay visible
+- A private response after watching ("Loved that", "Still thinking about it", "Not for
+  me", "Let's talk") with an optional sentence; no stars or reviews
+- Tickets as small invitation cards: a message, the film shown or hidden, a suggested
+  evening, a printable version
+- Pairing a TV by approving a short code on a signed-in phone, without using a screening
+- Screening nights: a shared page, a start time and an introduction, with everyone
+  watching on their own ticket (not synchronised)
+- A private viewing journal for members, which never implies they can still play a film
+- A short test clip to check picture, sound and subtitles before the first Play, which
+  never uses a screening
