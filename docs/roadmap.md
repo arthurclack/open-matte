@@ -49,7 +49,7 @@ Planned in [milestone-2.md](milestone-2.md) and built in six slices, all deploye
 - [ ] Device checks: Safari on iPhone and Mac, Chrome on Mac and Windows (with the
   phone's QR code), Android, desktop Firefox, a password manager, in-app browsers, a
   TV browser, AirPlay and Chromecast, a non-HDR screen
-- [ ] Decide whether the bare `openmatte.dev` redirects to `www`
+- [x] The bare `openmatte.dev` redirects to `www` (`REDIRECT_FROM`, 27 October)
 
 ## Milestone 3: polish and public release
 
