@@ -19,9 +19,12 @@ fails is worth a line about what you saw, and the server log
 - **In the admin, prepare:**
   1. **Publish** Test Pattern (it starts as a draft, and a ticket for a draft doesn't
      open), then issue a ticket **only for you**, signed in, with no screening limit.
-  2. A ticket **for anyone with the link** for Test Pattern, with **Let them keep it in
-     their account** ticked, and a second plain one for the TV.
-  3. **Show to members** on a film you have no ticket for (say Hedwig).
+  2. A plain ticket **for anyone with the link** for Test Pattern, for the TV.
+  3. **Show to members** on a film you have no ticket for (say Hedwig), and a ticket
+     **for anyone with the link** for that film with **Let them keep it in their
+     account** ticked. It has to be a film without a ticket of yours: once you're
+     signed in, the page shows your own ticket, and keeping is only offered for the
+     ticket the page shows.
 
 ## The checks on every device
 
@@ -44,10 +47,11 @@ Do these wherever a group says "the usual checks":
   with your setup link should be there already (Synced, in iCloud Keychain).
 - Mac Safari: the usual checks. The same passkey should come from iCloud Keychain, with
   Touch ID or your password.
-- On the Mac, also open the **for anyone** link in a private window: it plays with no
-  sign-in. Then sign in there and press **Keep it**; the ticket appears under Your
-  tickets on the iPhone without opening the link, and a second private window that
-  opened the link first is told "This ticket has been kept".
+- On the Mac, also open the **keepable** link (for Hedwig) in a browser that isn't
+  signed in, such as Chrome: it plays with no sign-in. Then open it in a private Safari
+  window, sign in there and press **Keep it**. Hedwig moves from Showing to members to
+  Your tickets on the iPhone, without opening the link, and Chrome is told "This
+  ticket has been kept".
 - **Keyboard only**, Mac Safari: turn on Safari ▸ Settings ▸ Advanced ▸ "Press Tab to
   highlight each item" (Safari skips links otherwise). Tab to Play, press Return, then
   Space pauses and the arrow keys seek. The name menu opens with Return and closes
@@ -114,7 +118,7 @@ and in an Instagram message, and open each from inside the app.
 | Where | Signed in | Your tickets, member film | Plays (audio, subtitles, quality) | Account page, sign out | Notes |
 |---|---|---|---|---|---|
 | iPhone Safari | Yes: passkey created with the setup link, 27 Oct | Yes (reported) | Yes, 27 Oct: Play and Resume on the ticket for you, no media errors | Not yet | Synced passkey (iCloud Keychain) |
-| Mac Safari | Yes, 27 Oct, with the iPhone's synced passkey from iCloud Keychain | | Not yet | Not yet | |
+| Mac Safari | Yes, 27 Oct, with the iPhone's synced passkey from iCloud Keychain; a private window carried its link ticket into the account | Your ticket's page, signed in | Yes, 27 Oct, from a link ticket with no sign-in | Not yet | Keep it: not yet (needs the Hedwig ticket) |
 | Mac Safari, keyboard only | – | – | | – | Chromium checked 27 Oct: Play, Space, menu |
 | Chrome on Mac | | | | | |
 | Chrome on Windows (QR code) | | | | | |
