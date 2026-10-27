@@ -113,8 +113,8 @@ and in an Instagram message, and open each from inside the app.
 
 | Where | Signed in | Your tickets, member film | Plays (audio, subtitles, quality) | Account page, sign out | Notes |
 |---|---|---|---|---|---|
-| iPhone Safari | Yes: passkey created with the setup link, 27 Oct | | | | Synced passkey (iCloud Keychain) |
-| Mac Safari | Yes, 27 Oct, with the iPhone's synced passkey from iCloud Keychain | | | | |
+| iPhone Safari | Yes: passkey created with the setup link, 27 Oct | Yes (reported) | Yes, 27 Oct: Play and Resume on the ticket for you, no media errors | Not yet | Synced passkey (iCloud Keychain) |
+| Mac Safari | Yes, 27 Oct, with the iPhone's synced passkey from iCloud Keychain | | Not yet | Not yet | |
 | Mac Safari, keyboard only | – | – | | – | Chromium checked 27 Oct: Play, Space, menu |
 | Chrome on Mac | | | | | |
 | Chrome on Windows (QR code) | | | | | |
