@@ -156,6 +156,15 @@ scripts/deploy.sh my-server
 This copies the code and rebuilds; the database and films are untouched.
 Database migrations run automatically on start.
 
+To run the tests on exactly the Node and SQLite the site now runs on (the server's
+image, which can differ from your computer's), use a throwaway container from that
+image, with no network and none of the site's data:
+
+```bash
+ssh my-server "docker run --rm --network none -e NODE_ENV=test \
+  -v /srv/open-matte/app/test:/app/test:ro -w /app deploy-app node --test 'test/*.test.js'"
+```
+
 Before the first milestone 2 update (people and passkeys), set `WEBAUTHN_RP_ID`
 (above), so it's in place before anyone creates a setup link, and check that no film
 folder is called `account`: that name is now reserved for the site, like `admin` and
