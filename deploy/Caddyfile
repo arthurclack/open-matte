@@ -1,7 +1,14 @@
 # Caddy gets and renews the HTTPS certificate for $DOMAIN by itself.
 # The domain's DNS must point at this server before the first start.
+# REDIRECT_FROM (optional, in deploy/.env) lists other names, such as the bare
+# domain, that are sent to $DOMAIN; Caddy gets certificates for those too.
 
-{$DOMAIN} {
+{$DOMAIN} {$REDIRECT_FROM} {
+	# Any name but DOMAIN goes to the same path on DOMAIN. Nothing is served
+	# there, so a passkey ceremony can only ever run on DOMAIN itself.
+	@elsewhere not host {$DOMAIN}
+	redir @elsewhere https://{$DOMAIN}{uri} permanent
+
 	# Compress pages and API responses. Video is already compressed.
 	encode {
 		zstd
@@ -22,9 +29,3 @@
 		-Server
 	}
 }
-
-# To send another name here as well (say the bare domain to www), add a block:
-#
-# example.com {
-# 	redir https://{$DOMAIN}{uri} permanent
-# }

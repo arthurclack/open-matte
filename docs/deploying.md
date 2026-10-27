@@ -34,6 +34,15 @@ docker compose up -d --build
 
 Caddy fetches a certificate on first start. Then open `https://your-domain/admin`.
 
+To send other names to the site, such as the bare domain when `DOMAIN` is
+`www.example.com`, list them as `REDIRECT_FROM` in `deploy/.env`, separated by spaces,
+and point their DNS at the server too: an A record, and an AAAA record only if
+`DOMAIN` has one (see [IPv6 and rate limits](#ipv6-and-rate-limits)). Caddy gets their
+certificates and answers every request there with a permanent redirect to the same
+path on `DOMAIN`; nothing else is served on them, so passkeys only ever run on
+`DOMAIN`. After changing it, `docker compose up -d caddy` picks it up. This deployment
+sends `openmatte.dev` to `www.openmatte.dev`.
+
 The data directory must be writable by uid 1000 (the container's `node` user).
 
 ## Passkeys
