@@ -182,6 +182,11 @@ export const MIGRATIONS = [
   `
   CREATE INDEX tickets_person ON tickets(person_id) WHERE person_id IS NOT NULL;
   `,
+  // Films shown to members: signed-in people see the page and poster. Playing
+  // still needs a ticket. Every existing film starts hidden from members.
+  `
+  ALTER TABLE films ADD COLUMN member_visible INTEGER NOT NULL DEFAULT 0 CHECK (member_visible IN (0, 1));
+  `,
 ];
 
 export function openDb(file) {

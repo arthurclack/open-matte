@@ -5,8 +5,8 @@ follows: `server/access.js` implements the ticket rules, `server/people.js` and
 `server/webauthn.js` people and passkeys, and the tests in `test/` check them.
 
 Milestone 2 is being built in slices, planned in [milestone-2.md](milestone-2.md).
-So far it adds people and passkeys, and tickets that only one person can use, signed
-in. Keeping a ticket in an account, films shown to members and an account page are
+So far it adds people and passkeys, tickets that only one person can use, signed in,
+and films shown to members. Keeping a ticket in an account and an account page are
 planned there, not built yet.
 
 ## The records
@@ -63,12 +63,12 @@ preview visit or a chat app's link scanner doesn't start the countdown.
 
 ### Who can do what
 
-| Browser | A ticket for anyone, whose link it opened | A ticket only for P |
-|---|---|---|
-| Anonymous | page, Play, stream | nothing (the link shows a sign-in page) |
-| Signed in as P | page, Play, stream | page, Play, stream, on every device |
-| Signed in as Q | page, Play, stream | nothing (the link says it's for someone else) |
-| P disabled | P's sessions are gone, so P is anonymous and can open link tickets again | nothing |
+| Browser | A ticket for anyone, whose link it opened | A ticket only for P | A film shown to members, with no ticket for it |
+|---|---|---|---|
+| Anonymous | page, Play, stream | nothing (the link shows a sign-in page) | nothing |
+| Signed in as P | page, Play, stream | page, Play, stream, on every device | page and poster |
+| Signed in as Q | page, Play, stream | nothing (the link says it's for someone else) | page and poster |
+| P disabled | P's sessions are gone, so P is anonymous and can open link tickets again | nothing | nothing |
 
 The rules behind both tables:
 
@@ -80,7 +80,8 @@ The rules behind both tables:
    and its person exists and isn't disabled, checked on every request (see
    [Signing in and out](#signing-in-and-out)).
 4. **Listing never grants playback.** Your tickets shows only tickets the browser
-   could use anyway; being listed lets nothing play.
+   could use anyway, and a film shown to members is only listed and described;
+   being listed lets nothing play.
 5. Who may use a ticket is decided in one place, the lookups in `server/access.js`. A
    ticket's own state (its limits, expiry and revocation) is the same whoever asks.
 
@@ -115,6 +116,31 @@ Your tickets on every device they sign in on. For such a ticket, **Opened** on t
 admin's ticket page is the first time they opened its link or its film page, signed
 in.
 
+## Films shown to members
+
+Each film has a **Show to members** switch on its admin page, off to begin with. While
+it's on and the film is published, every browser signed in as a person sees the film
+under **Showing to members** on the front page, marked "No ticket yet", and can read
+its page: poster, backdrop, details and your recommendation. Where Play would be,
+the page says they don't have a ticket and to ask whoever runs the cinema.
+
+- **It never plays.** Play is refused (`no-ticket`) and no screening starts, and
+  playlists, segments, audio and subtitles are refused exactly as for any film
+  without a ticket. To let someone watch, issue them a ticket: the film then moves
+  to Your tickets and plays.
+- **Only signed-in people see it.** A browser that isn't signed in gets the front
+  page it always did, and the film's address says nothing is showing there, even if
+  the browser holds link tickets for other films.
+- **It goes from the next request** when you switch it off or unpublish the film,
+  or when the person signs out or is disabled. Switching it off doesn't affect
+  tickets for the film.
+- **A ticket in a worse state wins.** Someone whose ticket for the film is used up
+  or expired sees that ticket's page, which says so, not the member page. Someone
+  whose ticket was revoked sees the member page again.
+- **Reading it records nothing**: no "opened" event, and no ticket is marked as
+  opened.
+- A draft can be switched on ahead of time: members see it once it's published.
+
 ## Screenings
 
 | Action | Result |
@@ -147,7 +173,8 @@ oldest. The film page, Play and Your tickets all go by the same choice.
 
 Every request under `/media/<film>/` is checked:
 
-- posters and backdrops need a ticket that can see the film page
+- posters and backdrops need whatever lets the browser see the film page: a ticket,
+  or, for a film shown to members, being signed in as a person
 - master and child playlists, init segments, media segments, audio and subtitles
   need a valid session that may use a ticket for that film under the rules above
   (it opened the link of a ticket for anyone, or it's signed in as the ticket's
@@ -378,7 +405,8 @@ Viewing:
 
 When the browser is signed in, Activity shows the person against these, read from
 the session: nothing more is stored. Events from before they signed in stay
-anonymous.
+anonymous. Reading the page of a film shown to members, without a ticket, records
+nothing.
 
 People and passkeys:
 

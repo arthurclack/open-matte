@@ -81,7 +81,14 @@ export default function Films() {
                       </span>
                     </Link>
                   </td>
-                  <td data-label="Status">{f.published ? <span className="badge good">Published</span> : <span className="badge">Draft</span>}</td>
+                  <td data-label="Status">
+                    {f.published ? <span className="badge good">Published</span> : <span className="badge">Draft</span>}
+                    {f.memberVisible && (
+                      <span className="badge" style={{ marginLeft: 6 }} title={f.published ? 'Shown to signed-in members' : 'Shown to signed-in members once published'}>
+                        Members
+                      </span>
+                    )}
+                  </td>
                   <td data-label="Media">
                     <MediaBadge status={f.mediaStatus} />
                   </td>

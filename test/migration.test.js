@@ -90,6 +90,7 @@ describe('a milestone 1 database', () => {
     assert.ok(columns(db, 'tickets').includes('person_id'));
     for (const c of ['person_id', 'passkey_id', 'signed_in_at']) assert.ok(columns(db, 'sessions').includes(c), c);
     assert.ok(columns(db, 'events').includes('person_id'));
+    assert.ok(columns(db, 'films').includes('member_visible'));
     assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
     const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((i) => i.name);
     for (const i of ['people_name', 'person_links_person', 'passkeys_person', 'sessions_person', 'sessions_passkey', 'events_person']) assert.ok(indexes.includes(i), i);
@@ -111,6 +112,7 @@ describe('a milestone 1 database', () => {
       assert.equal(r.signed_in_at, null);
     }
     for (const r of rows(db, 'events')) assert.equal(r.person_id, null, 'guest history is never rewritten');
+    for (const r of rows(db, 'films')) assert.equal(r.member_visible, 0, 'every film is hidden from members');
   });
 
   test('foreign_key_check is empty', () => {

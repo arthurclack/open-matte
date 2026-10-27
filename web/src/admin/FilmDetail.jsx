@@ -62,6 +62,11 @@ export default function FilmDetail() {
     }
   }
 
+  async function setMemberVisible(memberVisible) {
+    const r = await action.run(() => api.patch(`/api/admin/films/${film.id}`, { memberVisible }));
+    if (r) setData(r);
+  }
+
   async function resetMetadata() {
     if (!window.confirm('Replace your edits with the values from film.json?')) return;
     const r = await action.run(() => api.post(`/api/admin/films/${film.id}/reset-metadata`));
@@ -84,6 +89,7 @@ export default function FilmDetail() {
           <div className="row" style={{ gap: '0.5rem' }}>
             <span className="faint mono">/{film.slug}</span>
             {film.published ? <span className="badge good">Published</span> : <span className="badge">Draft</span>}
+            {film.memberVisible && <span className="badge">Members</span>}
             <MediaBadge status={film.mediaStatus} />
           </div>
         </div>
@@ -124,6 +130,18 @@ export default function FilmDetail() {
           </ul>
         </div>
       )}
+
+      <label className="check top card">
+        <input type="checkbox" checked={film.memberVisible} onChange={(e) => setMemberVisible(e.target.checked)} disabled={action.busy} />
+        <span>
+          <strong>Show to members</strong>
+          <br />
+          <span className="dim">
+            Signed-in members see it on their front page and can read its page. Watching still needs a ticket.
+            {!film.published && " They'll see it once it's published."}
+          </span>
+        </span>
+      </label>
 
       <h2>Tickets</h2>
       {!film.published && <p className="dim">Tickets only open the film once it's published. You can issue them now and send them later.</p>}

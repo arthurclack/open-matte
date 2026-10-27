@@ -102,6 +102,8 @@ export function adminRoutes(deps) {
     return {
       ...out,
       published: Boolean(f.published),
+      // Listed for signed-in people once published; playing still needs a ticket.
+      memberVisible: Boolean(f.member_visible),
       sortOrder: f.sort_order,
       mediaStatus,
       scanReport,
@@ -173,6 +175,7 @@ export function adminRoutes(deps) {
       }
       sets.push('published = ?'), args.push(b.published ? 1 : 0);
     }
+    if ('memberVisible' in b) sets.push('member_visible = ?'), args.push(b.memberVisible ? 1 : 0);
     if (sets.length) db.prepare(`UPDATE films SET ${sets.join(', ')}, updated_at = ? WHERE id = ?`).run(...args, Date.now(), f.id);
     res.json(adminFilm(getFilm(f.id)));
   });

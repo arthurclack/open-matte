@@ -165,7 +165,16 @@ CREATE INDEX events_person ON events(person_id, at) WHERE person_id IS NOT NULL;
 CREATE INDEX tickets_person ON tickets(person_id) WHERE person_id IS NOT NULL;
 ```
 
-### Migration 5 (slice 3): keeping
+Slice 4 shipped before slice 3 (27 October), so films shown to members are migration 5
+and keeping is migration 6.
+
+### Migration 5 (slice 4): films shown to members
+
+```sql
+ALTER TABLE films ADD COLUMN member_visible INTEGER NOT NULL DEFAULT 0 CHECK (member_visible IN (0, 1));
+```
+
+### Migration 6 (slice 3): keeping
 
 ```sql
 -- Only a ticket for anyone can be keepable; only a ticket with a person can have been kept.
@@ -177,12 +186,6 @@ ALTER TABLE tickets ADD COLUMN claimed_at INTEGER
 
 A keep therefore sets `person_id`, `claimed_at` and `claimable = 0` in one UPDATE,
 and a release clears `person_id` and `claimed_at` together.
-
-### Migration 6 (slice 4): films shown to members
-
-```sql
-ALTER TABLE films ADD COLUMN member_visible INTEGER NOT NULL DEFAULT 0 CHECK (member_visible IN (0, 1));
-```
 
 ### Existing rows
 
@@ -847,7 +850,7 @@ after **Back up now**.
 
 ### Slice 3: keeping a ticket
 
-- **Scope:** migration 5; `keep` and `setTicketPerson`; `POST /api/films/:slug/keep`;
+- **Scope:** migration 6; `keep` and `setTicketPerson`; `POST /api/films/:slug/keep`;
   `canKeep`; the "Let them keep it" box when issuing and editing; release and give; the
   keep panel, including Sign in and keep it; `ticket-kept` answers; the kept, given and
   released events; `usable` ordering by `COALESCE(claimed_at, created_at)`.
@@ -866,7 +869,7 @@ after **Back up now**.
 
 ### Slice 4: films shown to members
 
-- **Scope:** migration 6; `via: 'member'`; `no-ticket`; `memberFilms`; the Home shelf and
+- **Scope:** migration 5; `via: 'member'`; `no-ticket`; `memberFilms`; the Home shelf and
   member panel; the film toggle and badge. Independent of slices 2 and 3, so it can move.
 - **Acceptance:** show Arrival to members. Anonymous: the front page is unchanged and
   `/arrival` says nothing is showing. Signed in as Sam: the film is listed and its page says

@@ -10,6 +10,7 @@ function denialReason(req, who, access, film) {
   if (!who.viewer) return (req.headers.cookie || '').includes(`${VIEWER_COOKIE}=`) ? 'session expired or unknown' : 'no session cookie';
   const a = access.filmAccess(who, film);
   if (!a.canView) return 'no usable ticket for this film in this browser (or not signed in as its person)';
+  if (a.via === 'member') return 'shown to members, but no ticket for this film in this browser';
   if (!a.canPlay) return `ticket ${a.status?.state}`;
   return 'no screening held by this browser';
 }
@@ -39,9 +40,10 @@ const TYPES = {
 };
 
 // /media/<slug>/<path>. Every request is checked against the viewer's session:
-// artwork needs a ticket that lets you see the film page; master and child
-// playlists, init and media segments, audio and subtitles need a screening
-// that this browser holds. Knowing a file path is not enough.
+// artwork needs whatever lets you see the film page (a ticket, or being signed
+// in, for a film shown to members); master and child playlists, init and media
+// segments, audio and subtitles need a screening that this browser holds.
+// Knowing a file path is not enough.
 export function mediaRoutes({ db, sessions, access, mediaDir, metadata }) {
   const router = express.Router();
   const filmBySlug = db.prepare('SELECT * FROM films WHERE slug = ?');
@@ -101,7 +103,7 @@ export function mediaRoutes({ db, sessions, access, mediaDir, metadata }) {
   });
 
   // /artwork/<slug>/<file>: posters and backdrops downloaded from TMDb.
-  // Same rule as the folder's artwork: you need a ticket that shows the page.
+  // Same rule as the folder's artwork: whatever shows you the page.
   router.get('/artwork/:slug/:file', (req, res) => {
     const film = filmBySlug.get(req.params.slug);
     const file = film && metadata.artworkPath(film, req.params.file);

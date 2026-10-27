@@ -15,6 +15,9 @@ const HEARTBEAT_EVENT_MS = 5 * 60 * 1000;
 // Best state first, for when one browser holds several tickets to the same film.
 const RANK = { ok: 0, used_up: 1, expired: 2, unavailable: 3, unpublished: 4, revoked: 5 };
 const NONE = Object.freeze({ canView: false, canPlay: false, ticket: null, status: null, via: null });
+// A film shown to members, for a signed-in person with no ticket that shows it:
+// the page and poster, never the media.
+const MEMBER = Object.freeze({ canView: true, canPlay: false, ticket: null, status: null, via: 'member' });
 
 // All access rules live here. Pages, API calls and every media request ask
 // these functions, so revoking or expiring a ticket applies on the next request.
@@ -138,18 +141,20 @@ export function createAccess(db, settings) {
 
   // What this browser may do with a film page. Revoked and unpublished look
   // exactly like "no such film"; used-up, expired and broken media still show
-  // the page so the viewer gets an explanation.
+  // the page so the viewer gets an explanation. A film shown to members is
+  // listed for anyone signed in, but listing never lets anything play.
   function filmAccess({ viewer, admin }, film, now = Date.now()) {
     if (admin && film) return { canView: true, canPlay: true, ticket: null, status: null, via: 'admin' };
     if (!viewer || !film?.published) return NONE;
+    const fallback = viewer.person_id != null && film.member_visible ? MEMBER : NONE;
     const best = candidates(viewer, film)
       .map((ticket) => ({ ticket, status: ticketStatus(ticket, now) }))
       .sort(byBest(viewer, now))[0];
-    if (!best) return NONE;
+    if (!best) return fallback;
     const { state } = best.status;
     if (state === 'ok') return { canView: true, canPlay: true, via: 'ticket', ...best };
     if (state === 'used_up' || state === 'expired' || state === 'unavailable') return { canView: true, canPlay: false, via: 'ticket', ...best };
-    return NONE;
+    return fallback;
   }
 
   // Playlists, segments, audio and subtitles need a screening that this
@@ -173,6 +178,7 @@ export function createAccess(db, settings) {
       db,
       () => {
         const a = filmAccess({ viewer }, film, now);
+        if (a.via === 'member') return { error: 'no-ticket' };
         if (!a.canPlay) return { error: a.status?.state || 'no-access' };
         const { ticket, status } = a;
         let screening = status.open;

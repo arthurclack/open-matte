@@ -9,7 +9,8 @@ const Player = lazy(() => import('../Player.jsx'));
 
 const PLAY_ERRORS = {
   'playing-elsewhere': 'This screening is playing on another device right now. Pause it there, or give it a minute, then try again.',
-  used_up: null, // the ticket panel explains these after a reload
+  'no-ticket': null, // the ticket panel explains these after a reload
+  used_up: null,
   expired: null,
   unavailable: null,
 };
@@ -155,6 +156,19 @@ function TicketPanel({ access, film, site, signedIn, onPlay, starting, playing }
             ▶ Preview
           </button>
         )}
+      </div>
+    );
+  }
+
+  // A film shown to members: the page is for reading. Nothing is recorded, so
+  // there's no privacy line.
+  if (access.via === 'member') {
+    return (
+      <div className="ticket-panel">
+        <div className="admit">Showing to members</div>
+        <p>
+          You don't have a ticket for this one. If you'd like to see it, ask whoever runs {site?.cinemaName || 'this cinema'}.
+        </p>
       </div>
     );
   }

@@ -25,6 +25,8 @@ export function viewerRoutes({ db, sessions, access, settings, metadata, limit }
       WHERE st.session_hash = ? AND t.person_id IS NULL AND t.revoked_at IS NULL AND f.published = 1
       ORDER BY f.title`),
     lastOpened: db.prepare(`SELECT at FROM events WHERE type = 'opened' AND session_hash = ? AND ticket_id = ? ORDER BY at DESC LIMIT 1`),
+    // In the admin's order. filmAccess still decides whether each one shows.
+    memberFilms: db.prepare('SELECT * FROM films WHERE published = 1 AND member_visible = 1 ORDER BY sort_order, title COLLATE NOCASE'),
   };
 
   const who = (req) => ({ viewer: sessions.load(req, 'viewer'), admin: sessions.load(req, 'admin') });
@@ -57,7 +59,8 @@ export function viewerRoutes({ db, sessions, access, settings, metadata, limit }
     res.json({ slug: q.filmById.get(ticket.film_id).slug });
   });
 
-  // What this browser can see: the cinema's name and the tickets it holds.
+  // What this browser can see: the cinema's name, the tickets it holds and, when
+  // signed in, the films shown to members that none of those tickets is for.
   router.get('/api/me', (req, res) => {
     const { viewer, admin } = who(req);
     const seen = new Set();
@@ -66,18 +69,25 @@ export function viewerRoutes({ db, sessions, access, settings, metadata, limit }
       if (seen.has(ticket.film_id)) continue;
       const film = q.filmById.get(ticket.film_id);
       const a = access.filmAccess({ viewer }, film);
-      if (!a.canView) continue;
+      // A revoked ticket for a film shown to members leaves only the listing, which
+      // belongs under memberFilms.
+      if (a.via !== 'ticket') continue;
       seen.add(film.id);
       tickets.push({ film: filmSummary(film), ticket: ticketForViewer(a.ticket, a.status) });
     }
     const person = viewer?.person_id != null ? { name: viewer.person_name } : null;
+    const memberFilms = person
+      ? q.memberFilms.all().filter((film) => access.filmAccess({ viewer }, film).via === 'member').map(filmSummary)
+      : [];
     const linkTickets = viewer ? q.linkTitles.all(viewer.id_hash).map((r) => r.title) : [];
-    res.json({ site: site(), admin: Boolean(admin), person, tickets, linkTickets });
+    res.json({ site: site(), admin: Boolean(admin), person, tickets, memberFilms, linkTickets });
   });
 
   router.get('/api/site', (req, res) => res.json(site()));
 
-  // A film page. A film you have no ticket for looks the same as no film at all.
+  // A film page. A film you have no ticket for looks the same as no film at all,
+  // unless it's shown to members and you're signed in. Reading a member film's
+  // page records nothing.
   router.get('/api/films/:slug', (req, res) => {
     const { viewer, admin } = who(req);
     const film = q.filmBySlug.get(req.params.slug);
@@ -117,6 +127,7 @@ export function viewerRoutes({ db, sessions, access, settings, metadata, limit }
 
     const r = access.startScreening(viewer, film);
     if (r.error === 'no-access') return res.status(404).json({ error: 'not-found' });
+    // Including no-ticket: a film shown to members, which this browser may read about but not play.
     if (r.error) return res.status(409).json({ error: r.error });
     res.json({
       screeningId: r.screening.id,
