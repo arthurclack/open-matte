@@ -5,9 +5,9 @@ follows: `server/access.js` implements the ticket rules, `server/people.js` and
 `server/webauthn.js` people and passkeys, and the tests in `test/` check them.
 
 Milestone 2 is being built in slices, planned in [milestone-2.md](milestone-2.md).
-So far it adds people and passkeys, tickets that only one person can use, signed in,
-keeping a ticket in an account, and films shown to members. An account page is
-planned there, not built yet.
+It adds people and passkeys, tickets that only one person can use, signed in,
+keeping a ticket in an account, films shown to members and an account page. What's
+left is testing across devices and browsers.
 
 ## The records
 
@@ -363,6 +363,16 @@ Creating a passkey from a link signs in the same way. Then:
 | Sign in, from anonymous or from the same person | New cookie; old session ended | Carried over; playback continues | Unaffected |
 | Sign in, from someone else's session | New cookie; old session ended | Not carried over (they were the other person's); the screening is freed | Unaffected |
 | Sign out | Cookie cleared; session ended | Forgotten (the links still work if opened again); the screening is freed | Unaffected |
+| Sign out everywhere, from the account page | Cookie cleared; session ended | Forgotten; the screening is freed | Signed out too, and playback stops on their next request |
+
+**Your account** (`/account`, in the menu under their name) shows a signed-in person
+their passkeys (Synced or This device only, when and where each was added, whether
+from the setup link or a recovery link, when last used, and which one signed in
+this browser) and every browser signed in as them (device, when it signed in, when
+last seen, and which is this one). It shows only their own, with no ids. From there
+they can **Sign out**, or **Sign out everywhere**, which signs out every browser
+signed in as them, this one included; their passkeys still work. Adding or removing
+a passkey is still something they ask you for.
 
 You can sign people out too (below). Whichever way a browser is signed out, it
 forgets the link tickets it opened, and a screening it held is freed at once.
@@ -469,7 +479,8 @@ People and passkeys:
 
 - **signed-in**: someone signed in with a passkey
 - **signed-out**: a person signed out of a browser
-- **signed-out-everywhere**: you signed a person out of every browser (and how many)
+- **signed-out-everywhere**: a person was signed out of every browser, by you or
+  from their account page (and how many)
 - **passkey-added**: a passkey was created from a setup or recovery link (which kind)
 - **passkey-removed**: you removed a passkey (and how many browsers that signed out)
 - **link-created**: you created a link (which kind, how long it works, whether it was

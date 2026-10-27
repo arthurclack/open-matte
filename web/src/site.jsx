@@ -104,7 +104,7 @@ export function confirmSignOut(me) {
   return window.confirm(text);
 }
 
-// "Sam ▾": who is signed in here, and a way out.
+// "Sam ▾": who is signed in here, their tickets and account, and a way out.
 function PersonMenu({ me, onSignOut }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -143,6 +143,12 @@ function PersonMenu({ me, onSignOut }) {
       </button>
       {open && (
         <div className="menu-list" role="menu">
+          <Link role="menuitem" to="/" onClick={() => setOpen(false)}>
+            Your tickets
+          </Link>
+          <Link role="menuitem" to="/account" onClick={() => setOpen(false)}>
+            Your account
+          </Link>
           <button role="menuitem" onClick={signOut}>
             Sign out
           </button>

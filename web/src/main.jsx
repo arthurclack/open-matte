@@ -1,6 +1,7 @@
 import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import Account from './pages/Account.jsx';
 import Enroll from './pages/Enroll.jsx';
 import Film from './pages/Film.jsx';
 import Home from './pages/Home.jsx';
@@ -34,6 +35,7 @@ createRoot(document.getElementById('root')).render(
                 {/* Static paths, so they win over /:slug (both are reserved slugs). */}
                 <Route path="/signin" element={<SignIn />} />
                 <Route path="/enroll" element={<Enroll />} />
+                <Route path="/account" element={<Account />} />
                 <Route path="/:slug" element={<Film />} />
               </Routes>
             </SiteProvider>

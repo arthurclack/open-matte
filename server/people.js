@@ -128,10 +128,11 @@ export function createPeople({ db, sessions, access, settings, rp, ceremonies })
     return getPerson(p.id);
   }
 
-  function signOutEverywhere(id, by) {
+  // by: 'admin', or 'person' from their account page (sessionHash: that browser).
+  function signOutEverywhere(id, by, sessionHash = null) {
     const p = getPerson(id);
     const signedOut = sessions.revokePersonSessions(p.id);
-    event('signed-out-everywhere', p.id, { by, signedOut });
+    event('signed-out-everywhere', p.id, { by, signedOut }, { sessionHash });
     return signedOut;
   }
 

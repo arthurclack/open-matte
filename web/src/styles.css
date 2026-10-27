@@ -122,6 +122,12 @@ select.filter-select.on { border-color: var(--accent); color: var(--accent); }
 .menu-list button:hover, .menu-list a:hover, .menu-list button:focus-visible { background: var(--bg-sunk); outline: none; }
 .wrap { width: min(1100px, 100% - 2rem); margin: 0 auto; }
 .narrow { width: min(640px, 100% - 2rem); margin: 0 auto; }
+.account { padding: 3rem 0 2rem; }
+.account h1 { font-size: 2rem; margin-bottom: 0.4rem; }
+.account h2 { font-size: 1.3rem; margin: 2rem 0 0.4rem; }
+.account-list { list-style: none; padding: 0; margin: 0.8rem 0; }
+.account-list li { border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-raised); padding: 0.75rem 1rem; margin-bottom: 0.5rem; }
+.account-list .dim { font-size: 0.92rem; margin-top: 0.15rem; }
 
 .home-hero { padding: 12vh 0 4rem; }
 .home-hero h1 { font-size: clamp(2rem, 6vw, 3.4rem); margin-bottom: 0.6rem; }
