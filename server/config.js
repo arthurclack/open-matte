@@ -17,6 +17,10 @@ export const config = {
   adminPassword: env.ADMIN_PASSWORD || '',
   // Public origin, e.g. https://cinema.example.com. Used to build ticket links.
   publicUrl: (env.PUBLIC_URL || '').replace(/\/$/, ''),
+  // The domain passkeys belong to, e.g. example.com for https://www.example.com.
+  // Every passkey is tied to it for good: choose it before anyone sets one up.
+  webauthnRpId: (env.WEBAUTHN_RP_ID || '').trim(),
+  production: env.NODE_ENV === 'production',
   // "auto" marks cookies Secure when the request arrived over HTTPS (via Caddy).
   cookieSecure: env.COOKIE_SECURE || 'auto',
   viewerSessionDays: int('VIEWER_SESSION_DAYS', 90),

@@ -47,13 +47,36 @@ export function createAccess(db, settings) {
       WHERE id = ?`),
     finish: db.prepare('UPDATE screenings SET finished_at = ? WHERE id = ? AND finished_at IS NULL'),
     event: db.prepare(`
-      INSERT INTO events (at, type, film_id, ticket_id, session_hash, screening_id, position, detail)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
+      INSERT INTO events (at, type, film_id, ticket_id, session_hash, screening_id, position, detail, person_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     lastScreeningEvent: db.prepare('SELECT at FROM events WHERE screening_id = ? AND type = ? ORDER BY at DESC LIMIT 1'),
+    // The browser holding a screening, if it is still a live session: not revoked
+    // or expired, and its person (if signed in) still there and enabled.
+    holder: db.prepare(`
+      SELECT s.id_hash, s.person_id FROM sessions s LEFT JOIN people p ON p.id = s.person_id
+      WHERE s.id_hash = ? AND s.kind = 'viewer' AND s.revoked_at IS NULL AND s.expires_at > ?
+        AND (s.person_id IS NULL OR (p.id IS NOT NULL AND p.disabled_at IS NULL))`),
   };
 
-  function logEvent(type, { filmId = null, ticketId = null, sessionHash = null, screeningId = null, position = null, detail = null }, now = Date.now()) {
-    q.event.run(now, type, filmId, ticketId, sessionHash, screeningId, position, detail ? JSON.stringify(detail) : null);
+  // Only account events (sign-ins, passkeys, links) name a person directly;
+  // viewing events find theirs through the session.
+  function logEvent(type, { filmId = null, ticketId = null, sessionHash = null, screeningId = null, position = null, detail = null, personId = null }, now = Date.now()) {
+    q.event.run(now, type, filmId, ticketId, sessionHash, screeningId, position, detail ? JSON.stringify(detail) : null, personId);
+  }
+
+  // May this browser use this ticket at all, before the ticket's own state?
+  function mayHold(viewer, ticket) {
+    if (!viewer || !ticket) return false;
+    if (ticket.person_id != null) return ticket.person_id === viewer.person_id;
+    return Boolean(q.holds.get(viewer.id_hash, ticket.id));
+  }
+
+  // Another browser holds the screening. It only blocks a takeover while it could
+  // still play it: not once it is signed out, revoked or expired, its person
+  // disabled, or the ticket no longer its to use.
+  function holderCanPlay(hash, ticket, now) {
+    const h = hash ? q.holder.get(hash, now) : null;
+    return Boolean(h) && mayHold(h, ticket);
   }
 
   // The state of one ticket, whoever holds it.
@@ -129,7 +152,7 @@ export function createAccess(db, settings) {
         let screening = status.open;
         let resumed = false;
         if (screening) {
-          if (screening.session_hash !== viewer.id_hash && screening.active_until > now) {
+          if (screening.session_hash !== viewer.id_hash && screening.active_until > now && holderCanPlay(screening.session_hash, ticket, now)) {
             return { error: 'playing-elsewhere' };
           }
           q.claim.run(viewer.id_hash, now, now + ACTIVE_MS, screening.id);
@@ -177,5 +200,5 @@ export function createAccess(db, settings) {
 
   const heldTickets = (viewer) => (viewer ? q.held.all(viewer.id_hash) : []);
 
-  return { ticketStatus, filmAccess, mayStream, startScreening, heartbeat, heldTickets, logEvent };
+  return { ticketStatus, filmAccess, mayStream, startScreening, heartbeat, heldTickets, mayHold, logEvent };
 }

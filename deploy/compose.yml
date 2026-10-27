@@ -17,6 +17,8 @@ services:
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in deploy/.env}
       PUBLIC_URL: https://${DOMAIN:?Set DOMAIN in deploy/.env}
+      # The domain passkeys belong to. Without it passkeys are unavailable (the log says why).
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-}
       TMDB_API_KEY: ${TMDB_API_KEY:-}
       BACKUP_DIR: /backups
     volumes:

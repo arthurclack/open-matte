@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { softAuthenticator } from './softauth.js';
 
 process.env.ADMIN_PASSWORD ??= 'test-password-123';
 process.env.COOKIE_SECURE ??= 'false';
@@ -75,7 +76,7 @@ export function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'open-matte-test-'));
 }
 
-export async function startServer({ mediaDir, dataDir = tempDir(), metadataOptions = { envKey: '' }, backupOptions = {} }) {
+export async function startServer({ mediaDir, dataDir = tempDir(), metadataOptions = { envKey: '' }, backupOptions = {}, webauthn, limits }) {
   const db = openDb(':memory:');
   const app = createApp({
     db,
@@ -84,6 +85,9 @@ export async function startServer({ mediaDir, dataDir = tempDir(), metadataOptio
     metadataOptions,
     backupOptions: { backupDir: path.join(dataDir, 'backups'), ...backupOptions },
     webDist: path.join(mediaDir, 'no-web-build'),
+    // Passkeys on localhost, as in development, unless a test says otherwise.
+    webauthn: webauthn ?? { publicUrl: '', rpId: '', production: false },
+    limits,
   });
   const server = await new Promise((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
@@ -124,4 +128,42 @@ export async function adminBrowser(base) {
   const r = await b.post('/api/admin/login', { password: ADMIN_PASSWORD });
   if (r.status !== 200) throw new Error(`admin login failed: ${r.status}`);
   return b;
+}
+
+// ------------------------------------------------------------ people and passkeys (milestone 2)
+// `admin` is an adminBrowser; `b` is anything with get/post like browser().
+
+export async function newPerson(admin, name, note) {
+  const r = await admin.post('/api/admin/people', { name, note });
+  if (r.status !== 201) throw new Error(`newPerson: ${r.status} ${JSON.stringify(r.data)}`);
+  return r.data;
+}
+
+// The token is in the address fragment: <origin>/enroll#<token>.
+export const linkToken = (link) => new URL(link).hash.slice(1);
+
+// Creates a setup or recovery link. Throws unless it was created.
+export async function setupLink(admin, personId, body = {}) {
+  const r = await admin.post(`/api/admin/people/${personId}/links`, body);
+  if (r.status !== 201) throw new Error(`setupLink: ${r.status} ${JSON.stringify(r.data)}`);
+  return { ...r.data, token: linkToken(r.data.link) };
+}
+
+// Opens a link in browser b and creates a passkey with `auth` (a softAuthenticator).
+// Returns the finish response (or the options response, if that failed).
+export async function enroll(b, token, { auth = softAuthenticator(), over } = {}) {
+  const opts = await b.post('/api/enroll/options', { token });
+  if (opts.status !== 200) return { ...opts, auth, step: 'options' };
+  const credential = auth.create(opts.data.options, over);
+  const r = await b.post('/api/enroll/finish', { token, credential });
+  return { ...r, auth, options: opts.data.options, credential, step: 'finish' };
+}
+
+// Signs browser b in with `auth`. `over` forges fields of the assertion.
+export async function signIn(b, auth, over) {
+  const opts = await b.post('/api/signin/options');
+  if (opts.status !== 200) return { ...opts, step: 'options' };
+  const credential = auth.get(opts.data.options, over);
+  const r = await b.post('/api/signin/finish', { credential });
+  return { ...r, credential, options: opts.data.options, step: 'finish' };
 }

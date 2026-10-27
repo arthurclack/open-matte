@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { formatClock } from '../api.js';
+import { formatClock, plural } from '../api.js';
 
 export const AdminContext = createContext({ signedOut: () => {} });
 
@@ -116,8 +116,14 @@ export const msToDateInput = (ms) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+// How long a setup or recovery link works, in words.
+export const linkLifetime = (hours) => (!hours ? '' : hours % 24 === 0 ? plural(hours / 24, 'day') : plural(hours, 'hour'));
+
+const signedOutOf = (n) => (n ? `signed out of ${plural(n, 'browser')}` : 'no browsers were signed in');
+
 export function describeEvent(e) {
   const at = e.position != null ? ` at ${formatClock(e.position)}` : '';
+  const d = e.detail || {};
   switch (e.type) {
     case 'opened':
       return 'Opened the film page';
@@ -127,6 +133,35 @@ export function describeEvent(e) {
       return `Watching${at}`;
     case 'finished':
       return 'Reached the end';
+    // People and passkeys. Events you caused say "you".
+    case 'signed-in':
+      return 'Signed in with a passkey';
+    case 'signed-out':
+      return 'Signed out';
+    case 'signed-out-everywhere':
+      return `${d.by === 'admin' ? 'You signed them out everywhere' : 'Signed out everywhere'}: ${signedOutOf(d.signedOut)}`;
+    case 'passkey-added':
+      return d.via === 'recovery' ? 'Used a recovery link to add a passkey' : 'Used the setup link to add a passkey';
+    case 'passkey-removed':
+      return `You removed the passkey added${d.device ? ` from ${d.device}` : ''}: ${d.signedOut ? signedOutOf(d.signedOut) : 'no browser was signed in with it'}`;
+    case 'link-created':
+      if (d.purpose !== 'recovery') return `You created a setup link (works ${linkLifetime(d.hours)})`;
+      if (d.reset) {
+        return `You created a recovery link after a loss (works ${linkLifetime(d.hours)}): removed ${plural(d.passkeysRemoved ?? 0, 'passkey')}, ${signedOutOf(d.browsersSignedOut)}`;
+      }
+      return `You created a recovery link to add a sign-in method (works ${linkLifetime(d.hours)})`;
+    case 'link-cancelled':
+      return 'You cancelled the waiting link';
+    case 'person-disabled':
+      return `You disabled them: ${signedOutOf(d.signedOut)}`;
+    case 'person-enabled':
+      return 'You enabled them';
+    case 'sign-in-refused': {
+      const key = d.device ? ` (the passkey added from ${d.device})` : '';
+      return d.reason === 'disabled'
+        ? `Sign-in refused: they're disabled${key}`
+        : `Sign-in refused: the passkey's counter went backwards, which can mean it was copied${key}`;
+    }
     default:
       return e.type;
   }

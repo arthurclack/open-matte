@@ -25,7 +25,7 @@ export default function Settings() {
   }
 
   async function expireAll() {
-    if (!window.confirm('Sign out every viewer? Everyone will need to open their ticket link again. Tickets and screenings are not affected.')) return;
+    if (!window.confirm('Sign out every viewer and member? People will need to open their ticket link or sign in again. Tickets and screenings are not affected.')) return;
     const r = await action.run(() => api.post('/api/admin/sessions/expire-all'));
     if (r) setNotice(`Signed out ${r.expired} browser session${r.expired === 1 ? '' : 's'}.`);
   }
@@ -65,12 +65,15 @@ export default function Settings() {
       <h2>Film information</h2>
       <TmdbSettings settings={settings} onSaved={setData} />
 
+      <h2>People and passkeys</h2>
+      <Passkeys passkeys={settings.passkeys} />
+
       <h2>Backups</h2>
       <Backups />
 
       <h2>Sessions</h2>
       <div className="card" style={{ maxWidth: 720 }}>
-        <p className="dim">Signs every viewer out. Their tickets keep working: they just open their link again.</p>
+        <p className="dim">Sign out every viewer and member. Tickets keep working: people open their link or sign in again.</p>
         <button className="btn danger" onClick={expireAll} disabled={action.busy}>
           Sign out every viewer
         </button>
@@ -184,6 +187,36 @@ function TmdbSettings({ settings, onSaved }) {
         contact TMDB.
       </p>
     </form>
+  );
+}
+
+// Where passkeys belong. Read-only: WEBAUTHN_RP_ID and PUBLIC_URL are set on the server.
+function Passkeys({ passkeys }) {
+  if (!passkeys) return null;
+  return (
+    <div className="card" style={{ maxWidth: 720 }}>
+      {passkeys.problem && (
+        <div className="notice warn">
+          <strong>Passkeys aren't available.</strong> {passkeys.problem}
+        </div>
+      )}
+      {passkeys.rpId && (
+        <p>
+          Passkeys here belong to <strong className="mono">{passkeys.rpId}</strong>. If the site ever moves to another domain, everyone will need a new
+          passkey.
+        </p>
+      )}
+      <p className="dim" style={{ margin: 0, fontSize: '0.9rem' }}>
+        {passkeys.origin ? (
+          <>
+            They work on <span className="mono">{passkeys.origin}</span> only.{' '}
+          </>
+        ) : (
+          !passkeys.problem && <>In development they work on localhost at any port, but not on 127.0.0.1. </>
+        )}
+        Set by WEBAUTHN_RP_ID and PUBLIC_URL on the server: see docs/deploying.md.
+      </p>
+    </div>
   );
 }
 

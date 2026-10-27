@@ -1,12 +1,11 @@
 import express from 'express';
 import { filmDetail, filmSummary, masterUrl, ticketForViewer } from '../films.js';
-import { rateLimit } from '../ratelimit.js';
 
 const OPENED_DEDUPE_MS = 30 * 60 * 1000;
 
 // What a viewer's browser talks to. The ticket secret is only ever sent once,
 // to /api/tickets/open; after that the browser uses its session cookie.
-export function viewerRoutes({ db, sessions, access, settings, metadata }) {
+export function viewerRoutes({ db, sessions, access, settings, metadata, limit }) {
   // What the viewer site shows in its header and footer. TMDb asks for credit
   // wherever its data and images appear.
   const site = () => ({ ...settings.get(), tmdbCredit: metadata.status().configured });
@@ -27,7 +26,7 @@ export function viewerRoutes({ db, sessions, access, settings, metadata }) {
   // Exchange a ticket link (your-domain/t/<code>) for a session. The page at
   // /t/<code> calls this from JavaScript, so link previews in chat apps, which
   // fetch the URL but don't run scripts, neither create sessions nor count as opens.
-  const openLimit = rateLimit({ windowMs: 10 * 60 * 1000, max: 30 });
+  const openLimit = limit({ windowMs: 10 * 60 * 1000, max: 30 });
   router.post('/api/tickets/open', openLimit, (req, res) => {
     const code = String(req.body?.code || '').trim().toLowerCase();
     const ticket = code && q.ticketByCode.get(code);
@@ -55,7 +54,8 @@ export function viewerRoutes({ db, sessions, access, settings, metadata }) {
       seen.add(film.id);
       tickets.push({ film: filmSummary(film), ticket: ticketForViewer(a.ticket, a.status) });
     }
-    res.json({ site: site(), admin: Boolean(admin), tickets });
+    const person = viewer?.person_id != null ? { name: viewer.person_name } : null;
+    res.json({ site: site(), admin: Boolean(admin), person, tickets });
   });
 
   router.get('/api/site', (req, res) => res.json(site()));

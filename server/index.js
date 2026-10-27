@@ -12,6 +12,9 @@ const app = createApp({ db });
 app.locals.backups.start();
 const server = app.listen(config.port, () => {
   console.log(`Open Matte listening on :${config.port} (media: ${config.mediaDir}, data: ${config.dataDir})`);
+  const { rp } = app.locals;
+  if (rp.problem) console.warn(`Passkeys unavailable: ${rp.problem}`);
+  else console.log(`Passkeys: RP ID ${rp.id}, origin ${rp.origin ?? 'http://localhost (any port)'}`);
 });
 
 // Pick up anything copied into the media folder while the server was down.

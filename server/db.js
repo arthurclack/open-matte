@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 // Timestamps are integer milliseconds since the epoch throughout.
 // Each entry runs once, in order; never edit one that has shipped, add a new one.
-const MIGRATIONS = [
+export const MIGRATIONS = [
   `
   CREATE TABLE settings (
     key   TEXT PRIMARY KEY,
@@ -111,6 +111,71 @@ const MIGRATIONS = [
   ALTER TABLE films ADD COLUMN meta_sources TEXT;   -- JSON: { field: 'tmdb' } for values taken from TMDb
   ALTER TABLE films ADD COLUMN artwork TEXT;        -- JSON: { poster: { file, tmdbPath }, backdrop: { … } }, stored in DATA_DIR/artwork
   `,
+  // Milestone 2: people and passkeys. Existing sessions stay anonymous and
+  // existing tickets stay tickets for anyone with the link.
+  `
+  -- Someone the admin has added. The name is how they appear to themselves and
+  -- in their password manager; it is never used to sign in.
+  CREATE TABLE people (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,  -- never reused
+    name             TEXT NOT NULL,
+    note             TEXT,                   -- for the admin only; never sent to a viewer
+    webauthn_user_id TEXT NOT NULL UNIQUE,   -- base64url of 32 random bytes: WebAuthn user.id; never changes
+    disabled_at      INTEGER,
+    created_at       INTEGER NOT NULL
+  );
+  CREATE UNIQUE INDEX people_name ON people(name COLLATE NOCASE);
+
+  -- Single-use, short-lived links that let a person create a passkey. Only the
+  -- hash is kept: the admin sees the link once, when it is made.
+  CREATE TABLE person_links (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id    INTEGER NOT NULL REFERENCES people(id),
+    token_hash   TEXT NOT NULL UNIQUE,       -- sha256 of the token in /enroll#<token>
+    purpose      TEXT NOT NULL CHECK (purpose IN ('setup', 'recovery')),
+    reset        INTEGER NOT NULL DEFAULT 0 CHECK (reset IN (0, 1)),  -- recovery that removed the old passkeys
+    ticket_id    INTEGER REFERENCES tickets(id) ON DELETE SET NULL,   -- open this film afterwards
+    created_at   INTEGER NOT NULL,
+    expires_at   INTEGER NOT NULL,
+    opened_at    INTEGER,                    -- first opened (perhaps by a link scanner)
+    used_at      INTEGER,                    -- a passkey was created with it
+    used_device  TEXT,                       -- where, coarse; kept even if that passkey is removed later
+    cancelled_at INTEGER                     -- by the admin, by a newer link, or by disabling the person
+  );
+  CREATE INDEX person_links_person ON person_links(person_id, created_at);
+
+  CREATE TABLE passkeys (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id     INTEGER NOT NULL REFERENCES people(id),
+    credential_id TEXT NOT NULL UNIQUE,      -- base64url, as the library returns it
+    public_key    BLOB NOT NULL,             -- COSE key, as the library returns it
+    sign_count    INTEGER NOT NULL DEFAULT 0,
+    device_type   TEXT NOT NULL CHECK (device_type IN ('singleDevice', 'multiDevice')),
+    backed_up     INTEGER NOT NULL CHECK (backed_up IN (0, 1)),  -- "Synced" or "This device only"
+    transports    TEXT,                      -- JSON array; a hint for excludeCredentials
+    aaguid        TEXT,                      -- which provider, when it says
+    added_device  TEXT,                      -- coarse, e.g. "Safari on iPhone"
+    link_id       INTEGER REFERENCES person_links(id),
+    created_at    INTEGER NOT NULL,
+    last_used_at  INTEGER
+  );
+  CREATE INDEX passkeys_person ON passkeys(person_id);
+
+  -- A viewer session signed in as a person. Anonymous ticket browsers keep NULL.
+  ALTER TABLE sessions ADD COLUMN person_id INTEGER REFERENCES people(id);
+  ALTER TABLE sessions ADD COLUMN passkey_id INTEGER REFERENCES passkeys(id) ON DELETE SET NULL;
+  ALTER TABLE sessions ADD COLUMN signed_in_at INTEGER;
+  CREATE INDEX sessions_person ON sessions(person_id) WHERE person_id IS NOT NULL;
+  CREATE INDEX sessions_passkey ON sessions(passkey_id) WHERE passkey_id IS NOT NULL;
+
+  -- Tickets only one person can use, signed in. NULL = anyone with the link, as before.
+  ALTER TABLE tickets ADD COLUMN person_id INTEGER REFERENCES people(id);
+
+  -- The person an account event is about (sign-ins, passkeys, links, disabling).
+  -- Viewing events find their person through the session instead.
+  ALTER TABLE events ADD COLUMN person_id INTEGER REFERENCES people(id);
+  CREATE INDEX events_person ON events(person_id, at) WHERE person_id IS NOT NULL;
+  `,
 ];
 
 export function openDb(file) {
@@ -123,6 +188,14 @@ export function openDb(file) {
 
 function migrate(db) {
   const version = db.prepare('PRAGMA user_version').get().user_version;
+  // A careless rollback should fail loudly, not treat tickets for one person as
+  // tickets for anyone.
+  if (version > MIGRATIONS.length) {
+    throw new Error(
+      `This database was written by a newer Open Matte (schema ${version}; this code knows ${MIGRATIONS.length}). ` +
+        'Deploy the newer code, or restore a backup from before the upgrade.',
+    );
+  }
   for (let i = version; i < MIGRATIONS.length; i++) {
     tx(db, () => {
       db.exec(MIGRATIONS[i]);

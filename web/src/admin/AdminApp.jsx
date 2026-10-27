@@ -4,6 +4,8 @@ import { api } from '../api.js';
 import Activity from './Activity.jsx';
 import FilmDetail from './FilmDetail.jsx';
 import Films from './Films.jsx';
+import People from './People.jsx';
+import PersonDetail from './PersonDetail.jsx';
 import Settings from './Settings.jsx';
 import TicketDetail from './TicketDetail.jsx';
 import Tickets from './Tickets.jsx';
@@ -41,6 +43,7 @@ export default function AdminApp() {
               Films
             </NavLink>
             <NavLink to="/admin/tickets">Tickets</NavLink>
+            <NavLink to="/admin/people">People</NavLink>
             <NavLink to="/admin/activity">Activity</NavLink>
             <NavLink to="/admin/settings">Settings</NavLink>
           </div>
@@ -57,6 +60,8 @@ export default function AdminApp() {
             <Route path="films/:id" element={<FilmDetail />} />
             <Route path="tickets" element={<Tickets />} />
             <Route path="tickets/:id" element={<TicketDetail />} />
+            <Route path="people" element={<People />} />
+            <Route path="people/:id" element={<PersonDetail />} />
             <Route path="activity" element={<Activity />} />
             <Route path="settings" element={<Settings />} />
           </Routes>

@@ -4,8 +4,8 @@ import { config } from '../config.js';
 import { tx } from '../db.js';
 import { artworkUrl, filmArtwork, filmMedia } from '../films.js';
 import { MetadataError, TMDB_FIELDS } from '../metadata.js';
-import { rateLimit } from '../ratelimit.js';
 import { META_FIELDS, scanMedia } from '../scan.js';
+import { peopleRoutes } from './people.js';
 import { ADMIN_COOKIE, clearCookie, ticketCode } from '../sessions.js';
 import { guessTitleYear, looksLikeReleaseName } from '../titles.js';
 
@@ -50,9 +50,10 @@ const metadataRoute = (fn) => async (req, res) => {
   }
 };
 
-export function adminRoutes({ db, sessions, access, settings, mediaDir, metadata, backups }) {
+export function adminRoutes(deps) {
+  const { db, sessions, access, settings, mediaDir, metadata, backups, rp, limit } = deps;
   const router = express.Router();
-  const loginLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
+  const loginLimit = limit({ windowMs: 15 * 60 * 1000, max: 10 });
 
   // ------------------------------------------------------------ sign-in
   router.post('/api/admin/login', loginLimit, (req, res) => {
@@ -75,6 +76,9 @@ export function adminRoutes({ db, sessions, access, settings, mediaDir, metadata
   });
 
   router.get('/api/admin/session', (req, res) => res.json({ ok: true }));
+
+  // People and passkeys.
+  router.use(peopleRoutes(deps));
 
   const origin = (req) => config.publicUrl || `${req.protocol}://${req.get('host')}`;
 
@@ -421,16 +425,20 @@ export function adminRoutes({ db, sessions, access, settings, mediaDir, metadata
     const args = [];
     if (req.query.ticket) where.push('e.ticket_id = ?'), args.push(Number(req.query.ticket));
     if (req.query.film) where.push('e.film_id = ?'), args.push(Number(req.query.film));
+    // Account events name their person; viewing events find theirs through the session.
+    if (req.query.person) where.push('COALESCE(e.person_id, s.person_id) = ?'), args.push(Number(req.query.person));
     if (req.query.heartbeats !== '1') where.push("e.type <> 'heartbeat'");
     const limit = Math.min(Number(req.query.limit) || 200, 1000);
     const rows = db
       .prepare(`
         SELECT e.id, e.at, e.type, e.position, e.detail, e.screening_id AS screeningId,
-               f.id AS filmId, f.title AS filmTitle, t.id AS ticketId, t.label AS ticketLabel, s.device
+               f.id AS filmId, f.title AS filmTitle, t.id AS ticketId, t.label AS ticketLabel, s.device,
+               p.id AS personId, p.name AS personName
         FROM events e
         LEFT JOIN films f ON f.id = e.film_id
         LEFT JOIN tickets t ON t.id = e.ticket_id
         LEFT JOIN sessions s ON s.id_hash = e.session_hash
+        LEFT JOIN people p ON p.id = COALESCE(e.person_id, s.person_id)
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY e.at DESC, e.id DESC LIMIT ?`)
       .all(...args, limit);
@@ -438,7 +446,7 @@ export function adminRoutes({ db, sessions, access, settings, mediaDir, metadata
   });
 
   // ------------------------------------------------------------ settings
-  const adminSettings = () => ({ ...settings.get(), tmdb: metadata.status() });
+  const adminSettings = () => ({ ...settings.get(), tmdb: metadata.status(), passkeys: { rpId: rp.id, origin: rp.origin, problem: rp.problem } });
   router.get('/api/admin/settings', (req, res) => res.json(adminSettings()));
   router.patch(
     '/api/admin/settings',

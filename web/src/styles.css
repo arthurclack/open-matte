@@ -68,6 +68,13 @@ input[type='text'], input[type='password'], input[type='number'], input[type='da
 textarea { min-height: 6em; resize: vertical; line-height: 1.5; }
 input:focus, textarea:focus, select:focus, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .check { display: flex; gap: 0.6em; align-items: center; margin-bottom: 1rem; }
+.check.top { align-items: flex-start; }
+.check.top input { margin-top: 0.3em; flex-shrink: 0; }
+/* A radio button with a heading and an explanation, e.g. Add a sign-in method / Reset after loss. */
+.choice { display: flex; gap: 0.7em; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0.75em 0.9em; margin-bottom: 0.6rem; cursor: pointer; }
+.choice:has(input:checked) { border-color: var(--accent); background: var(--bg-sunk); }
+.choice input { margin-top: 0.3em; flex-shrink: 0; }
+.choice small { display: block; color: var(--text-dim); font-size: 0.85rem; margin-top: 0.15em; }
 .row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 1rem; }
 
@@ -95,6 +102,14 @@ input:focus, textarea:focus, select:focus, .btn:focus-visible { outline: 2px sol
 .site-main { flex: 1; }
 .site-footer { padding: 2rem clamp(1rem, 4vw, 3rem); color: var(--text-faint); font-size: 0.85rem; display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .site-footer a { color: var(--text-dim); }
+/* The browser also holds the admin cookie, which bypasses every person rule. */
+.preview-banner { position: relative; z-index: 3; text-align: center; font-size: 0.82rem; padding: 0.35rem 1rem; color: var(--warn); background: #1d170c; border-bottom: 1px solid #5e4720; }
+/* "Sam ▾" in the header. */
+.menu { position: relative; }
+.menu-error { position: absolute; right: 0; top: calc(100% + 0.4rem); width: max-content; max-width: 18rem; z-index: 10; }
+.menu-list { position: absolute; right: 0; top: calc(100% + 0.4rem); min-width: 10rem; background: var(--bg-raised); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0.3rem; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); z-index: 10; }
+.menu-list button, .menu-list a { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0.45em 0.7em; border-radius: 6px; cursor: pointer; text-decoration: none; font-size: 0.92rem; }
+.menu-list button:hover, .menu-list a:hover, .menu-list button:focus-visible { background: var(--bg-sunk); outline: none; }
 .wrap { width: min(1100px, 100% - 2rem); margin: 0 auto; }
 .narrow { width: min(640px, 100% - 2rem); margin: 0 auto; }
 

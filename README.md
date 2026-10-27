@@ -10,7 +10,9 @@ computer, copy them to a server, write a few lines on why someone should watch
 the film, and send a ticket. The server serves the prepared files and never
 transcodes, so playback doesn't depend on your home upload speed.
 
-## What's here (milestone 1: ticketed playback, complete)
+## What's here
+
+Milestone 1, ticketed playback, is complete:
 
 - **Film pages** with poster, details and your recommendation
 - **Adaptive HLS playback** (hls.js, or Safari's own player) with audio and subtitle choices and quality on Auto
@@ -22,8 +24,13 @@ transcodes, so playback doesn't depend on your home upload speed.
 - **Film information from TMDB**, optional: details, posters and backdrops filled in on import or chosen by hand, as Jellyfin does ([docs/metadata.md](docs/metadata.md))
 - **Reference encoder** for HEVC + H.264 ladders with alternate audio ([docs/encoding.md](docs/encoding.md))
 
-Milestone 2 adds people and passkeys; milestone 3 branding, polish and release
-documentation. See [docs/roadmap.md](docs/roadmap.md).
+Milestone 2 is adding people and passkeys, in slices planned in
+[docs/milestone-2.md](docs/milestone-2.md). Built so far:
+
+- **People and passkeys**: you add people and send each a single-use setup link; they create a passkey and can then sign in and out with no password. Recovery links, disabling people and removing passkeys are in the admin. Signing in grants nothing yet: tickets for one person come next ([docs/access.md](docs/access.md))
+
+Milestone 3 brings branding, polish and release documentation. See
+[docs/roadmap.md](docs/roadmap.md).
 
 ## Running it locally
 
@@ -39,6 +46,10 @@ npm run dev                 # server on http://localhost:3000
 To work on the web app with hot reload, run `npm run dev:web` alongside and use
 http://localhost:5173.
 
+Use `localhost`, not `127.0.0.1`: passkeys belong to a domain, and browsers won't use
+them on an IP address. Locally they need no setting; on a server, see
+[docs/deploying.md](docs/deploying.md#passkeys).
+
 Put a film folder in `media/` (or make a test one with the encoder), open
 http://localhost:3000/admin, scan, publish, and issue a ticket. Open the ticket
 link in a private window to see it as a guest would.
@@ -49,12 +60,14 @@ npm test                    # access rules, scanner and the full ticket journey
 
 ## Deploying
 
-One container behind Caddy, which handles HTTPS. See [docs/deploying.md](docs/deploying.md).
+One container behind Caddy, which handles HTTPS. Choose `WEBAUTHN_RP_ID` before
+inviting anyone. See [docs/deploying.md](docs/deploying.md).
 
 ## How access works
 
 Tickets are bearer links; pressing Play starts a screening; media needs a
-screening this browser holds. The details, including what is recorded about
+screening this browser holds. People you add can sign in with a passkey, created
+from a single-use link you send them. The details, including what is recorded about
 viewers, are in [docs/access.md](docs/access.md).
 
 ## Layout

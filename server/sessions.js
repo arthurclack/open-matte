@@ -77,10 +77,26 @@ export function clearCookie(req, res, name) {
 export function createSessionStore(db) {
   const q = {
     insert: db.prepare(`INSERT INTO sessions (id_hash, kind, device, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`),
-    get: db.prepare(`SELECT * FROM sessions WHERE id_hash = ? AND kind = ?`),
+    insertSignedIn: db.prepare(`
+      INSERT INTO sessions (id_hash, kind, device, created_at, last_seen_at, expires_at, person_id, passkey_id, signed_in_at)
+      VALUES (?, 'viewer', ?, ?, ?, ?, ?, ?, ?)`),
+    get: db.prepare(`
+      SELECT s.*, p.name AS person_name, p.disabled_at AS person_disabled_at, p.id AS person_found
+      FROM sessions s LEFT JOIN people p ON p.id = s.person_id
+      WHERE s.id_hash = ? AND s.kind = ?`),
     touch: db.prepare(`UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?`),
     revoke: db.prepare(`UPDATE sessions SET revoked_at = ? WHERE id_hash = ? AND revoked_at IS NULL`),
+    moveTickets: db.prepare('UPDATE session_tickets SET session_hash = ? WHERE session_hash = ?'),
+    moveScreenings: db.prepare('UPDATE screenings SET session_hash = ? WHERE session_hash = ?'),
+    // Live sessions only: expired ones are refused anyway, and counting them would
+    // tell the admin more browsers were signed out than were ever shown.
+    revokePerson: db.prepare(`UPDATE sessions SET revoked_at = ?1 WHERE person_id = ?2 AND revoked_at IS NULL AND expires_at > ?1`),
+    revokePasskey: db.prepare(`UPDATE sessions SET revoked_at = ?1 WHERE passkey_id = ?2 AND revoked_at IS NULL AND expires_at > ?1`),
   };
+
+  // Live: not revoked or expired, and if signed in, its person still exists and isn't disabled.
+  const live = (row, now) =>
+    Boolean(row) && !row.revoked_at && row.expires_at > now && (row.person_id == null || (row.person_found != null && !row.person_disabled_at));
 
   function create(req, res, kind) {
     const token = randomToken();
@@ -98,7 +114,9 @@ export function createSessionStore(db) {
     if (!token) return null;
     const row = q.get.get(sha256(token), kind);
     const now = Date.now();
-    if (!row || row.revoked_at || row.expires_at <= now) return null;
+    // Disabling a person also revokes their sessions; checking here as well means
+    // "from the next request" holds even if that write were ever missed.
+    if (!live(row, now)) return null;
     if (now - row.last_seen_at > TOUCH_INTERVAL) q.touch.run(now, row.id_hash);
     return row;
   }
@@ -107,5 +125,33 @@ export function createSessionStore(db) {
     q.revoke.run(Date.now(), idHash);
   }
 
-  return { create, load, revoke };
+  // Signing in always makes a new session and cookie, so a planted cookie never
+  // becomes a signed-in one. Runs inside the caller's IMMEDIATE transaction (tx()
+  // can't nest), and re-reads the browser's current session there because the
+  // passkey check awaited before the transaction began. Link tickets and a held
+  // screening come along only from an anonymous session or the same person's. The
+  // caller sets the cookie after COMMIT, so a rolled-back sign-in never sends one.
+  function signIn(req, { personId, passkeyId, currentHash = null }, now = Date.now()) {
+    const token = randomToken();
+    const idHash = sha256(token);
+    const ttl = config.viewerSessionDays * DAY;
+    q.insertSignedIn.run(idHash, deviceLabel(req.get('user-agent')), now, now, now + ttl, personId, passkeyId, now);
+    const current = currentHash ? q.get.get(currentHash, 'viewer') : null;
+    if (current && current.id_hash !== idHash) {
+      if (live(current, now) && (current.person_id == null || current.person_id === personId)) {
+        q.moveTickets.run(idHash, current.id_hash);
+        q.moveScreenings.run(idHash, current.id_hash);
+      }
+      q.revoke.run(now, current.id_hash);
+    }
+    return { token, ttl, session: q.get.get(idHash, 'viewer') };
+  }
+
+  const setViewerCookie = (req, res, token, ttl) => setCookie(req, res, VIEWER_COOKIE, token, ttl);
+
+  // Each returns how many browsers it signed out.
+  const revokePersonSessions = (personId, now = Date.now()) => Number(q.revokePerson.run(now, personId).changes);
+  const revokePasskeySessions = (passkeyId, now = Date.now()) => Number(q.revokePasskey.run(now, passkeyId).changes);
+
+  return { create, load, revoke, signIn, setViewerCookie, revokePersonSessions, revokePasskeySessions };
 }

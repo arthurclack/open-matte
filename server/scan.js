@@ -9,7 +9,7 @@ import { tx } from './db.js';
 
 export const SCHEMA_VERSION = 1;
 // Film folders become URLs (your-domain/<folder>), so these names are taken.
-export const RESERVED_SLUGS = new Set(['admin', 'api', 'media', 't', 'assets', 'signin', 'enroll', 'tickets', 'about', 'help']);
+export const RESERVED_SLUGS = new Set(['admin', 'api', 'media', 't', 'assets', 'signin', 'enroll', 'account', 'tickets', 'about', 'help']);
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 const LANG_RE = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.avif'];

@@ -118,6 +118,7 @@ CREATE TABLE person_links (
   expires_at   INTEGER NOT NULL,
   opened_at    INTEGER,                        -- first opened (perhaps by a link scanner)
   used_at      INTEGER,                        -- a passkey was created with it
+  used_device  TEXT,                           -- where, coarse; kept even if that passkey is removed later
   cancelled_at INTEGER                         -- by the admin, by a newer link, or by disabling the person
 );
 CREATE INDEX person_links_person ON person_links(person_id, created_at);
