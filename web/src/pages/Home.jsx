@@ -15,24 +15,33 @@ export default function Home() {
   const notice = NOTICES[params.get('notice')];
   if (!me) return null;
 
+  const signedIn = Boolean(me.person);
+  // The server gives the best ticket per film, newest first, from this browser's
+  // links and the person's account alike. Open screenings come first (a stable sort).
+  const tickets = [...me.tickets].sort((a, b) => Boolean(b.ticket?.openScreening) - Boolean(a.ticket?.openScreening));
+
   return (
     <div className="wrap">
       <section className="home-hero">
         <h1>{site?.cinemaName}</h1>
         {notice && <div className="notice bad">{notice}</div>}
-        {me.tickets.length === 0 && <p>{site?.welcome}</p>}
+        {tickets.length === 0 && <p>{signedIn ? "No tickets yet. When someone sends you one, it'll be here." : site?.welcome}</p>}
       </section>
 
-      {me.tickets.length > 0 && (
+      {tickets.length > 0 && (
         <section>
           <h2>Your tickets</h2>
           <div className="shelf">
-            {me.tickets.map(({ film, ticket }) => (
+            {tickets.map(({ film, ticket }) => (
               <Link key={film.slug} to={`/${film.slug}`} className="shelf-item">
                 <Poster film={film} />
                 <div className="meta">
                   <div>{film.title}</div>
-                  <div className="faint">{ticketSummary(ticket)}</div>
+                  <div className="faint">
+                    {ticketSummary(ticket)}
+                    {/* A link ticket lives in this browser; an account ticket follows the person. */}
+                    {signedIn && !ticket?.inAccount && ' · on this device only'}
+                  </div>
                 </div>
               </Link>
             ))}

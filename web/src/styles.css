@@ -58,7 +58,7 @@ p { margin: 0 0 1em; }
 .btn.big { padding: 0.8em 1.6em; font-size: 1.05rem; }
 .linklike { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
 
-.field { display: grid; gap: 0.3em; margin-bottom: 1rem; }
+.field { display: grid; gap: 0.3em; margin-bottom: 1rem; align-content: start; }
 .field > span { font-size: 0.85rem; color: var(--text-dim); }
 .field small { color: var(--text-faint); font-size: 0.8rem; }
 input[type='text'], input[type='password'], input[type='number'], input[type='date'], input:not([type]), textarea, select {
@@ -75,6 +75,8 @@ input:focus, textarea:focus, select:focus, .btn:focus-visible { outline: 2px sol
 .choice:has(input:checked) { border-color: var(--accent); background: var(--bg-sunk); }
 .choice input { margin-top: 0.3em; flex-shrink: 0; }
 .choice small { display: block; color: var(--text-dim); font-size: 0.85rem; margin-top: 0.15em; }
+.choice:has(input:disabled) { cursor: not-allowed; opacity: 0.6; }
+.choice select.inline { width: auto; max-width: 100%; padding: 0.25em 0.5em; margin-left: 0.5em; }
 .row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 1rem; }
 
@@ -93,12 +95,18 @@ input:focus, textarea:focus, select:focus, .btn:focus-visible { outline: 2px sol
 .badge.warn { color: var(--warn); border-color: #5e4720; }
 .badge.bad { color: var(--bad); border-color: #6b3530; }
 .badge.accent { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+/* A row of filters: the current one is marked. */
+.btn.on { border-color: var(--accent); color: var(--accent); }
+select.filter-select { width: auto; padding: 0.3em 0.75em; font-size: 0.85rem; border-radius: 999px; }
+select.filter-select.on { border-color: var(--accent); color: var(--accent); }
 
 /* ---------- viewer site ---------- */
 
 .site { min-height: 100vh; display: flex; flex-direction: column; }
 .site-header { display: flex; justify-content: space-between; align-items: center; padding: 1.2rem clamp(1rem, 4vw, 3rem); position: relative; z-index: 2; }
 .site-name { font-family: var(--serif); font-size: 1.25rem; text-decoration: none; letter-spacing: 0.01em; }
+.site-signin { color: var(--text-dim); font-size: 0.92rem; text-decoration: none; }
+.site-signin:hover { color: var(--text); text-decoration: underline; }
 .site-main { flex: 1; }
 .site-footer { padding: 2rem clamp(1rem, 4vw, 3rem); color: var(--text-faint); font-size: 0.85rem; display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .site-footer a { color: var(--text-dim); }

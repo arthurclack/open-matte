@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, formatAgo, formatClock, formatDate, formatDateTime } from '../api.js';
+import { PersonDisabledBadge, ticketMessage } from './Tickets.jsx';
 import { CopyButton, ErrorNote, Progress, TicketBadge, dateInputToMs, describeEvent, msToDateInput, useAction, useLoad } from './ui.jsx';
 
 export default function TicketDetail() {
@@ -47,6 +48,9 @@ export default function TicketDetail() {
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const revoked = t.state === 'revoked';
+  // A ticket only one person can use: their browsers are whichever are signed in as them.
+  const person = t.person;
+  const personLink = person && <Link to={`/admin/people/${person.id}`}>{person.name}</Link>;
 
   return (
     <>
@@ -57,10 +61,12 @@ export default function TicketDetail() {
       </p>
       <div className="page-head">
         <div>
-          <h1>{t.label || 'Unnamed ticket'}</h1>
+          <h1>{t.label || person?.name || 'Unnamed ticket'}</h1>
+          <p className="dim" style={{ margin: '0 0 0.4rem' }}>{person ? <>Only {personLink}, signed in</> : 'Anyone with the link'}</p>
           <div className="row" style={{ gap: '0.5rem' }}>
             <Link to={`/admin/films/${t.film.id}`}>{t.film.title}</Link>
             <TicketBadge ticket={t} />
+            <PersonDisabledBadge ticket={t} />
           </div>
         </div>
         <div className="row">
@@ -70,13 +76,20 @@ export default function TicketDetail() {
             </button>
           ) : (
             <>
-              <button
-                className="btn"
-                onClick={() => post(`tickets/${t.id}/sign-out-browsers`, 'Forget this ticket in every browser that opened it? The link will still work if opened again.')}
-                disabled={action.busy || !t.browsers}
-              >
-                Sign out browsers
-              </button>
+              {/* Signing a person's browsers out is Sign out everywhere, on their page. */}
+              {person ? (
+                <Link className="btn" to={`/admin/people/${person.id}`}>
+                  {person.name}'s page
+                </Link>
+              ) : (
+                <button
+                  className="btn"
+                  onClick={() => post(`tickets/${t.id}/sign-out-browsers`, 'Forget this ticket in every browser that opened it? The link will still work if opened again.')}
+                  disabled={action.busy || !t.browsers}
+                >
+                  Sign out browsers
+                </button>
+              )}
               <button
                 className="btn danger"
                 onClick={() => post(`tickets/${t.id}/revoke`, 'Revoke this ticket? Playback stops on the next request and the link stops working.')}
@@ -90,11 +103,22 @@ export default function TicketDetail() {
       </div>
       <ErrorNote error={action.error} />
 
+      {revoked && (
+        <div className="notice">
+          Revoked {formatDateTime(t.revokedAt)}.{' '}
+          {!person
+            ? 'If you restore it, browsers have to open the link again.'
+            : person.disabled
+              ? `If you restore it, ${person.name} sees it again once you enable them.`
+              : `If you restore it, ${person.name} sees it again straight away.`}
+        </div>
+      )}
+
       {!revoked && (
         <div className="link-box" style={{ marginBottom: '1.5rem' }}>
           <code>{t.link}</code>
           <CopyButton text={t.link} label="Copy link" />
-          <CopyButton text={`You should watch ${t.film.title}. Here's your ticket: ${t.link}`} label="Copy message" />
+          <CopyButton text={ticketMessage(t, t.film.title)} label="Copy message" />
         </div>
       )}
 
@@ -120,7 +144,7 @@ export default function TicketDetail() {
                     : 'Never'}
             </dd>
             <dt>Browsers</dt>
-            <dd>{t.browsers}</dd>
+            <dd>{person ? <>Any browser signed in as {personLink}</> : t.browsers}</dd>
             {t.openScreening && (
               <>
                 <dt>Open screening</dt>
@@ -136,7 +160,7 @@ export default function TicketDetail() {
         </div>
         <form className="card" onSubmit={save}>
           <label className="field">
-            <span>Who is it for?</span>
+            <span>{person ? 'Note (optional)' : 'Who is it for?'}</span>
             <input value={form.label} onChange={set('label')} maxLength={200} />
           </label>
           <div className="grid-2">

@@ -22,12 +22,22 @@ export function createAccess(db, settings) {
   const q = {
     ticket: db.prepare('SELECT * FROM tickets WHERE id = ?'),
     film: db.prepare('SELECT * FROM films WHERE id = ?'),
-    heldForFilm: db.prepare(`
-      SELECT t.* FROM session_tickets st JOIN tickets t ON t.id = st.ticket_id
-      WHERE st.session_hash = ? AND t.film_id = ?`),
-    held: db.prepare(`
-      SELECT t.* FROM session_tickets st JOIN tickets t ON t.id = st.ticket_id
-      WHERE st.session_hash = ? ORDER BY st.added_at DESC`),
+    // Tickets this browser may use for a film: link tickets it opened, while they're
+    // still for anyone, plus tickets in the signed-in person's name. Oldest first,
+    // as before. With :person NULL only link tickets match.
+    forFilm: db.prepare(`
+      SELECT t.* FROM tickets t
+      WHERE t.film_id = :film AND (
+        (t.person_id IS NULL AND t.id IN (SELECT ticket_id FROM session_tickets WHERE session_hash = :session))
+        OR t.person_id = :person)
+      ORDER BY t.id`),
+    // Every ticket this browser may use, newest first, for /api/me.
+    usable: db.prepare(`
+      SELECT t.*, st.added_at AS since FROM session_tickets st JOIN tickets t ON t.id = st.ticket_id
+      WHERE st.session_hash = :session AND t.person_id IS NULL
+      UNION ALL
+      SELECT t.*, t.created_at AS since FROM tickets t WHERE t.person_id = :person
+      ORDER BY since DESC`),
     holds: db.prepare('SELECT 1 FROM session_tickets WHERE session_hash = ? AND ticket_id = ?'),
     used: db.prepare('SELECT COUNT(*) AS n FROM screenings WHERE ticket_id = ? AND voided_at IS NULL'),
     open: db.prepare(`
@@ -109,16 +119,32 @@ export function createAccess(db, settings) {
     };
   }
 
+  // Who may use a ticket is decided here and in mayHold, nowhere else.
+  const ids = (viewer) => ({ session: viewer.id_hash, person: viewer.person_id ?? null });
+  const candidates = (viewer, film) => q.forFilm.all({ film: film.id, ...ids(viewer) });
+
+  // Best state first; then a ticket whose open screening this browser could resume
+  // now, so Play resumes it (not one another browser is busy playing); then the
+  // person's own ticket; then the oldest, which is the order before people existed.
+  const byBest = (viewer, now) => {
+    const resumable = ({ ticket, status: s }) =>
+      Boolean(s.open) && (s.open.session_hash === viewer.id_hash || s.open.active_until <= now || !holderCanPlay(s.open.session_hash, ticket, now));
+    return (a, b) =>
+      RANK[a.status.state] - RANK[b.status.state] ||
+      resumable(b) - resumable(a) ||
+      (b.ticket.person_id != null) - (a.ticket.person_id != null) ||
+      a.ticket.id - b.ticket.id;
+  };
+
   // What this browser may do with a film page. Revoked and unpublished look
   // exactly like "no such film"; used-up, expired and broken media still show
   // the page so the viewer gets an explanation.
   function filmAccess({ viewer, admin }, film, now = Date.now()) {
     if (admin && film) return { canView: true, canPlay: true, ticket: null, status: null, via: 'admin' };
     if (!viewer || !film?.published) return NONE;
-    const best = q.heldForFilm
-      .all(viewer.id_hash, film.id)
+    const best = candidates(viewer, film)
       .map((ticket) => ({ ticket, status: ticketStatus(ticket, now) }))
-      .sort((a, b) => RANK[a.status.state] - RANK[b.status.state])[0];
+      .sort(byBest(viewer, now))[0];
     if (!best) return NONE;
     const { state } = best.status;
     if (state === 'ok') return { canView: true, canPlay: true, via: 'ticket', ...best };
@@ -131,7 +157,7 @@ export function createAccess(db, settings) {
   function mayStream({ viewer, admin }, film, now = Date.now()) {
     if (admin) return true;
     if (!viewer || !film?.published) return false;
-    for (const ticket of q.heldForFilm.all(viewer.id_hash, film.id)) {
+    for (const ticket of candidates(viewer, film)) {
       const s = ticketStatus(ticket, now);
       if (s.state === 'ok' && s.open?.session_hash === viewer.id_hash) return true;
     }
@@ -175,9 +201,10 @@ export function createAccess(db, settings) {
   // definition lives on the server rather than in each browser.
   function heartbeat(viewer, screeningId, { position, playing = true }, now = Date.now()) {
     const s = q.screening.get(screeningId);
-    if (!viewer || !s || s.voided_at || !q.holds.get(viewer.id_hash, s.ticket_id)) return { error: 'not-found' };
+    const ticket = s ? q.ticket.get(s.ticket_id) : null;
+    if (!viewer || !s || s.voided_at || !mayHold(viewer, ticket)) return { error: 'not-found' };
     if (s.session_hash !== viewer.id_hash) return { error: 'playing-elsewhere' };
-    const status = ticketStatus(q.ticket.get(s.ticket_id), now);
+    const status = ticketStatus(ticket, now);
     if (status.state !== 'ok') return { error: status.state };
     if (status.open?.id !== s.id) return { error: 'screening-ended' };
 
@@ -198,7 +225,7 @@ export function createAccess(db, settings) {
     return { ok: true };
   }
 
-  const heldTickets = (viewer) => (viewer ? q.held.all(viewer.id_hash) : []);
+  const usableTickets = (viewer) => (viewer ? q.usable.all(ids(viewer)) : []);
 
-  return { ticketStatus, filmAccess, mayStream, startScreening, heartbeat, heldTickets, mayHold, logEvent };
+  return { ticketStatus, filmAccess, mayStream, startScreening, heartbeat, usableTickets, mayHold, logEvent };
 }

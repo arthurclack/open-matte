@@ -9,7 +9,7 @@ import { VIEWER_COOKIE, deviceLabel } from '../sessions.js';
 function denialReason(req, who, access, film) {
   if (!who.viewer) return (req.headers.cookie || '').includes(`${VIEWER_COOKIE}=`) ? 'session expired or unknown' : 'no session cookie';
   const a = access.filmAccess(who, film);
-  if (!a.canView) return 'no ticket for this film in this browser';
+  if (!a.canView) return 'no usable ticket for this film in this browser (or not signed in as its person)';
   if (!a.canPlay) return `ticket ${a.status?.state}`;
   return 'no screening held by this browser';
 }

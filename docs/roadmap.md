@@ -82,3 +82,25 @@ ticket.
 - A private viewing journal for members, which never implies they can still play a film
 - A short test clip to check picture, sound and subtitles before the first Play, which
   never uses a screening
+
+Browser features that would make the player feel native (most fit milestone 3's
+playback work):
+
+- Media Session: title, poster and position on the lock screen and in media
+  notifications, and hardware play/pause keys, routed through the player's own
+  controls. Showing the title outside the page should be optional (and off for
+  "surprise me" tickets)
+- Media Capabilities: hls.js already uses it to skip renditions a device can't
+  decode; the next step is preferring power-efficient ones and saying so ("Recommended
+  for this device: 1080p H.264"). Safari's own player doesn't go through hls.js
+- View transitions: a poster growing into the film page and back, short, honouring
+  reduced motion (React Router can drive these)
+- Installable: a home-screen icon, an app-like launch and an offline message. A
+  service worker must never cache `/api`, `/media`, `/t/` or `/enroll`: tickets and
+  revocation depend on every request reaching the server. No offline films
+- An optional ambient glow sampled from the picture (infrequently, small, off by
+  default, with a pure-black mode), benchmarked on phones first
+- Listening aids through Web Audio (a dialogue preset, a late-night preset), tested
+  carefully: iPhone Safari's own HLS player and Web Audio have a history of silence
+- A "Playback help" panel: stream, codec, buffer, recent errors, and a copyable
+  summary that leaves out ticket links, cookies and names

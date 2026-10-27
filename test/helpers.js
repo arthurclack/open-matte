@@ -167,3 +167,24 @@ export async function signIn(b, auth, over) {
   const r = await b.post('/api/signin/finish', { credential });
   return { ...r, credential, options: opts.data.options, step: 'finish' };
 }
+
+// Every kind of file a player fetches, for a film made by makeFilm: the master and
+// child playlists, init segments, video and audio segments, and subtitles. A copy of
+// the journey's list (journey.test.js stays as it is), with every rendition's playlist.
+export function playbackFiles(slug) {
+  const hls = `/media/${slug}/hls`;
+  return [
+    `${hls}/master.m3u8`,
+    `${hls}/v_h264_720/index.m3u8`,
+    `${hls}/v_hevc_1080/index.m3u8`,
+    `${hls}/a_en/index.m3u8`,
+    `${hls}/a_fr/index.m3u8`,
+    `${hls}/v_h264_720/init.mp4`,
+    `${hls}/a_en/init.mp4`,
+    `${hls}/v_h264_720/seg_3.m4s`,
+    `${hls}/v_hevc_1080/seg_0.m4s`,
+    `${hls}/a_en/seg_1.m4s`,
+    `${hls}/a_fr/seg_0.m4s`,
+    `/media/${slug}/subtitles/en.vtt`,
+  ];
+}

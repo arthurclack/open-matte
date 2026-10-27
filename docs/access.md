@@ -5,17 +5,16 @@ follows: `server/access.js` implements the ticket rules, `server/people.js` and
 `server/webauthn.js` people and passkeys, and the tests in `test/` check them.
 
 Milestone 2 is being built in slices, planned in [milestone-2.md](milestone-2.md).
-So far it adds people and passkeys, which on their own grant nothing: a signed-in
-person watches with a ticket link exactly as anyone else does. Tickets that only one
-person can use, keeping a ticket in an account, films shown to members and an
-account page are planned there, not built yet.
+So far it adds people and passkeys, and tickets that only one person can use, signed
+in. Keeping a ticket in an account, films shown to members and an account page are
+planned there, not built yet.
 
 ## The records
 
 | Record | What it is | Created when |
 |---|---|---|
-| **Ticket** | An "admit one" invitation to one film, with its own link | The admin issues it |
-| **Session** | A browser's sign-in, held in an HttpOnly cookie | Someone opens a ticket link, or signs in with a passkey |
+| **Ticket** | An "admit one" invitation to one film, with its own link: for anyone with the link, or only for one person | The admin issues it |
+| **Session** | A browser's sign-in, held in an HttpOnly cookie | Someone opens the link of a ticket for anyone, or signs in with a passkey |
 | **Screening** | One use of a ticket | Someone presses Play |
 | **Person** | Someone you've added, who can sign in | You add them |
 | **Passkey** | A person's sign-in key, kept by their phone, computer or password manager | They create it from a link you sent |
@@ -23,10 +22,19 @@ account page are planned there, not built yet.
 
 ## Tickets
 
-A ticket is a **bearer invitation**: whoever has the link can use it. The name you
-give it is a label for you, not an identity check, and signing in doesn't change
-that. (Tickets that only one signed-in person can use are planned in
-[milestone-2.md](milestone-2.md).)
+Every ticket is one of two kinds, chosen when you issue it:
+
+- **For anyone with the link**: a **bearer invitation**, as in milestone 1. Whoever
+  has the link can use it, in any browser. The name you give it is a label for you,
+  not an identity check, and signing in doesn't change that.
+- **Only for one person, signed in**: it works only in a browser signed in as that
+  person with their passkey. The link is just a way to reach it, and forwarding it
+  does nothing.
+
+Who a ticket is for can't be changed once it's issued. A ticket for a person needs
+them to be enabled, and is issued one at a time. They don't need a passkey yet: send
+them a setup link that carries the ticket (see
+[Setup and recovery links](#setup-and-recovery-links)).
 
 Each ticket has, all optional:
 
@@ -39,22 +47,84 @@ Each ticket has, all optional:
 The expiry clock starts at first **playback**, not when the link is opened, so a
 preview visit or a chat app's link scanner doesn't start the countdown.
 
+### Two kinds of ticket
+
+| | For anyone with the link | Only for one person, signed in |
+|---|---|---|
+| Who can use it | Any browser that opened the link | Any browser signed in as that person; they don't need to open the link |
+| Opening the link | Adds it to this browser | Signed in as the person: opens the film. Not signed in: a sign-in page, with nothing created or recorded. Signed in as someone else: told it's for someone else |
+| Forwarding the link | Works for whoever gets it | Does nothing |
+| Under Your tickets | In that browser only | On every device the person signs in on |
+| TVs and in-app browsers | Work | Need a browser that can use passkeys |
+| Revoke / restore | Stops on the next request; after a restore, browsers must open the link again | Stops on the next request; after a restore it works for the person at once |
+| **Sign out browsers** | Forgets it in every browser that opened the link | Does nothing, since no browser holds it: use the person's **Sign out everywhere**, or revoke the ticket |
+| Person disabled | Not affected | Stops on the next request |
+| Limits, start by, days after first play, resume window, one device at a time | The same | The same |
+
+### Who can do what
+
+| Browser | A ticket for anyone, whose link it opened | A ticket only for P |
+|---|---|---|
+| Anonymous | page, Play, stream | nothing (the link shows a sign-in page) |
+| Signed in as P | page, Play, stream | page, Play, stream, on every device |
+| Signed in as Q | page, Play, stream | nothing (the link says it's for someone else) |
+| P disabled | P's sessions are gone, so P is anonymous and can open link tickets again | nothing |
+
+The rules behind both tables:
+
+1. A **ticket for anyone with the link** can be used by a browser if and only if that
+   browser opened its link.
+2. A **ticket for one person** can be used by a browser if and only if that browser is
+   signed in as that person. Having opened its link grants nothing.
+3. A browser counts as **signed in** only while its session is unrevoked and unexpired
+   and its person exists and isn't disabled, checked on every request (see
+   [Signing in and out](#signing-in-and-out)).
+4. **Listing never grants playback.** Your tickets shows only tickets the browser
+   could use anyway; being listed lets nothing play.
+5. Who may use a ticket is decided in one place, the lookups in `server/access.js`. A
+   ticket's own state (its limits, expiry and revocation) is the same whoever asks.
+
 ## Opening a link
 
-`/t/<code>` is a page that sends the code to `/api/tickets/open` from JavaScript,
-receives a session cookie, and replaces the URL with the film's clean address.
+`/t/<code>` is a page that sends the code to `/api/tickets/open` from JavaScript.
 Link previews in chat apps fetch the URL but don't run scripts, so they create no
-session and no "opened" event. The code is never used again after the exchange.
+session and no "opened" event. Unknown and revoked tickets, and tickets for an
+unpublished film, are refused first, whichever kind they are.
+
+For a ticket for anyone with the link, the page receives a session cookie and
+replaces the URL with the film's clean address straight away. The code is never used
+again after the exchange.
+
+For a ticket for one person:
+
+- **Signed in as that person**: the page goes to the film. Nothing is added to the
+  browser: the ticket is already theirs on every device they sign in on.
+- **Not signed in**: a sign-in page. No session or cookie is created, the ticket
+  isn't marked as opened and no event is recorded, and the server says neither
+  which film it is nor who it's for. Once they've signed in, the page opens the
+  ticket again and goes to the film.
+- **Signed in as someone else**: told the ticket is for someone else. Again nothing
+  is created or recorded.
+
+Until the person signs in, the code stays in the `/t/` address, so "Open in Safari"
+from an app's built-in browser, which can't use passkeys, takes the ticket with it.
+The code is useless to anyone but that person, and pages send no Referer.
+
+The person doesn't need the link at all once they're signed in: the ticket is under
+Your tickets on every device they sign in on. For such a ticket, **Opened** on the
+admin's ticket page is the first time they opened its link or its film page, signed
+in.
 
 ## Screenings
 
 | Action | Result |
 |---|---|
-| Open a ticket link | Shows the film page. No screening is used. |
+| Open a ticket link | Shows the film page (for a ticket for one person, once they're signed in). No screening is used. |
 | Press Play | Resumes the ticket's open screening, or starts a new one if the limit allows. |
 | Pause, refresh, reconnect | Continues the same screening. |
 | Switch device | The new device takes the screening over once the old one has paused, closed the tab, or gone quiet for about 75 seconds. Two devices can't play one screening at once. |
 | The device playing can no longer play: it was signed out (by its viewer or by you), its session expired, its person was disabled, or **Sign out browsers** took the ticket out of it | Another device can take the screening over at once, without waiting. This covers link tickets too, for example after **Sign out every viewer**. |
+| Two devices signed in as the same person, with a ticket for them | One at a time, with the same takeover rules as two browsers that opened the same link. |
 | Reach the limit | No new screenings; an open one can still be resumed. |
 | Revoke the ticket | Page and media requests fail from the next request on. |
 | Unpublish the film | The page disappears and playback under way stops, for every ticket. Publishing again restores both; open screenings keep their place, and their resume windows keep running meanwhile. |
@@ -67,18 +137,27 @@ Ticket expiry always wins over a resume window that is still running.
 Checking the limit and creating the screening happen in one write transaction,
 so two simultaneous presses of Play can't both take the last screening.
 
+A browser can have more than one ticket it may use for a film: say a link ticket it
+opened and one for the person it's signed in as. Then the ticket in the best state
+wins; among those, one with an open screening this browser could resume now, rather
+than one another browser is busy playing; then the person's own ticket; then the
+oldest. The film page, Play and Your tickets all go by the same choice.
+
 ## Media requests
 
 Every request under `/media/<film>/` is checked:
 
 - posters and backdrops need a ticket that can see the film page
 - master and child playlists, init segments, media segments, audio and subtitles
-  need a valid session holding a valid ticket for that film, the film published
-  and playable, the ticket not revoked or expired, **and** an open screening that
+  need a valid session that may use a ticket for that film under the rules above
+  (it opened the link of a ticket for anyone, or it's signed in as the ticket's
+  person), that ticket in the `ok` state (the film published and playable, the
+  ticket not revoked or expired), **and** an open screening of that ticket which
   this browser currently holds
 
-So knowing a file's URL is not enough, and neither is holding a ticket without
-pressing Play. A ticket for one film unlocks nothing of another, and a file in a
+So knowing a file's URL is not enough, nor is having the link of a ticket for one
+person without being signed in as them, nor holding a ticket without pressing
+Play. A ticket for one film unlocks nothing of another, and a file in a
 film folder that is really a symlink to somewhere outside it is never served.
 Media responses are marked `private`, so only the viewer's own browser caches them.
 Revoking a ticket, signing a browser out, disabling a person or removing a passkey
@@ -86,12 +165,16 @@ stops future requests, playlists and segments included; none of them can take ba
 what is already in the player's buffer (typically under a minute of video).
 
 A browser signed in to the admin plays in preview mode and never uses a screening.
+Who a ticket is for doesn't matter there either, so check tickets for one person in
+a browser that isn't signed in to the admin. The site says so when a browser is
+signed in to both.
 
 ## People and passkeys
 
 A **person** is someone you've added in the admin under **People**. Nobody can sign
-up on their own, and nobody needs an account to watch: ticket links work for
-anyone, in any browser, TVs included.
+up on their own, and nobody needs an account to watch a ticket for anyone with the
+link: those work in any browser, TVs included. A ticket for one person needs that
+person's passkey.
 
 - **Name**: shown to the person, and saved in their password manager with the
   passkey. Names are unique (ignoring case) and up to 80 characters. Renaming
@@ -124,7 +207,8 @@ cookie into a permanent way in.
 
 Passkeys need a real browser: the built-in browsers of some apps (Instagram,
 Facebook and the like) don't handle them, so the person may need to open the link in
-Safari or Chrome.
+Safari or Chrome. TV browsers usually can't use them either, so for watching on a
+TV's own browser, issue a ticket for anyone with the link.
 
 ## Setup and recovery links
 
@@ -144,6 +228,11 @@ first time, a **recovery link** ever after.
   already been used and to tell whoever sent it straight away.
 - **One at a time.** Creating a link cancels any other waiting link for that person.
   You can also cancel one yourself, and disabling a person cancels theirs.
+- **It can carry a ticket.** A link can carry a ticket for that person that isn't
+  revoked; once the passkey is created, the page takes you on to the film. So a
+  friend with no passkey yet still gets one link that ends on the film. A ticket's
+  own link never creates a passkey: ticket codes are stored as they are and can be
+  copied again, so if one could, a leaked ticket would become a way into the account.
 - **Shown once.** The server keeps only a hash of the link, so you see it once, when
   you create it. If it goes astray, create a new one: the old one then stops working.
 - **In the fragment.** Links look like `https://your-domain/enroll#<token>`. Browsers
@@ -194,6 +283,9 @@ Creating a passkey from a link signs in the same way. Then:
 You can sign people out too (below). Whichever way a browser is signed out, it
 forgets the link tickets it opened, and a screening it held is freed at once.
 
+Tickets for the person themselves aren't held by any browser: every browser signed
+in as them can use them, and a browser that signs out simply can't any more.
+
 When someone signs in, they're told about any passkey added to their account since
 the one they're using last signed in, with when and from which device. Only someone
 holding that passkey moves that point on, so a passkey created from an intercepted
@@ -221,7 +313,10 @@ included.
 - **Disable** signs the person out everywhere, cancels any waiting link, and refuses
   their passkeys until you enable them. It doesn't remove passkeys: for a lost or
   stolen device, use **Reset after loss**. A disabled person is simply anonymous, so
-  like anyone else they can still watch with a ticket link, by opening it again.
+  like anyone else they can still watch with a ticket for anyone, by opening its link
+  again. Tickets only for them stop working from the next request, playlists and
+  segments included. Once you enable them and they sign in, those work again, and
+  an open screening resumes where it was if its resume window is still running.
 - **Enable** lets them sign in again with the passkeys they have. A link that
   disabling cancelled stays cancelled.
 - **Sign out everywhere** signs the person out of every browser. Their passkeys still
@@ -234,7 +329,8 @@ included.
 ## Secrets and sessions
 
 - Ticket codes are about 64 random bits. They're stored as they are, so the admin
-  can copy a link again later; anyone who can read the database could use them.
+  can copy a link again later; anyone who can read the database could use the ones
+  for anyone with the link. A ticket for one person still needs their passkey.
 - Session cookies are 256 random bits, HttpOnly, SameSite=Lax, and Secure over
   HTTPS. The database keeps only their SHA-256 hash. Admin sign-out, session
   expiry, ticket revocation, signing a person out and signing out every viewer (in
@@ -264,7 +360,8 @@ included.
 - The app never logs ticket codes, link tokens, cookies or the admin password, and
   Caddy keeps no access log. When a passkey is refused, the reason goes to the
   server log, never to the browser. Pages send no Referer, so the code in a
-  `/t/<code>` address goes no further than that one request. The exception: if the
+  `/t/<code>` address goes no further than the requests for that page (a ticket for
+  one person keeps it there until they sign in). The exception: if the
   app is down or restarting when someone opens their ticket link, Caddy's error log
   records the address, code included. (A setup link's token is never in an address
   the server sees, so not even then.)

@@ -76,6 +76,12 @@ In development you don't set it: with no `PUBLIC_URL`, or one on `localhost`,
 passkeys belong to `localhost` and work at `http://localhost` on any port. Use
 `localhost`, never `127.0.0.1`: browsers won't use passkeys on an IP address.
 
+TV browsers and the built-in browsers of apps such as Instagram and Facebook usually
+can't use passkeys, so they can't use tickets for one person. For a TV, issue a
+ticket for anyone with the link. Someone who opens their ticket in an app's browser
+can open it again in Safari or Chrome: the code stays in the address until they sign
+in.
+
 ### Testing from home
 
 Passkeys only work when the browser itself visits the site's real name, so tricks
@@ -145,6 +151,10 @@ Before the first milestone 2 update (people and passkeys), set `WEBAUTHN_RP_ID`
 (above), so it's in place before anyone creates a setup link, and check that no film
 folder is called `account`: that name is now reserved for the site, like `admin` and
 `api`, and a scan would skip it.
+
+From milestone 2's second update (tickets for one person) on, going back to older
+code always needs a restore of the backup you took before it: see
+[Rolling back](#rolling-back).
 
 ## Backups
 
@@ -263,12 +273,13 @@ So the backup has to be in place before the older code starts:
 
 Screenings, events, people and tickets written since that backup are lost.
 
-The only rollback without a restore is from milestone 2's first update (people and
-passkeys) back to milestone 1 (`b28a56d`), and only while no ticket for one person
-exists, which is true until those tickets are built (slice 2 in
-[milestone-2.md](milestone-2.md)). Milestone 1 code has no guard and ignores who a
-ticket is for: started on a database that has tickets for one person, it would let
-anyone with their links use them. From then on, always restore.
+From milestone 2's second update (tickets for one person) on, always restore. The
+only rollback that ever worked without one was from the first update (people and
+passkeys) back to milestone 1 (`b28a56d`), while no ticket for one person existed.
+Don't try that now: milestone 1 code has no guard and ignores who a ticket is for, so
+started on a database that has tickets for one person, it would run, and let anyone
+with their links use them. Code from the first update onwards has the guard, and
+stops as above.
 
 ## IPv6 and rate limits
 

@@ -269,9 +269,11 @@ export function adminRoutes(deps) {
       db.prepare('SELECT id, slug, title, media FROM films').all()
         .map((f) => [f.id, { film: { id: f.id, slug: f.slug, title: f.title }, durationSeconds: filmMedia(f).durationSeconds ?? null }]),
     );
-    if (ids && !ids.length) return { films, browsers: new Map(), lastEvent: new Map(), progress: new Map() };
+    const people = new Map(db.prepare('SELECT id, name, disabled_at FROM people').all().map((p) => [p.id, { id: p.id, name: p.name, disabled: Boolean(p.disabled_at) }]));
+    if (ids && !ids.length) return { films, people, browsers: new Map(), lastEvent: new Map(), progress: new Map() };
     return {
       films,
+      people,
       browsers: byTicket(db.prepare(`SELECT ticket_id, COUNT(*) AS n FROM session_tickets WHERE 1 ${only} GROUP BY ticket_id`).all(...args)),
       // SQLite takes `type` from the row that holds MAX(at).
       lastEvent: byTicket(db.prepare(`SELECT ticket_id, MAX(at) AS at, type FROM events WHERE ticket_id IS NOT NULL ${only} GROUP BY ticket_id`).all(...args)),
@@ -294,6 +296,8 @@ export function adminRoutes(deps) {
       code: t.code,
       link: `${origin(req)}/t/${t.code}`,
       film: film?.film ?? null,
+      // Set: only this person can use it, signed in. Null: anyone with the link.
+      person: t.person_id != null ? ctx.people.get(t.person_id) ?? null : null,
       label: t.label,
       screeningLimit: t.screening_limit,
       startBy: t.start_by,
@@ -330,8 +334,13 @@ export function adminRoutes(deps) {
   }
 
   router.get('/api/admin/tickets', (req, res) => {
-    const filter = req.query.film ? 'WHERE film_id = ?' : '';
-    const rows = db.prepare(`SELECT * FROM tickets ${filter} ORDER BY created_at DESC, id DESC`).all(...(req.query.film ? [Number(req.query.film)] : []));
+    const where = [];
+    const args = [];
+    if (req.query.film) where.push('film_id = ?'), args.push(Number(req.query.film));
+    if (req.query.person) where.push('person_id = ?'), args.push(Number(req.query.person));
+    if (req.query.kind === 'anyone') where.push('person_id IS NULL');
+    if (req.query.kind === 'person') where.push('person_id IS NOT NULL');
+    const rows = db.prepare(`SELECT * FROM tickets ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC, id DESC`).all(...args);
     const now = Date.now();
     const ctx = ticketContext();
     res.json(rows.map((t) => adminTicket(req, t, now, ctx)));
@@ -344,6 +353,14 @@ export function adminRoutes(deps) {
     const sets = [];
     const args = [];
     ticketFields({ label: b.label, screeningLimit: b.screeningLimit, startBy: b.startBy, daysAfterFirstPlay: b.daysAfterFirstPlay }, sets, args);
+    // A ticket only one person can use, signed in with their passkey.
+    if (b.personId != null) {
+      const person = db.prepare('SELECT * FROM people WHERE id = ?').get(Number(b.personId));
+      if (!person) throw bad('person-not-found');
+      if (person.disabled_at) throw bad('person-disabled', 409);
+      if (count !== 1) throw bad('One ticket at a time for a person');
+      sets.push('person_id = ?'), args.push(person.id);
+    }
     const cols = sets.map((s) => s.split(' = ')[0]);
     const ids = tx(db, () => {
       const out = [];

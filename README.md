@@ -27,7 +27,8 @@ Milestone 1, ticketed playback, is complete:
 Milestone 2 is adding people and passkeys, in slices planned in
 [docs/milestone-2.md](docs/milestone-2.md). Built so far:
 
-- **People and passkeys**: you add people and send each a single-use setup link; they create a passkey and can then sign in and out with no password. Recovery links, disabling people and removing passkeys are in the admin. Signing in grants nothing yet: tickets for one person come next ([docs/access.md](docs/access.md))
+- **People and passkeys**: you add people and send each a single-use setup link; they create a passkey and can then sign in and out with no password. Recovery links, disabling people and removing passkeys are in the admin ([docs/access.md](docs/access.md))
+- **Tickets for one person**: alongside tickets for anyone with the link, a ticket only one person can use, signed in with their passkey. It's listed on every device they sign in on, and forwarding the link does nothing ([docs/access.md](docs/access.md#two-kinds-of-ticket))
 
 Milestone 3 brings branding, polish and release documentation. See
 [docs/roadmap.md](docs/roadmap.md).
@@ -65,10 +66,10 @@ inviting anyone. See [docs/deploying.md](docs/deploying.md).
 
 ## How access works
 
-Tickets are bearer links; pressing Play starts a screening; media needs a
-screening this browser holds. People you add can sign in with a passkey, created
-from a single-use link you send them. The details, including what is recorded about
-viewers, are in [docs/access.md](docs/access.md).
+Tickets are bearer links, or work only for one person, signed in; pressing Play
+starts a screening; media needs a screening this browser holds. People you add can
+sign in with a passkey, created from a single-use link you send them. The details,
+including what is recorded about viewers, are in [docs/access.md](docs/access.md).
 
 ## Layout
 

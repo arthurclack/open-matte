@@ -32,6 +32,11 @@ export function createPeople({ db, sessions, access, settings, rp, ceremonies })
       UPDATE person_links SET used_at = ?, used_device = ?
       WHERE id = ? AND used_at IS NULL AND cancelled_at IS NULL AND expires_at > ?`),
     passkeysOf: db.prepare('SELECT * FROM passkeys WHERE person_id = ? ORDER BY created_at'),
+    ticketFor: db.prepare('SELECT * FROM tickets WHERE id = ? AND person_id = ? AND revoked_at IS NULL'),
+    // Still this person's and not revoked: a restored ticket shows its film again at once.
+    filmOf: db.prepare(`
+      SELECT f.slug, f.title, f.published FROM tickets t JOIN films f ON f.id = t.film_id
+      WHERE t.id = ? AND t.person_id = ? AND t.revoked_at IS NULL`),
     passkey: db.prepare('SELECT * FROM passkeys WHERE id = ?'),
     passkeyByCredential: db.prepare('SELECT * FROM passkeys WHERE credential_id = ?'),
     insertPasskey: db.prepare(`
@@ -158,8 +163,8 @@ export function createPeople({ db, sessions, access, settings, rp, ceremonies })
       const h = hours ?? DEFAULT_HOURS[purpose];
       if (!LINK_HOURS[purpose].includes(h)) throw fail('bad-hours', 400);
       if (purpose === 'recovery' && confirmedContact !== true) throw fail('confirm-contact', 400);
-      // Tickets for one person arrive in slice 2.
-      if (ticketId != null) throw fail('bad-ticket', 400);
+      // A link can carry a ticket for this person, so a new friend gets one link that ends on the film.
+      if (ticketId != null && !q.ticketFor.get(Number(ticketId), p.id)) throw fail('bad-ticket', 400);
       const now = Date.now();
       const resetting = purpose === 'recovery' && reset === true;
       q.cancelLinks.run(now, p.id);
@@ -171,7 +176,7 @@ export function createPeople({ db, sessions, access, settings, rp, ceremonies })
         passkeysRemoved = Number(q.deletePasskeys.run(p.id).changes);
       }
       const expiresAt = now + h * HOUR;
-      q.insertLink.run(p.id, sha256(token), purpose, resetting ? 1 : 0, null, now, expiresAt);
+      q.insertLink.run(p.id, sha256(token), purpose, resetting ? 1 : 0, ticketId != null ? Number(ticketId) : null, now, expiresAt);
       event('link-created', p.id, { purpose, reset: resetting, hours: h, passkeysRemoved, browsersSignedOut }, {}, now);
       return { purpose, expiresAt };
     }, { immediate: true });
@@ -196,6 +201,12 @@ export function createPeople({ db, sessions, access, settings, rp, ceremonies })
     return link;
   }
 
+  // The film a link carries, while it is published; the ticket itself is checked as usual.
+  function linkFilm(link) {
+    const f = link.ticket_id != null ? q.filmOf.get(link.ticket_id, link.person_id) : null;
+    return f?.published ? { slug: f.slug, title: f.title } : null;
+  }
+
   // Opening the page uses nothing up: link previews and scanners can't spend a link.
   async function enrollOptions(token) {
     available();
@@ -204,7 +215,7 @@ export function createPeople({ db, sessions, access, settings, rp, ceremonies })
     q.opened.run(Date.now(), link.id);
     const options = await registrationOptions(rp, { rpName: settings.get().cinemaName, person, existing: q.passkeysOf.all(person.id) });
     ceremonies.beginEnroll(link.id, options.challenge);
-    return { person: { name: person.name }, purpose: link.purpose, reset: Boolean(link.reset), expiresAt: link.expires_at, film: null, options };
+    return { person: { name: person.name }, purpose: link.purpose, reset: Boolean(link.reset), expiresAt: link.expires_at, film: linkFilm(link), options };
   }
 
   // Only a passkey actually created uses a link up. Two browsers finishing one
@@ -246,7 +257,7 @@ export function createPeople({ db, sessions, access, settings, rp, ceremonies })
       }
       const signedIn = sessions.signIn(req, { personId: person.id, passkeyId, currentHash }, now);
       event('passkey-added', person.id, { via: link.purpose, device }, { sessionHash: signedIn.session.id_hash }, now);
-      return { ...signedIn, person: { name: person.name }, slug: null };
+      return { ...signedIn, person: { name: person.name }, slug: linkFilm(link)?.slug ?? null };
     }, { immediate: true });
   }
 

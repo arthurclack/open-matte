@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, formatAgo, formatDateTime, formatDayTime, plural } from '../api.js';
-import { PasskeysProblem, PersonBadge, peopleError } from './People.jsx';
-import { CopyButton, ErrorNote, describeEvent, linkLifetime, useAction, useLoad } from './ui.jsx';
+import { CreatedLink, PasskeysProblem, PersonBadge, peopleError } from './People.jsx';
+import { TicketTable } from './Tickets.jsx';
+import { ErrorNote, describeEvent, linkLifetime, useAction, useLoad } from './ui.jsx';
 
 const SETUP_HOURS = [1, 24, 72, 168];
 const RECOVERY_HOURS = [1, 24];
@@ -14,6 +15,7 @@ export default function PersonDetail() {
   const { id } = useParams();
   const { data: p, setData, error, reload } = useLoad(() => api.get(`/api/admin/people/${id}`), [id]);
   const events = useLoad(() => api.get(`/api/admin/activity?person=${id}&limit=300`), [id]);
+  const tickets = useLoad(() => api.get(`/api/admin/tickets?person=${id}`), [id]);
   const settings = useLoad(() => api.get('/api/admin/settings'), []);
   const [panel, setPanel] = useState(null); // 'setup' | 'help'
   const [created, setCreated] = useState(null); // the link, shown this once
@@ -52,6 +54,7 @@ export default function PersonDetail() {
     else reload();
     done?.(r);
     events.reload();
+    tickets.reload(); // disabling or enabling changes how their tickets show
   }
 
   const createLink = (body) =>
@@ -135,6 +138,11 @@ export default function PersonDetail() {
                 Create a setup link
               </button>
             ))}
+          {!p.disabled && (
+            <Link className="btn" to={`/admin/tickets?person=${p.id}`}>
+              Issue a ticket for {name}
+            </Link>
+          )}
           <button className="btn" onClick={signOutEverywhere} disabled={action.busy || !p.browsers.length}>
             Sign out everywhere
           </button>
@@ -288,6 +296,11 @@ export default function PersonDetail() {
         </div>
       )}
 
+      <h2>Tickets</h2>
+      <ErrorNote error={tickets.error} />
+      {tickets.data?.length > 0 && <TicketTable tickets={tickets.data} showFilm showKind={false} />}
+      {tickets.data?.length === 0 && <p className="dim">No tickets only for {name} yet. Tickets for anyone with the link aren't listed here.</p>}
+
       <h2>Links</h2>
       {p.links.length === 0 ? (
         <p className="dim">No setup or recovery links yet.</p>
@@ -354,36 +367,6 @@ function LinkOutcome({ link: l }) {
   if (l.cancelledAt) return <span className="faint">Cancelled {formatDateTime(l.cancelledAt)}</span>;
   if (l.expiresAt <= Date.now()) return <span className="faint">Expired {formatDateTime(l.expiresAt)}</span>;
   return <span>Waiting: works until {formatDayTime(l.expiresAt)}</span>;
-}
-
-// The only time the link is ever shown: the server keeps just its hash.
-function CreatedLink({ created, name, cinema, onDone }) {
-  const until = formatDayTime(created.expiresAt);
-  const setup = created.purpose === 'setup';
-  const message = setup
-    ? `Here's your link for ${cinema}: open it on your phone or computer to create a passkey. It works once, until ${until}. ${created.link}`
-    : `Here's your link to get back into ${cinema}: open it to create a new passkey. It works once, until ${until}. ${created.link}`;
-  return (
-    <div className="notice good">
-      <p style={{ marginBottom: '0.6rem' }}>
-        <strong>
-          {setup ? 'Setup' : 'Recovery'} link for {name}:
-        </strong>{' '}
-        works once, until {until}.
-      </p>
-      <div className="link-box">
-        <code>{created.link}</code>
-        <CopyButton text={created.link} label="Copy link" />
-        <CopyButton text={message} label="Copy message" />
-      </div>
-      <div className="row" style={{ marginTop: '0.7rem', justifyContent: 'space-between' }}>
-        <span className="dim">You won't see this link again. If it goes astray, create a new one: this one then stops working.</span>
-        <button className="btn small" onClick={onDone}>
-          Done
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function SetupLinkPanel({ person: p, busy, onCreate, onClose }) {

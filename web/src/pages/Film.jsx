@@ -16,7 +16,7 @@ const PLAY_ERRORS = {
 
 export default function Film() {
   const { slug } = useParams();
-  const { site, refresh: refreshSite } = useSite();
+  const { me, site, refresh: refreshSite, setPlayerOpen } = useSite();
   const [data, setData] = useState(undefined); // undefined = loading, null = not found
   const [screening, setScreening] = useState(null);
   const [message, setMessage] = useState(null);
@@ -42,6 +42,13 @@ export default function Film() {
   useEffect(() => {
     if (data?.film?.title && site?.cinemaName) document.title = `${data.film.title} · ${site.cinemaName}`;
   }, [data?.film?.title, site?.cinemaName]);
+
+  // The header's Sign in link isn't offered while the player is open.
+  const playerOpen = Boolean(screening);
+  useEffect(() => {
+    setPlayerOpen(playerOpen);
+    return () => setPlayerOpen(false);
+  }, [playerOpen, setPlayerOpen]);
 
   async function play() {
     setMessage(null);
@@ -115,7 +122,15 @@ export default function Film() {
           )}
 
           {message && <div className="notice warn">{message}</div>}
-          <TicketPanel access={access} film={film} site={site} onPlay={play} starting={starting} playing={Boolean(screening)} />
+          <TicketPanel
+            access={access}
+            film={film}
+            site={site}
+            signedIn={Boolean(me?.person)}
+            onPlay={play}
+            starting={starting}
+            playing={Boolean(screening)}
+          />
 
           {film.synopsis && <p className="synopsis">{film.synopsis}</p>}
           {film.contentNote && <p className="faint">{film.contentNote}</p>}
@@ -125,7 +140,7 @@ export default function Film() {
   );
 }
 
-function TicketPanel({ access, film, site, onPlay, starting, playing }) {
+function TicketPanel({ access, film, site, signedIn, onPlay, starting, playing }) {
   const t = access.ticket;
   const windowHours = site?.resumeWindowHours ?? 48;
 
@@ -157,6 +172,7 @@ function TicketPanel({ access, film, site, onPlay, starting, playing }) {
       if (t.daysAfterFirstPlay && !t.firstPlayedAt) lines.push(`Once you start, the ticket lasts ${plural(t.daysAfterFirstPlay, 'day')}.`);
     }
     if (t.expiresAt) lines.push(`The ticket is valid until ${formatDateTime(t.expiresAt)}.`);
+    if (t.inAccount) lines.push("This ticket is in your account, so it's on every device you sign in on.");
     const resumeAt = open && open.position > 15 ? ` at ${formatClock(open.position)}` : '';
     button = !playing && (
       <button className="btn primary big" onClick={onPlay} disabled={starting}>
@@ -179,8 +195,8 @@ function TicketPanel({ access, film, site, onPlay, starting, playing }) {
       ))}
       {button}
       <p className="privacy">
-        {site?.cinemaName || 'The host'} can see when this ticket is opened and played, the kind of device (such as “Safari on iPhone”), and roughly how far
-        playback gets.
+        {site?.cinemaName || 'The host'} can see when this ticket is opened and played, the kind of device (such as “Safari on iPhone”),{' '}
+        {signedIn ? "roughly how far playback gets and, because you're signed in, that it was you." : 'and roughly how far playback gets.'}
       </p>
     </div>
   );

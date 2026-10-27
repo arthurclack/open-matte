@@ -1,17 +1,30 @@
 import { useState } from 'react';
-import { api } from './api.js';
+import { api, formatDay } from './api.js';
 import { browserProblem, serverProblem, signInWithPasskey, supportsPasskeys, useCeremonyOptions } from './passkeys.js';
 import { useSite } from './site.jsx';
 
 const fetchSignInOptions = () => api.post('/api/signin/options');
 
-// One button that signs this browser in with a passkey. Used by the sign-in page,
-// and later wherever a ticket or the keep panel needs a signed-in person.
-// onSignedIn gets the server's answer: { person, newPasskeys }.
-export default function PasskeySignIn({ onSignedIn }) {
+// One button that signs this browser in with a passkey. Used by the sign-in page and
+// a ticket for one person, and later by the keep panel. onSignedIn gets the server's
+// answer: { person, newPasskeys }. copyLabel names what Copy link copies.
+export default function PasskeySignIn({ onSignedIn, copyLabel }) {
   const [supported] = useState(supportsPasskeys);
-  if (!supported) return <OpenInBrowser />;
+  if (!supported) return <OpenInBrowser copyLabel={copyLabel} />;
   return <SignInButton onSignedIn={onSignedIn} />;
+}
+
+// Passkeys added since the one that just signed in was last used. The server says
+// so once, so every page that signs someone in shows them before moving on.
+export function NewPasskeys({ passkeys }) {
+  const { site } = useSite();
+  const host = `whoever runs ${site?.cinemaName || 'this cinema'}`;
+  return (passkeys || []).map((k) => (
+    <div key={`${k.addedAt}-${k.device}`} className="notice warn">
+      A passkey was added on {formatDay(k.addedAt)}
+      {k.device ? ` from ${k.device}` : ''}. Not you? Tell {host}.
+    </div>
+  ));
 }
 
 function SignInButton({ onSignedIn }) {
@@ -71,7 +84,7 @@ function SignInButton({ onSignedIn }) {
 
 // Where passkeys can't work (no WebAuthn, or an app's built-in browser): send
 // people to a real browser with this exact address, fragment included.
-export function OpenInBrowser() {
+export function OpenInBrowser({ copyLabel = 'Copy link' }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     const href = window.location.href;
@@ -90,7 +103,7 @@ export function OpenInBrowser() {
       </p>
       <p className="dim">This browser can't use passkeys. Copy the link, then paste it into Safari or Chrome. In an app, its menu may offer “Open in browser”.</p>
       <button className="btn" onClick={copy}>
-        {copied ? 'Copied' : 'Copy link'}
+        {copied ? 'Copied' : copyLabel}
       </button>
     </div>
   );

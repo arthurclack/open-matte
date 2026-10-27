@@ -116,7 +116,8 @@ function EnrollLink({ token }) {
       })
       .then((r) => {
         stored.clear();
-        setDone(r);
+        // The link may carry a ticket: then it ends on that film.
+        setDone({ ...r, film: r.slug ? info.film : null });
         refresh();
       })
       .catch((err) => {
@@ -140,7 +141,7 @@ function EnrollLink({ token }) {
         <Title>You're in, {done.person.name}</Title>
         <p className="dim">Your passkey is ready. Next time, use it to sign in.</p>
         <button className="btn primary" onClick={() => navigate(done.slug ? `/${done.slug}` : '/', { replace: true })}>
-          Continue
+          {done.film ? `Continue to ${done.film.title}` : 'Continue'}
         </button>
       </Page>
     );
@@ -210,7 +211,8 @@ function EnrollLink({ token }) {
         {info.purpose === 'setup' ? 'Welcome' : 'Welcome back'}, {name}
       </Title>
       <p>
-        Create a passkey to sign in to {site?.cinemaName || 'this cinema'}. Your phone or computer keeps it and unlocks it with Face ID, a fingerprint or
+        Create a passkey to sign in to {site?.cinemaName || 'this cinema'}
+        {info.film ? `, then go on to ${info.film.title}` : ''}. Your phone or computer keeps it and unlocks it with Face ID, a fingerprint or
         your screen lock. No password, no email address.
       </p>
       {info.reset && (

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from './api.js';
 
 const SiteContext = createContext(null);
@@ -8,7 +8,10 @@ const SiteContext = createContext(null);
 // a header and footer around every page.
 export function SiteProvider({ children }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [me, setMe] = useState(null);
+  // Sign-in is never offered while the player is open: the film page says when it is.
+  const [playerOpen, setPlayerOpen] = useState(false);
   const refresh = useCallback(() => api.get('/api/me').then(setMe).catch(() => setMe({ site: null, person: null, tickets: [] })), []);
   useEffect(() => {
     refresh();
@@ -17,16 +20,20 @@ export function SiteProvider({ children }) {
   // Revokes this browser's session, so it also forgets the link tickets it opened.
   // False if the server never heard: the session is still there, so nothing may
   // look signed out (on a borrowed computer the next person would be signed in).
-  const signOut = useCallback(async () => {
-    try {
-      await api.post('/api/signout');
-    } catch {
-      return false;
-    }
-    await refresh();
-    navigate('/');
-    return true;
-  }, [refresh, navigate]);
+  // Then goes to the front page, or stays put with { to: null }.
+  const signOut = useCallback(
+    async ({ to = '/' } = {}) => {
+      try {
+        await api.post('/api/signout');
+      } catch {
+        return false;
+      }
+      await refresh();
+      if (to != null) navigate(to);
+      return true;
+    },
+    [refresh, navigate],
+  );
 
   const site = me?.site;
   useEffect(() => {
@@ -34,7 +41,7 @@ export function SiteProvider({ children }) {
   }, [site?.cinemaName]);
 
   return (
-    <SiteContext.Provider value={{ me, site, refresh, signOut }}>
+    <SiteContext.Provider value={{ me, site, refresh, signOut, setPlayerOpen }}>
       <div className="site">
         {/* The admin cookie bypasses every ticket and person check in this browser. */}
         {me?.admin && me?.person && <div className="preview-banner">Admin preview: person rules don't apply in this browser.</div>}
@@ -49,6 +56,11 @@ export function SiteProvider({ children }) {
               </a>
             )}
             {me?.person && <PersonMenu me={me} onSignOut={signOut} />}
+            {me && !me.person && !playerOpen && offersSignIn(pathname) && (
+              <Link to={pathname === '/' ? '/signin' : `/signin?next=${encodeURIComponent(pathname)}`} className="site-signin">
+                Sign in
+              </Link>
+            )}
           </div>
         </header>
         <main className="site-main">{children}</main>
@@ -70,6 +82,26 @@ export function SiteProvider({ children }) {
       </div>
     </SiteContext.Provider>
   );
+}
+
+// Pages that handle signing in themselves (a ticket for one person signs in on its
+// own page, and keeps its code out of any other address) don't get the header link.
+const offersSignIn = (pathname) => !/^\/(t\/|signin$|enroll$)/.test(pathname);
+
+// Signing out forgets the link tickets this browser opened; the links still work.
+// True to go ahead.
+export function confirmSignOut(me) {
+  // Every link ticket this browser holds, even one hidden behind the person's own
+  // ticket for the same film.
+  const fromLinks = me?.linkTickets || [];
+  if (!fromLinks.length) return true;
+  const n = fromLinks.length;
+  const titles = fromLinks.join(', ');
+  const text =
+    n === 1
+      ? `Sign out of this browser? It also forgets 1 ticket you opened from a link here (${titles}). The link still works if you open it again.`
+      : `Sign out of this browser? It also forgets ${n} tickets you opened from links here (${titles}). The links still work if you open them again.`;
+  return window.confirm(text);
 }
 
 // "Sam ▾": who is signed in here, and a way out.
@@ -94,17 +126,7 @@ function PersonMenu({ me, onSignOut }) {
 
   async function signOut() {
     setOpen(false);
-    // Signing out forgets the link tickets this browser opened; the links still work.
-    const fromLinks = me.tickets.filter((t) => !t.ticket?.inAccount);
-    if (fromLinks.length) {
-      const n = fromLinks.length;
-      const titles = fromLinks.map((t) => t.film.title).join(', ');
-      const text =
-        n === 1
-          ? `Sign out of this browser? It also forgets 1 ticket you opened from a link here (${titles}). The link still works if you open it again.`
-          : `Sign out of this browser? It also forgets ${n} tickets you opened from links here (${titles}). The links still work if you open them again.`;
-      if (!window.confirm(text)) return;
-    }
+    if (!confirmSignOut(me)) return;
     setBusy(true);
     setError(null);
     try {

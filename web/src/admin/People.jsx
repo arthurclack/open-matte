@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, formatAgo } from '../api.js';
-import { ErrorNote, useAction, useLoad } from './ui.jsx';
+import { api, formatAgo, formatDayTime } from '../api.js';
+import { CopyButton, ErrorNote, useAction, useLoad } from './ui.jsx';
 
 // The server answers these with a code; everything else it says in words.
 const PEOPLE_ERRORS = {
   'name-taken': 'Someone here already has that name (capitals are ignored). Add something to tell them apart.',
   'confirm-contact': "Tick the box to confirm you're replying on a contact you already know is theirs.",
   'bad-hours': 'Choose how long the link works.',
-  'bad-ticket': "Links can't carry a ticket yet.",
+  'bad-ticket': "That ticket can't go with the link: it has to be a ticket only for them, and not revoked.",
   'person-disabled': "Enable them first: disabled people can't be sent a link.",
   'person-not-found': 'There is nobody here with that id.',
   'passkey-not-found': 'That passkey has already been removed.',
@@ -35,6 +35,39 @@ export function PasskeysProblem({ settings }) {
     <div className="notice warn">
       <strong>Passkeys aren't available.</strong> {problem} Until it's fixed, nobody can sign in or create a passkey, and no setup links can be made.
       Tickets for anyone with the link still work.
+    </div>
+  );
+}
+
+// The only time a setup or recovery link is ever shown: the server keeps just its
+// hash. `message` replaces the default one, e.g. for a link that opens a film.
+export function CreatedLink({ created, name, cinema, message, onDone }) {
+  const until = formatDayTime(created.expiresAt);
+  const setup = created.purpose === 'setup';
+  const text =
+    message ??
+    (setup
+      ? `Here's your link for ${cinema}: open it on your phone or computer to create a passkey. It works once, until ${until}. ${created.link}`
+      : `Here's your link to get back into ${cinema}: open it to create a new passkey. It works once, until ${until}. ${created.link}`);
+  return (
+    <div className="notice good">
+      <p style={{ marginBottom: '0.6rem' }}>
+        <strong>
+          {setup ? 'Setup' : 'Recovery'} link for {name}:
+        </strong>{' '}
+        works once, until {until}.
+      </p>
+      <div className="link-box">
+        <code>{created.link}</code>
+        <CopyButton text={created.link} label="Copy link" />
+        <CopyButton text={text} label="Copy message" />
+      </div>
+      <div className="row" style={{ marginTop: '0.7rem', justifyContent: 'space-between' }}>
+        <span className="dim">You won't see this link again. If it goes astray, create a new one: this one then stops working.</span>
+        <button className="btn small" onClick={onDone}>
+          Done
+        </button>
+      </div>
     </div>
   );
 }
@@ -67,6 +100,7 @@ export default function People() {
               <tr>
                 <th>Name</th>
                 <th>Passkeys</th>
+                <th>Tickets</th>
                 <th>Last signed in</th>
                 <th>Status</th>
               </tr>
@@ -79,6 +113,7 @@ export default function People() {
                     {p.note && <div className="faint" style={{ fontWeight: 400, fontSize: '0.85rem' }}>{p.note}</div>}
                   </td>
                   <td data-label="Passkeys">{p.passkeys || <span className="faint">None yet</span>}</td>
+                  <td data-label="Tickets">{p.tickets ? <Link to={`/admin/tickets?person=${p.id}`}>{p.tickets}</Link> : <span className="faint">None</span>}</td>
                   <td className="faint nowrap" data-label="Last signed in">{p.lastSignedInAt ? formatAgo(p.lastSignedInAt) : 'Never'}</td>
                   <td data-label="Status">
                     <span className="row" style={{ gap: '0.4rem' }}>

@@ -176,6 +176,12 @@ export const MIGRATIONS = [
   ALTER TABLE events ADD COLUMN person_id INTEGER REFERENCES people(id);
   CREATE INDEX events_person ON events(person_id, at) WHERE person_id IS NOT NULL;
   `,
+  // From here on tickets.person_id is set, so code from before tickets for one
+  // person, which ignores it, must refuse this database rather than treat those
+  // tickets as tickets for anyone.
+  `
+  CREATE INDEX tickets_person ON tickets(person_id) WHERE person_id IS NOT NULL;
+  `,
 ];
 
 export function openDb(file) {

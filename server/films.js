@@ -83,6 +83,9 @@ export function ticketForViewer(ticket, status) {
     daysAfterFirstPlay: ticket.days_after_first_play,
     expiresAt: status.expiresAt,
     firstPlayedAt: ticket.first_played_at,
-    openScreening: status.open ? { resumableUntil: status.open.resumable_until, position: status.open.position_seconds } : null,
+    // Only while the ticket can still play it: expiry wins over a running resume window.
+    openScreening: status.state === 'ok' && status.open ? { resumableUntil: status.open.resumable_until, position: status.open.position_seconds } : null,
+    // In the signed-in person's account, so on every device they sign in on.
+    inAccount: ticket.person_id != null,
   };
 }

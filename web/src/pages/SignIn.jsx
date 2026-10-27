@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { formatDay } from '../api.js';
-import PasskeySignIn from '../PasskeySignIn.jsx';
+import PasskeySignIn, { NewPasskeys } from '../PasskeySignIn.jsx';
 import { useSite } from '../site.jsx';
 
 // Only a path on this site: one leading slash, not // or /\ (another site), and no
@@ -37,12 +36,7 @@ export default function SignIn() {
     return (
       <div className="narrow" style={{ paddingTop: '15vh' }}>
         <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Signed in as {result.person.name}</h1>
-        {result.newPasskeys.map((k) => (
-          <div key={`${k.addedAt}-${k.device}`} className="notice warn">
-            A passkey was added on {formatDay(k.addedAt)}
-            {k.device ? ` from ${k.device}` : ''}. Not you? Tell {host}.
-          </div>
-        ))}
+        <NewPasskeys passkeys={result.newPasskeys} />
         <button className="btn primary" onClick={() => navigate(next, { replace: true })}>
           Continue
         </button>
