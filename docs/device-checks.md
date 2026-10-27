@@ -17,7 +17,8 @@ fails is worth a line about what you saw, and the server log
 - **Use Test Pattern.** It's a minute long: if the picture moves, the audio switches
   between English and French and the subtitles appear, playback works.
 - **In the admin, prepare:**
-  1. A ticket **only for you**, signed in, for Test Pattern, with no screening limit.
+  1. **Publish** Test Pattern (it starts as a draft, and a ticket for a draft doesn't
+     open), then issue a ticket **only for you**, signed in, with no screening limit.
   2. A ticket **for anyone with the link** for Test Pattern, with **Let them keep it in
      their account** ticked, and a second plain one for the TV.
   3. **Show to members** on a film you have no ticket for (say Hedwig).
@@ -112,8 +113,8 @@ and in an Instagram message, and open each from inside the app.
 
 | Where | Signed in | Your tickets, member film | Plays (audio, subtitles, quality) | Account page, sign out | Notes |
 |---|---|---|---|---|---|
-| iPhone Safari | | | | | |
-| Mac Safari | | | | | |
+| iPhone Safari | Yes: passkey created with the setup link, 27 Oct | | | | Synced passkey (iCloud Keychain) |
+| Mac Safari | Yes, 27 Oct, with the iPhone's synced passkey from iCloud Keychain | | | | |
 | Mac Safari, keyboard only | – | – | | – | Chromium checked 27 Oct: Play, Space, menu |
 | Chrome on Mac | | | | | |
 | Chrome on Windows (QR code) | | | | | |
