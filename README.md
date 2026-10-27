@@ -24,8 +24,9 @@ Milestone 1, ticketed playback, is complete:
 - **Film information from TMDB**, optional: details, posters and backdrops filled in on import or chosen by hand, as Jellyfin does ([docs/metadata.md](docs/metadata.md))
 - **Reference encoder** for HEVC + H.264 ladders with alternate audio ([docs/encoding.md](docs/encoding.md))
 
-Milestone 2 is adding people and passkeys, in slices planned in
-[docs/milestone-2.md](docs/milestone-2.md). Built so far:
+Milestone 2, people and passkeys, is built (planned in
+[docs/milestone-2.md](docs/milestone-2.md)); checks on real devices are under way
+([docs/device-checks.md](docs/device-checks.md)):
 
 - **People and passkeys**: you add people and send each a single-use setup link; they create a passkey and can then sign in and out with no password. Recovery links, disabling people and removing passkeys are in the admin ([docs/access.md](docs/access.md))
 - **Tickets for one person**: alongside tickets for anyone with the link, a ticket only one person can use, signed in with their passkey. It's listed on every device they sign in on, and forwarding the link does nothing ([docs/access.md](docs/access.md#two-kinds-of-ticket))

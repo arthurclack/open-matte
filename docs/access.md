@@ -4,10 +4,10 @@ The goal is "private enough for friends", not DRM. These are the rules the code
 follows: `server/access.js` implements the ticket rules, `server/people.js` and
 `server/webauthn.js` people and passkeys, and the tests in `test/` check them.
 
-Milestone 2 is being built in slices, planned in [milestone-2.md](milestone-2.md).
-It adds people and passkeys, tickets that only one person can use, signed in,
-keeping a ticket in an account, films shown to members and an account page. What's
-left is testing across devices and browsers.
+Milestone 2, planned in [milestone-2.md](milestone-2.md), adds people and passkeys,
+tickets that only one person can use, signed in, keeping a ticket in an account,
+films shown to members and an account page. Checks on real devices are listed in
+[device-checks.md](device-checks.md).
 
 ## The records
 

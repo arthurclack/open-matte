@@ -104,6 +104,13 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     if (code !== 'playing-elsewhere' && code !== 'unsupported') onHalt?.();
   }
 
+  // Pressing Play removes the button that had focus. Hand it to the video, so the
+  // keyboard works straight away (Space to pause, arrows to seek) rather than
+  // starting again from the top of the page. The film page scrolls to the player.
+  useEffect(() => {
+    if (!document.activeElement || document.activeElement === document.body) videoRef.current?.focus({ preventScroll: true });
+  }, []);
+
   // ---- choose a player
   useEffect(() => {
     const video = videoRef.current;

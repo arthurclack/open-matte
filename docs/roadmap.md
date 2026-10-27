@@ -31,15 +31,25 @@ desktop, and how the tone-mapped SDR renditions look on a non-HDR screen.
 
 ## Milestone 2: people and passkeys
 
-Planned in [milestone-2.md](milestone-2.md), to be built in six slices.
+Planned in [milestone-2.md](milestone-2.md) and built in six slices, all deployed by
+27 October 2026. What's left is checking it on real devices
+([device-checks.md](device-checks.md)).
 
-- People, and claiming a ticket into a person's account (an admin toggle per ticket)
-- Passkey enrollment and sign-in; HTTPS with a stable WebAuthn relying-party ID
-- Identity-enforced tickets, which require signing in as the assigned person,
-  alongside today's bearer tickets; the admin chooses which kind to issue
-- "Your tickets", plus films marked visible to members
-- Recovery as an explicit admin action: single-use, short-lived enrollment and
-  recovery links, with the option to revoke old passkeys and sessions
+- [x] People, passkey setup and sign-in, with `openmatte.dev` as the relying party
+- [x] Recovery as an explicit admin action: single-use, short-lived setup and recovery
+  links, with Reset after loss to remove old passkeys and sessions
+- [x] Tickets only one person can use, signed in, alongside tickets for anyone with
+  the link; the admin chooses which kind to issue
+- [x] "Your tickets" on every device a person signs in on
+- [x] Keeping a ticket in an account (a per-ticket "Let them keep it"), and giving or
+  releasing it from the admin
+- [x] Films shown to members: listed and readable, never playable without a ticket
+- [x] An account page: passkeys, signed-in browsers, Sign out everywhere
+- [x] Keyboard only (Chromium): Play, pausing, the name menu
+- [ ] Device checks: Safari on iPhone and Mac, Chrome on Mac and Windows (with the
+  phone's QR code), Android, desktop Firefox, a password manager, in-app browsers, a
+  TV browser, AirPlay and Chromecast, a non-HDR screen
+- [ ] Decide whether the bare `openmatte.dev` redirects to `www`
 
 ## Milestone 3: polish and public release
 

@@ -113,14 +113,17 @@ function PersonMenu({ me, onSignOut }) {
 
   useEffect(() => {
     if (!open) return undefined;
+    // Escape, a click elsewhere, or tabbing out of the menu closes it.
     const close = (e) => {
       if (e.type === 'keydown' ? e.key === 'Escape' : !ref.current?.contains(e.target)) setOpen(false);
     };
     document.addEventListener('pointerdown', close);
     document.addEventListener('keydown', close);
+    document.addEventListener('focusin', close);
     return () => {
       document.removeEventListener('pointerdown', close);
       document.removeEventListener('keydown', close);
+      document.removeEventListener('focusin', close);
     };
   }, [open]);
 

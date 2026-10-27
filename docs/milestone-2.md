@@ -5,6 +5,10 @@ The plan for milestone 2, agreed on 26 October 2026. It starts from commit b28a5
 what will be. As each slice ships, its rules move into access.md and its box in
 [roadmap.md](roadmap.md) gets ticked.
 
+**Status, 27 October:** slices 1 to 5 are built and deployed (slice 4 before slice 3,
+so films shown to members are migration 5 and keeping is 6). Slice 6's device checks
+are in [device-checks.md](device-checks.md).
+
 ## What it's for
 
 Friends who want an account can have one, and nobody has to. You add a person and
