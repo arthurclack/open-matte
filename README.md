@@ -29,6 +29,7 @@ Milestone 2 is adding people and passkeys, in slices planned in
 
 - **People and passkeys**: you add people and send each a single-use setup link; they create a passkey and can then sign in and out with no password. Recovery links, disabling people and removing passkeys are in the admin ([docs/access.md](docs/access.md))
 - **Tickets for one person**: alongside tickets for anyone with the link, a ticket only one person can use, signed in with their passkey. It's listed on every device they sign in on, and forwarding the link does nothing ([docs/access.md](docs/access.md#two-kinds-of-ticket))
+- **Keeping a ticket**: a ticket for anyone can be marked "Let them keep it". The first signed-in person to keep it makes it theirs, on every device they sign in on; other browsers holding the link lose it and are told why, and its limits and expiry don't change. You can give it to someone else or back to anyone with the link ([docs/access.md](docs/access.md#keeping-a-ticket))
 - **Films shown to members**: a switch per film. Signed-in people see its page, poster and your recommendation, and are told to ask for a ticket; playing it still needs one ([docs/access.md](docs/access.md#films-shown-to-members))
 
 Milestone 3 brings branding, polish and release documentation. See

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, formatAgo, formatClock, formatDate, formatDateTime } from '../api.js';
-import { PersonDisabledBadge, ticketMessage } from './Tickets.jsx';
+import { KeepBox, PersonDisabledBadge, ticketKind, ticketMessage } from './Tickets.jsx';
 import { CopyButton, ErrorNote, Progress, TicketBadge, dateInputToMs, describeEvent, msToDateInput, useAction, useLoad } from './ui.jsx';
 
 export default function TicketDetail() {
@@ -18,6 +18,7 @@ export default function TicketDetail() {
         screeningLimit: t.screeningLimit ?? '',
         startBy: msToDateInput(t.startBy),
         daysAfterFirstPlay: t.daysAfterFirstPlay ?? '',
+        claimable: t.claimable,
       });
   }, [t]);
 
@@ -41,9 +42,16 @@ export default function TicketDetail() {
         screeningLimit: form.screeningLimit === '' ? null : Number(form.screeningLimit),
         startBy: dateInputToMs(form.startBy),
         daysAfterFirstPlay: form.daysAfterFirstPlay === '' ? null : Number(form.daysAfterFirstPlay),
+        ...(t.person ? {} : { claimable: form.claimable }),
       }),
     );
     if (r) reload();
+  }
+
+  // Gives the ticket to a person, or (null) lets anyone with the link use it again.
+  async function setHolder(personId, confirmText) {
+    if (!window.confirm(confirmText)) return;
+    if (await action.run(() => api.post(`/api/admin/tickets/${t.id}/holder`, { personId }))) refresh();
   }
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -62,7 +70,16 @@ export default function TicketDetail() {
       <div className="page-head">
         <div>
           <h1>{t.label || person?.name || 'Unnamed ticket'}</h1>
-          <p className="dim" style={{ margin: '0 0 0.4rem' }}>{person ? <>Only {personLink}, signed in</> : 'Anyone with the link'}</p>
+          <p className="dim" style={{ margin: '0 0 0.4rem' }}>
+            {person ? (
+              <>
+                Only {personLink}
+                {t.claimedAt ? ` · kept from a link ${formatDateTime(t.claimedAt)}` : ', signed in'}
+              </>
+            ) : (
+              ticketKind(t)
+            )}
+          </p>
           <div className="row" style={{ gap: '0.5rem' }}>
             <Link to={`/admin/films/${t.film.id}`}>{t.film.title}</Link>
             <TicketBadge ticket={t} />
@@ -122,6 +139,8 @@ export default function TicketDetail() {
         </div>
       )}
 
+      <WhoCanUseIt ticket={t} busy={action.busy} onSetHolder={setHolder} />
+
       <div className="grid-2">
         <div className="card">
           <dl className="kv">
@@ -177,6 +196,7 @@ export default function TicketDetail() {
             <span>Start watching by</span>
             <input type="date" value={form.startBy} onChange={set('startBy')} />
           </label>
+          {!person && <KeepBox checked={form.claimable} onChange={(claimable) => setForm({ ...form, claimable })} style={{ marginLeft: 0 }} />}
           <button className="btn primary" disabled={action.busy}>
             Save changes
           </button>
@@ -239,29 +259,28 @@ export default function TicketDetail() {
         </div>
       )}
 
+      {t.waitingBrowsers > 0 && (
+        <>
+          <h2>Opened the link before it was {t.claimedAt ? 'kept' : 'given to ' + person.name}</h2>
+          <p className="dim">
+            These browsers opened the link while it was for anyone. Unless they're signed in as {person.name}, they can't use it now: they're told it has
+            been kept in someone's account. They get it back if you let anyone with the link use it.{' '}
+            <button
+              className="linklike"
+              onClick={() => post(`tickets/${t.id}/sign-out-browsers`, "Forget this ticket in these browsers? They won't get it back if you let anyone with the link use it, unless they open the link again.")}
+              disabled={action.busy}
+            >
+              Forget it in these browsers
+            </button>
+          </p>
+          <BrowserTable browsers={t.browserList} />
+        </>
+      )}
+
       {t.browsers > 0 && (
         <>
           <h2>Browsers holding this ticket</h2>
-          <div className="table-wrap">
-            <table className="stack">
-              <thead>
-                <tr>
-                  <th>Device</th>
-                  <th>Opened the link</th>
-                  <th>Last seen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(t.browserList || []).map((b) => (
-                  <tr key={b.ref}>
-                    <td className="card-title">{b.device}</td>
-                    <td data-label="Opened the link">{formatDateTime(b.addedAt)}</td>
-                    <td className="faint" data-label="Last seen">{formatAgo(b.lastSeenAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <BrowserTable browsers={t.browserList} />
         </>
       )}
 
@@ -289,5 +308,93 @@ export default function TicketDetail() {
         {t.durationSeconds ? `For this film that's ${formatClock(t.durationSeconds * 0.92)}.` : ''}
       </p>
     </>
+  );
+}
+
+// Browsers that opened the ticket's link.
+function BrowserTable({ browsers }) {
+  return (
+    <div className="table-wrap">
+      <table className="stack">
+        <thead>
+          <tr>
+            <th>Device</th>
+            <th>Opened the link</th>
+            <th>Last seen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(browsers || []).map((b) => (
+            <tr key={b.ref}>
+              <td className="card-title">{b.device}</td>
+              <td data-label="Opened the link">{formatDateTime(b.addedAt)}</td>
+              <td className="faint" data-label="Last seen">{formatAgo(b.lastSeenAt)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Who the ticket is for, and changing it: Give it to a person, or Let anyone with
+// the link use it. Either way its limits, clocks and screenings stay as they are.
+function WhoCanUseIt({ ticket: t, busy, onSetHolder }) {
+  const people = useLoad(() => api.get('/api/admin/people'), []);
+  const [to, setTo] = useState('');
+  const person = t.person;
+  // Disabled people can't be given tickets, and the current holder already has it.
+  const choices = people.data?.filter((p) => !p.disabled && p.id !== person?.id) || [];
+  const chosen = choices.find((p) => String(p.id) === to);
+
+  function give() {
+    if (!chosen) return;
+    const loses = person ? `${person.name} loses it from the next request` : 'Browsers that opened the link lose it from the next request';
+    onSetHolder(chosen.id, `Give this ticket to ${chosen.name}? Only ${chosen.name}, signed in, can use it from now on. ${loses}.`);
+  }
+  function release() {
+    onSetHolder(
+      null,
+      `Let anyone with the link use this ticket again? ${person.name} loses it from the next request, and browsers that opened the link get it back.`,
+    );
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: '1rem' }}>
+      <div className="row" style={{ justifyContent: 'space-between', gap: '0.8rem' }}>
+        <div>
+          <strong>Who can use it</strong>
+          <div className="dim">
+            {person
+              ? `Only ${person.name}, signed in, on every device they sign in on.`
+              : t.claimable
+                ? 'Anyone with the link. Someone you\'ve added can keep it in their account, and whoever keeps it first takes it from everyone else.'
+                : 'Anyone with the link.'}
+          </div>
+        </div>
+        <div className="row" style={{ gap: '0.5rem' }}>
+          {person && (
+            <button className="btn" onClick={release} disabled={busy}>
+              Let anyone with the link use it
+            </button>
+          )}
+          {choices.length > 0 && (
+            <>
+              <select aria-label="Give it to" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: 'auto' }}>
+                <option value="">{person ? 'Give it to someone else…' : 'Give it to a person…'}</option>
+                {choices.map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <button className="btn" onClick={give} disabled={busy || !chosen}>
+                Give
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

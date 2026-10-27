@@ -25,6 +25,12 @@ export function viewerRoutes({ db, sessions, access, settings, metadata, limit }
       WHERE st.session_hash = ? AND t.person_id IS NULL AND t.revoked_at IS NULL AND f.published = 1
       ORDER BY f.title`),
     lastOpened: db.prepare(`SELECT at FROM events WHERE type = 'opened' AND session_hash = ? AND ticket_id = ? ORDER BY at DESC LIMIT 1`),
+    holds: db.prepare('SELECT 1 FROM session_tickets WHERE session_hash = ? AND ticket_id = ?'),
+    // This browser opened the link of a ticket for this film that someone has kept
+    // since (or that was given to someone). Revoking forgets these rows.
+    keptFrom: db.prepare(`
+      SELECT 1 FROM session_tickets st JOIN tickets t ON t.id = st.ticket_id
+      WHERE st.session_hash = ? AND t.film_id = ? AND t.person_id IS NOT NULL AND t.revoked_at IS NULL LIMIT 1`),
     // In the admin's order. filmAccess still decides whether each one shows.
     memberFilms: db.prepare('SELECT * FROM films WHERE published = 1 AND member_visible = 1 ORDER BY sort_order, title COLLATE NOCASE'),
   };
@@ -45,12 +51,16 @@ export function viewerRoutes({ db, sessions, access, settings, metadata, limit }
 
     // A ticket for one person works only for a browser signed in as them. Anyone
     // else gets nothing: no session, no cookie, no "opened", not even the film.
+    // A browser that opened the link while it was for anyone is told it was kept.
     if (ticket.person_id != null) {
       const viewer = sessions.load(req, 'viewer');
+      if (viewer && viewer.person_id === ticket.person_id) {
+        q.firstOpen.run(Date.now(), ticket.id);
+        return res.json({ slug: q.filmById.get(ticket.film_id).slug });
+      }
+      if (viewer && q.holds.get(viewer.id_hash, ticket.id)) return res.status(410).json({ error: 'ticket-kept' });
       if (!viewer?.person_id) return res.status(401).json({ error: 'sign-in-required' });
-      if (viewer.person_id !== ticket.person_id) return res.status(403).json({ error: 'ticket-for-someone-else' });
-      q.firstOpen.run(Date.now(), ticket.id);
-      return res.json({ slug: q.filmById.get(ticket.film_id).slug });
+      return res.status(403).json({ error: 'ticket-for-someone-else' });
     }
 
     const viewer = sessions.load(req, 'viewer') || sessions.create(req, res, 'viewer');
@@ -92,7 +102,10 @@ export function viewerRoutes({ db, sessions, access, settings, metadata, limit }
     const { viewer, admin } = who(req);
     const film = q.filmBySlug.get(req.params.slug);
     const a = access.filmAccess({ viewer, admin }, film);
-    if (!a.canView) return res.status(404).json({ error: 'not-found' });
+    // No ticket shows the film, but this browser opened the link of one that has
+    // been kept in someone's account since: say so, rather than "nothing showing".
+    const kept = Boolean(viewer && film?.published && (a.via === null || a.via === 'member') && q.keptFrom.get(viewer.id_hash, film.id));
+    if (!a.canView) return kept ? res.status(410).json({ error: 'ticket-kept' }) : res.status(404).json({ error: 'not-found' });
 
     if (a.via === 'ticket') {
       // A ticket for one person may never have been opened by its link.
@@ -111,6 +124,10 @@ export function viewerRoutes({ db, sessions, access, settings, metadata, limit }
         preview: a.via === 'admin',
         published: Boolean(film?.published),
         mediaStatus: film.media_status,
+        // The ticket shown here could be kept in an account (after signing in, if need be).
+        canKeep: access.canKeep(a),
+        // A film shown to members whose ticket this browser had was kept by someone.
+        ticketKept: kept,
       },
     });
   });
@@ -136,6 +153,18 @@ export function viewerRoutes({ db, sessions, access, settings, metadata, limit }
       resumableUntil: r.screening.resumable_until,
       masterUrl: masterUrl(film),
     });
+  });
+
+  // Keeping the ticket this film's page shows in the signed-in person's account.
+  const keepLimit = limit({ windowMs: 10 * 60 * 1000, max: 30 });
+  router.post('/api/films/:slug/keep', keepLimit, (req, res) => {
+    const viewer = sessions.load(req, 'viewer');
+    if (viewer?.person_id == null) return res.status(401).json({ error: 'sign-in-required' });
+    const film = q.filmBySlug.get(req.params.slug);
+    if (!film) return res.status(404).json({ error: 'not-found' });
+    const r = access.keep(viewer, film);
+    if (r.error) return res.status(409).json({ error: r.error });
+    res.json({ ticket: ticketForViewer(r.ticket, access.ticketStatus(r.ticket)) });
   });
 
   router.post('/api/screenings/:id/heartbeat', (req, res) => {

@@ -6,7 +6,7 @@ follows: `server/access.js` implements the ticket rules, `server/people.js` and
 
 Milestone 2 is being built in slices, planned in [milestone-2.md](milestone-2.md).
 So far it adds people and passkeys, tickets that only one person can use, signed in,
-and films shown to members. Keeping a ticket in an account and an account page are
+keeping a ticket in an account, and films shown to members. An account page is
 planned there, not built yet.
 
 ## The records
@@ -31,9 +31,11 @@ Every ticket is one of two kinds, chosen when you issue it:
   person with their passkey. The link is just a way to reach it, and forwarding it
   does nothing.
 
-Who a ticket is for can't be changed once it's issued. A ticket for a person needs
-them to be enabled, and is issued one at a time. They don't need a passkey yet: send
-them a setup link that carries the ticket (see
+Afterwards only two things change who a ticket is for: someone keeping a ticket for
+anyone that you've let them keep, and you giving a ticket to a person or letting
+anyone with the link use it again (see [Keeping a ticket](#keeping-a-ticket)). A
+ticket for a person needs them to be enabled, and is issued one at a time. They
+don't need a passkey yet: send them a setup link that carries the ticket (see
 [Setup and recovery links](#setup-and-recovery-links)).
 
 Each ticket has, all optional:
@@ -57,7 +59,7 @@ preview visit or a chat app's link scanner doesn't start the countdown.
 | Under Your tickets | In that browser only | On every device the person signs in on |
 | TVs and in-app browsers | Work | Need a browser that can use passkeys |
 | Revoke / restore | Stops on the next request; after a restore, browsers must open the link again | Stops on the next request; after a restore it works for the person at once |
-| **Sign out browsers** | Forgets it in every browser that opened the link | Does nothing, since no browser holds it: use the person's **Sign out everywhere**, or revoke the ticket |
+| **Sign out browsers** | Forgets it in every browser that opened the link | No browser holds it: use the person's **Sign out everywhere**, or revoke the ticket. For a ticket that was kept or given, it forgets the browsers that opened the link before, so they don't get it back if you release it |
 | Person disabled | Not affected | Stops on the next request |
 | Limits, start by, days after first play, resume window, one device at a time | The same | The same |
 
@@ -106,6 +108,9 @@ For a ticket for one person:
   ticket again and goes to the film.
 - **Signed in as someone else**: told the ticket is for someone else. Again nothing
   is created or recorded.
+- **This browser opened the link while it was for anyone**, and someone has kept it
+  since (or you gave it to someone): told it has been kept in someone's account, and
+  to ask whoever sent it.
 
 Until the person signs in, the code stays in the `/t/` address, so "Open in Safari"
 from an app's built-in browser, which can't use passkeys, takes the ticket with it.
@@ -115,6 +120,57 @@ The person doesn't need the link at all once they're signed in: the ticket is un
 Your tickets on every device they sign in on. For such a ticket, **Opened** on the
 admin's ticket page is the first time they opened its link or its film page, signed
 in.
+
+## Keeping a ticket
+
+A ticket for anyone with the link can be marked **Let them keep it in their account**,
+when you issue it or later on its page. It's off by default. A signed-in person whose
+browser holds such a ticket (it opened the link, or opened it before they signed in
+there) can then press **Keep it** on the film page; someone not signed in is offered
+**Sign in and keep it**. Keeping makes it a ticket only for them, signed in, as if
+you'd issued it that way: it's under Your tickets on every device they sign in on,
+and the link works for nobody else.
+
+| | Before | After Sam keeps it | After you choose **Let anyone with the link use it** |
+|---|---|---|---|
+| Who can use it | Any browser that opened the link | Only Sam, signed in | Any browser that opened the link, again |
+| Browsers that opened the link | Hold it | Lose it from their next request, and are told "This ticket has been kept in someone's account. Ask whoever sent it." (no name) | Hold it again, unless you signed them out of it or revoked it meanwhile |
+| Sam's devices | Only browsers that opened it | Every device Sam signs in on | Lose it, unless they opened the link |
+| An open screening | Where it is | Sam can take it over at once, at the same place | The same rule |
+| Screenings used, first play, expiry, resume deadline | Unchanged throughout | | |
+
+The rules:
+
+- **The first keep wins.** Keeping checks and changes the ticket in one write
+  transaction, so of two people keeping it at once, exactly one gets it and the other
+  is told it has been kept. Only you can change it after that.
+- **Only a ticket in the `ok` state** can be kept: not one that's used up, expired,
+  revoked or unavailable.
+- **Not while another browser is playing it.** If a browser that can still play the
+  ticket is playing it right now, keeping is refused until it pauses, closes or goes
+  quiet (about 75 seconds). So a keep never stops a film someone is watching.
+- **The screening follows the ticket.** A screening left in a browser that lost the
+  ticket isn't voided or used again: the keeper resumes it where it was, within the
+  same resume window, without waiting.
+- **Nothing else changes**: limits, start by, days after first play and the resume
+  window are as they were. **Opened** and **First played** keep their dates.
+- Keeping is never offered while the player is open, and a browser that can't use
+  passkeys is told to open the link in Safari or Chrome to keep it.
+
+On the ticket's page you can also:
+
+- **Let anyone with the link use it**: the ticket is for anyone again, not keepable
+  unless you tick the box again. The person loses it from their next request (an open
+  screening can then be taken over at once), and browsers that opened the link get it
+  back.
+- **Give it to a person** (or to someone else): only they, signed in, can use it from
+  the next request. You can do this with any ticket, kept or not; browsers that opened
+  the link lose it and are told it has been kept. A ticket you gave shows as "Only Sam,
+  signed in"; one Sam kept shows as "Only Sam · kept from a link".
+- See which browsers opened the link before it was kept or given, and **Forget it in
+  these browsers**, so a release gives it to nobody until the link is opened again.
+
+Revoking a kept ticket also forgets those browsers, as it does for any ticket.
 
 ## Films shown to members
 
@@ -155,6 +211,7 @@ the page says they don't have a ticket and to ask whoever runs the cinema.
 | Revoke the ticket | Page and media requests fail from the next request on. |
 | Unpublish the film | The page disappears and playback under way stops, for every ticket. Publishing again restores both; open screenings keep their place, and their resume windows keep running meanwhile. |
 | The film's folder goes missing, or a scan finds errors in it | The page stays and says the film isn't available right now; nothing plays and no screening can start. Resume windows keep running meanwhile. |
+| The ticket is kept, given or released | Its open screening stays as it is. A browser that can no longer use the ticket stops on its next request, and whoever can use it now can take the screening over at once. |
 
 A screening can be resumed for a fixed window after it starts: **48 hours** by
 default, set in the admin under Settings. Changing it affects new screenings only.
@@ -421,6 +478,15 @@ People and passkeys:
 - **person-disabled** (and how many browsers that signed out) and **person-enabled**
 - **sign-in-refused**: one of a person's passkeys was refused, because they're
   disabled or because the passkey's counter hadn't moved on
+
+Keeping tickets:
+
+- **ticket-kept**: a person kept a ticket from a link in their account (with the
+  device)
+- **ticket-given**: you gave a ticket to a person (and whether it was for anyone, or
+  someone else's)
+- **ticket-released**: a person's ticket left their account, because you let anyone
+  with the link use it or gave it to someone else
 
 Plus a coarse device label such as "Safari on iPhone": the browser's, or for a
 passkey, the one it was added from. No IP addresses and no full user-agent strings

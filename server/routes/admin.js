@@ -292,6 +292,9 @@ export function adminRoutes(deps) {
     const film = ctx.films.get(t.film_id);
     const progress = ctx.progress.get(t.id) || {};
     const last = ctx.lastEvent.get(t.id);
+    // Browsers that opened the link. Once the ticket has a person they can't use
+    // it: they're waiting, and get it back if it's released.
+    const opened = ctx.browsers.get(t.id)?.n ?? 0;
     // A screening only counts as open while the ticket can still play it.
     const open = status.state === 'ok' ? status.open : null;
     return {
@@ -301,6 +304,10 @@ export function adminRoutes(deps) {
       film: film?.film ?? null,
       // Set: only this person can use it, signed in. Null: anyone with the link.
       person: t.person_id != null ? ctx.people.get(t.person_id) ?? null : null,
+      // A ticket for anyone that whoever keeps it first can keep in their account.
+      claimable: Boolean(t.claimable),
+      // When its person kept it from a link. Null for one issued or given to them.
+      claimedAt: t.claimed_at,
       label: t.label,
       screeningLimit: t.screening_limit,
       startBy: t.start_by,
@@ -321,7 +328,8 @@ export function adminRoutes(deps) {
             device: open.session_hash ? deviceOf.get(open.session_hash)?.device ?? null : null,
           }
         : null,
-      browsers: ctx.browsers.get(t.id)?.n ?? 0,
+      browsers: t.person_id == null ? opened : 0,
+      waitingBrowsers: t.person_id == null ? 0 : opened,
       furthestSeconds: progress.furthest ?? null,
       durationSeconds: film?.durationSeconds ?? null,
       finished: Boolean(progress.finished),
@@ -334,6 +342,22 @@ export function adminRoutes(deps) {
     if ('screeningLimit' in b) sets.push('screening_limit = ?'), args.push(optInt(b.screeningLimit, 'Screening limit', { min: 1, max: 1000 }));
     if ('startBy' in b) sets.push('start_by = ?'), args.push(optTime(b.startBy, 'Start-by date'));
     if ('daysAfterFirstPlay' in b) sets.push('days_after_first_play = ?'), args.push(optInt(b.daysAfterFirstPlay, 'Days after first play', { min: 1, max: 3650 }));
+  }
+
+  // Only a ticket for anyone with the link can be keepable.
+  function claimableField(b, personId, sets, args) {
+    if (!('claimable' in b)) return;
+    if (b.claimable && personId != null) throw bad('Only a ticket for anyone with the link can be kept');
+    sets.push('claimable = ?'), args.push(b.claimable ? 1 : 0);
+  }
+
+  const personRow = db.prepare('SELECT * FROM people WHERE id = ?');
+  // A person a ticket can be issued or given to.
+  function enabledPerson(id) {
+    const person = personRow.get(Number(id));
+    if (!person) throw bad('person-not-found');
+    if (person.disabled_at) throw bad('person-disabled', 409);
+    return person;
   }
 
   router.get('/api/admin/tickets', (req, res) => {
@@ -358,12 +382,11 @@ export function adminRoutes(deps) {
     ticketFields({ label: b.label, screeningLimit: b.screeningLimit, startBy: b.startBy, daysAfterFirstPlay: b.daysAfterFirstPlay }, sets, args);
     // A ticket only one person can use, signed in with their passkey.
     if (b.personId != null) {
-      const person = db.prepare('SELECT * FROM people WHERE id = ?').get(Number(b.personId));
-      if (!person) throw bad('person-not-found');
-      if (person.disabled_at) throw bad('person-disabled', 409);
+      const person = enabledPerson(b.personId);
       if (count !== 1) throw bad('One ticket at a time for a person');
       sets.push('person_id = ?'), args.push(person.id);
     }
+    claimableField(b, b.personId, sets, args);
     const cols = sets.map((s) => s.split(' = ')[0]);
     const ids = tx(db, () => {
       const out = [];
@@ -403,8 +426,21 @@ export function adminRoutes(deps) {
     const sets = [];
     const args = [];
     ticketFields(req.body || {}, sets, args);
+    claimableField(req.body || {}, t.person_id, sets, args);
     if (sets.length) db.prepare(`UPDATE tickets SET ${sets.join(', ')} WHERE id = ?`).run(...args, t.id);
     res.json(adminTicket(req, getTicket(t.id)));
+  });
+
+  // Gives the ticket to one person ({ personId }), or lets anyone with the link use
+  // it again ({ personId: null, claimable }). Browsers that opened the link lose it
+  // to a person, and get it back on a release.
+  router.post('/api/admin/tickets/:id/holder', (req, res) => {
+    const t = getTicket(req.params.id);
+    const b = req.body || {};
+    if (!('personId' in b)) throw bad('Say who gets it: personId, or null for anyone with the link');
+    const personId = b.personId == null ? null : enabledPerson(b.personId).id;
+    const r = access.setTicketPerson(t.id, personId, { claimable: Boolean(b.claimable) });
+    res.json(adminTicket(req, r.ticket));
   });
 
   // Revoking also drops the ticket from every browser that opened it.

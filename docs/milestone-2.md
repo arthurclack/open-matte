@@ -185,7 +185,9 @@ ALTER TABLE tickets ADD COLUMN claimed_at INTEGER
 ```
 
 A keep therefore sets `person_id`, `claimed_at` and `claimable = 0` in one UPDATE,
-and a release clears `person_id` and `claimed_at` together.
+and a release clears `person_id` and `claimed_at` together. Giving a ticket to a person
+also clears `claimed_at` (as built, 27 October): only a keep sets it, so "kept from a
+link" always means the person kept it themselves.
 
 ### Existing rows
 

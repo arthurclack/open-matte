@@ -156,6 +156,13 @@ export function describeEvent(e) {
       return `You disabled them: ${signedOutOf(d.signedOut)}`;
     case 'person-enabled':
       return 'You enabled them';
+    // Keeping, giving and releasing tickets: the event names the person whose account it went into or left.
+    case 'ticket-kept':
+      return 'Kept a ticket from a link in their account';
+    case 'ticket-given':
+      return d.from === 'person' ? "You gave them a ticket that was someone else's" : 'You gave them a ticket that was for anyone with the link';
+    case 'ticket-released':
+      return d.to === 'person' ? 'You gave their ticket to someone else' : 'You let anyone with the link use their ticket again';
     case 'sign-in-refused': {
       const key = d.device ? ` (the passkey added from ${d.device})` : '';
       return d.reason === 'disabled'

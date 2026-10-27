@@ -34,13 +34,20 @@ export function createAccess(db, settings) {
         (t.person_id IS NULL AND t.id IN (SELECT ticket_id FROM session_tickets WHERE session_hash = :session))
         OR t.person_id = :person)
       ORDER BY t.id`),
-    // Every ticket this browser may use, newest first, for /api/me.
+    // Every ticket this browser may use, newest first, for /api/me. A kept ticket
+    // counts from when it was kept.
     usable: db.prepare(`
       SELECT t.*, st.added_at AS since FROM session_tickets st JOIN tickets t ON t.id = st.ticket_id
       WHERE st.session_hash = :session AND t.person_id IS NULL
       UNION ALL
-      SELECT t.*, t.created_at AS since FROM tickets t WHERE t.person_id = :person
+      SELECT t.*, COALESCE(t.claimed_at, t.created_at) AS since FROM tickets t WHERE t.person_id = :person
       ORDER BY since DESC`),
+    // The two ways a ticket's person changes after it's issued. Keeping needs the
+    // ticket still keepable and for anyone, so of two keeps only the first matches.
+    keep: db.prepare(`
+      UPDATE tickets SET person_id = ?, claimed_at = ?, claimable = 0
+      WHERE id = ? AND person_id IS NULL AND claimable = 1 AND revoked_at IS NULL`),
+    setPerson: db.prepare('UPDATE tickets SET person_id = ?, claimed_at = NULL, claimable = ? WHERE id = ?'),
     holds: db.prepare('SELECT 1 FROM session_tickets WHERE session_hash = ? AND ticket_id = ?'),
     used: db.prepare('SELECT COUNT(*) AS n FROM screenings WHERE ticket_id = ? AND voided_at IS NULL'),
     open: db.prepare(`
@@ -233,5 +240,59 @@ export function createAccess(db, settings) {
 
   const usableTickets = (viewer) => (viewer ? q.usable.all(ids(viewer)) : []);
 
-  return { ticketStatus, filmAccess, mayStream, startScreening, heartbeat, usableTickets, mayHold, logEvent };
+  // Whether the ticket a film page shows could be kept in an account: a keepable
+  // ticket for anyone, in the ok state. Signing in comes after, if need be.
+  const canKeep = (a) => a.via === 'ticket' && a.ticket.person_id == null && a.ticket.claimable === 1 && a.status.state === 'ok';
+
+  // Keeping the ticket this browser's film page shows in the signed-in person's
+  // account. The first keep wins: the ticket becomes theirs, so every other
+  // browser that opened the link loses it from its next request. Refused while
+  // another browser that could still play it is playing it. Screenings used, the
+  // clocks and any open screening stay as they are; a screening left in a browser
+  // that lost the ticket can be taken over at once.
+  function keep(viewer, film, now = Date.now()) {
+    if (viewer?.person_id == null) return { error: 'sign-in-required' };
+    return tx(
+      db,
+      () => {
+        const a = filmAccess({ viewer }, film, now);
+        if (!canKeep(a)) return { error: 'cannot-keep' };
+        const { ticket, status } = a;
+        const open = status.open;
+        if (open && open.session_hash !== viewer.id_hash && open.active_until > now && holderCanPlay(open.session_hash, ticket, now)) {
+          return { error: 'playing-elsewhere' };
+        }
+        if (q.keep.run(viewer.person_id, now, ticket.id).changes !== 1) return { error: 'cannot-keep' };
+        logEvent('ticket-kept', { filmId: film.id, ticketId: ticket.id, sessionHash: viewer.id_hash, personId: viewer.person_id }, now);
+        return { ticket: q.ticket.get(ticket.id) };
+      },
+      { immediate: true },
+    );
+  }
+
+  // The admin giving a ticket to one person (personId), or letting anyone with the
+  // link use it again (null), keepable or not. Browsers that opened the link get it
+  // back on a release, unless they were signed out of it meanwhile. An open
+  // screening stays where it is, under the usual takeover rules. The caller checks
+  // that the person exists and is enabled.
+  function setTicketPerson(ticketId, personId, { claimable = false } = {}, now = Date.now()) {
+    return tx(
+      db,
+      () => {
+        const t = q.ticket.get(ticketId);
+        if (!t) return { error: 'not-found' };
+        const from = t.person_id ?? null;
+        const keepable = personId == null && claimable ? 1 : 0;
+        if (from === personId && (personId != null || t.claimable === keepable)) return { ticket: t, changed: false };
+        q.setPerson.run(personId, keepable, t.id);
+        const base = { filmId: t.film_id, ticketId: t.id };
+        if (from != null && from !== personId) logEvent('ticket-released', { ...base, personId: from, detail: { to: personId == null ? 'anyone' : 'person' } }, now);
+        if (personId != null && from !== personId) logEvent('ticket-given', { ...base, personId, detail: { from: from == null ? 'anyone' : 'person' } }, now);
+        return { ticket: q.ticket.get(t.id), changed: true };
+      },
+      { immediate: true },
+    );
+  }
+
+  return { ticketStatus, filmAccess, mayStream, startScreening, heartbeat, usableTickets, mayHold, canKeep, keep, setTicketPerson, logEvent };
 }

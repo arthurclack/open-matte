@@ -187,6 +187,16 @@ export const MIGRATIONS = [
   `
   ALTER TABLE films ADD COLUMN member_visible INTEGER NOT NULL DEFAULT 0 CHECK (member_visible IN (0, 1));
   `,
+  // Keeping a ticket: a ticket for anyone can be marked keepable, and the first
+  // signed-in person to keep it makes it theirs. From here on a ticket's person
+  // can change after it's issued, so older code must refuse this database.
+  `
+  -- Only a ticket for anyone can be keepable; only a ticket with a person can have been kept.
+  ALTER TABLE tickets ADD COLUMN claimable INTEGER NOT NULL DEFAULT 0
+    CHECK (claimable IN (0, 1) AND (claimable = 0 OR person_id IS NULL));
+  ALTER TABLE tickets ADD COLUMN claimed_at INTEGER
+    CHECK (claimed_at IS NULL OR person_id IS NOT NULL);
+  `,
 ];
 
 export function openDb(file) {

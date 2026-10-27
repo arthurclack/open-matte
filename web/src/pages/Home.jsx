@@ -5,6 +5,7 @@ import { Poster, ticketSummary } from './shared.jsx';
 const NOTICES = {
   'unknown-ticket': "That ticket link doesn't work. Check that you copied all of it, or ask whoever sent it.",
   'ticket-revoked': 'That ticket has been cancelled.',
+  'ticket-kept': "That ticket has been kept in someone's account, so it only works for them now. Ask whoever sent it.",
   'film-unavailable': "That film isn't showing at the moment.",
   'too-many-requests': 'Too many attempts from this connection. Wait a few minutes, then open the link again.',
 };

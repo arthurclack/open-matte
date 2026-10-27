@@ -91,6 +91,7 @@ describe('a milestone 1 database', () => {
     for (const c of ['person_id', 'passkey_id', 'signed_in_at']) assert.ok(columns(db, 'sessions').includes(c), c);
     assert.ok(columns(db, 'events').includes('person_id'));
     assert.ok(columns(db, 'films').includes('member_visible'));
+    for (const c of ['claimable', 'claimed_at']) assert.ok(columns(db, 'tickets').includes(c), c);
     assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
     const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((i) => i.name);
     for (const i of ['people_name', 'person_links_person', 'passkeys_person', 'sessions_person', 'sessions_passkey', 'events_person']) assert.ok(indexes.includes(i), i);
@@ -105,7 +106,11 @@ describe('a milestone 1 database', () => {
         assert.deepEqual(old, before1[t][i], `${t} row ${i}`);
       });
     }
-    for (const r of rows(db, 'tickets')) assert.equal(r.person_id, null, 'every ticket is still a ticket for anyone');
+    for (const r of rows(db, 'tickets')) {
+      assert.equal(r.person_id, null, 'every ticket is still a ticket for anyone');
+      assert.equal(r.claimable, 0, 'and not keepable');
+      assert.equal(r.claimed_at, null);
+    }
     for (const r of rows(db, 'sessions')) {
       assert.equal(r.person_id, null, 'every session is anonymous');
       assert.equal(r.passkey_id, null);

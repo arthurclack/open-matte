@@ -5,7 +5,10 @@ import { CreatedLink, peopleError } from './People.jsx';
 import { CopyButton, ErrorNote, Progress, TicketBadge, dateInputToMs, useAction, useLoad } from './ui.jsx';
 
 // Who can use a ticket, in the words the admin sees everywhere.
-export const ticketKind = (t) => (t.person ? `Only ${t.person.name}, signed in` : 'Anyone with the link');
+export const ticketKind = (t) => {
+  if (!t.person) return t.claimable ? 'Anyone with the link · can be kept' : 'Anyone with the link';
+  return t.claimedAt ? `Only ${t.person.name} · kept from a link` : `Only ${t.person.name}, signed in`;
+};
 
 // What to send with a ticket link. A ticket for one person needs their passkey.
 export const ticketMessage = (t, title) =>
@@ -154,7 +157,7 @@ export function TicketTable({ tickets, showFilm, showKind = true }) {
 // starts it on "Only a person", with that person chosen, if they're enabled.
 export function IssueTicket({ film, personId = '', onIssued, bare = false }) {
   const people = useLoad(() => api.get('/api/admin/people'), []);
-  const [form, setForm] = useState({ label: '', screeningLimit: '1', startBy: '', daysAfterFirstPlay: '', count: '1' });
+  const [form, setForm] = useState({ label: '', screeningLimit: '1', startBy: '', daysAfterFirstPlay: '', count: '1', claimable: false });
   const [who, setWho] = useState({ kind: personId ? 'person' : 'anyone', personId: personId ? String(personId) : '' });
   const [issued, setIssued] = useState(null); // { tickets, person }
   const action = useAction();
@@ -182,7 +185,7 @@ export function IssueTicket({ film, personId = '', onIssued, bare = false }) {
         startBy: dateInputToMs(form.startBy),
         daysAfterFirstPlay: form.daysAfterFirstPlay === '' ? null : Number(form.daysAfterFirstPlay),
         count,
-        ...(forPerson ? { personId: chosen.id } : {}),
+        ...(forPerson ? { personId: chosen.id } : { claimable: form.claimable }),
       }),
     );
     if (r) {
@@ -210,6 +213,7 @@ export function IssueTicket({ film, personId = '', onIssued, bare = false }) {
             <small>Like a paper ticket: whoever has the link can use it, on any device, TVs included. The name is only a note for you.</small>
           </span>
         </label>
+        {!forPerson && <KeepBox checked={form.claimable} onChange={(claimable) => setForm({ ...form, claimable })} />}
         <label className="choice">
           <input
             type="radio"
@@ -310,6 +314,22 @@ export function IssueTicket({ film, personId = '', onIssued, bare = false }) {
         </div>
       )}
     </>
+  );
+}
+
+// "Let them keep it in their account", for a ticket for anyone with the link.
+export function KeepBox({ checked, onChange, style }) {
+  return (
+    <label className="check top keep-box" style={style}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>
+        Let them keep it in their account
+        <small>
+          Someone you've added under People can keep it, so it's on every device they sign in on. Whoever keeps it first takes it from everyone else
+          with the link.
+        </small>
+      </span>
+    </label>
   );
 }
 
