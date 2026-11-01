@@ -5,9 +5,13 @@ The plan for milestone 2, agreed on 26 October 2026. It starts from commit b28a5
 what will be. As each slice ships, its rules move into access.md and its box in
 [roadmap.md](roadmap.md) gets ticked.
 
-**Status, 27 October:** slices 1 to 5 are built and deployed (slice 4 before slice 3,
-so films shown to members are migration 5 and keeping is 6). Slice 6's device checks
-are in [device-checks.md](device-checks.md).
+**Status, 1 November:** slices 1 to 5 are built and deployed (slice 4 before slice 3,
+so films shown to members are migration 5 and keeping is 6), and so are slice 6's
+keyboard fixes and the bare-domain redirect. Slice 6's device checks were split: the
+ones that test this milestone's risks (signing in on each platform, keeping, in-app
+browsers, AirPlay and Chromecast) close it; the playback-only ones (a TV browser,
+desktop Firefox, a non-HDR screen, keyboard only in Safari) moved to milestone 3. Both
+lists are in [device-checks.md](device-checks.md).
 
 ## What it's for
 

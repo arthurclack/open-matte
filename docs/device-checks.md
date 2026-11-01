@@ -1,9 +1,16 @@
 # Device checks
 
-Milestone 2's last slice, and milestone 1's open checks: does everything work on the
-phones, computers, browsers and TVs friends will use? Each group below says what to
-do and what to look for. Write what happened in [Results](#results); a check that
-fails is worth a line about what you saw, and the server log
+Does everything work on the phones, computers, browsers and TVs friends will use?
+Split in two on 1 November:
+
+- **[To close milestone 2](#to-close-milestone-2)**: the checks that test milestone 2's
+  own risks. Signing in differs on every platform, and AirPlay and Chromecast receivers
+  might fetch video without the phone's cookie, which would need new work.
+- **[For milestone 3](#for-milestone-3)**: checks that are about playback rather than
+  accounts. They join milestone 3's playback compatibility testing.
+
+Each group says what to do and what to look for. Write what happened in its results
+table; a check that fails is worth a line about what you saw, and the server log
 (`docker compose logs app`) says why any media request was refused.
 
 ## Before you start
@@ -41,49 +48,43 @@ Do these wherever a group says "the usual checks":
 5. **Sign out**: the header says Sign in, and Test Pattern's page says nothing is
    showing.
 
-## iPhone and Mac Safari
+## To close milestone 2
+
+### iPhone and Mac Safari
 
 - iPhone Safari, on mobile data: the usual checks, with Face ID. The passkey you made
   with your setup link should be there already (Synced, in iCloud Keychain).
 - Mac Safari: the usual checks. The same passkey should come from iCloud Keychain, with
   Touch ID or your password.
-- On the Mac, also open the **keepable** link (for Hedwig) in a browser that isn't
-  signed in, such as Chrome: it plays with no sign-in. Then open it in a private Safari
-  window, sign in there and press **Keep it**. Hedwig moves from Showing to members to
-  Your tickets on the iPhone, without opening the link, and Chrome is told "This
-  ticket has been kept".
-- **Keyboard only**, Mac Safari: turn on Safari ▸ Settings ▸ Advanced ▸ "Press Tab to
-  highlight each item" (Safari skips links otherwise). Tab to Play, press Return, then
-  Space pauses and the arrow keys seek. The name menu opens with Return and closes
-  with Escape. (Checked in Chromium on 27 October.)
+- **Keeping**, on the Mac: open the **keepable** link (for Hedwig) in a browser that
+  isn't signed in, such as Chrome: it plays with no sign-in. Then open it in a private
+  Safari window, sign in there and press **Keep it**. Hedwig moves from Showing to
+  members to Your tickets on the iPhone, without opening the link, and Chrome is told
+  "This ticket has been kept".
 
-## Chrome on Mac and Windows
+### Signing in with the phone's QR code
 
-- Chrome on Mac: the usual checks. Chrome may offer the iCloud Keychain passkey
-  directly; if not, choose **Use a phone or tablet** and scan the QR code with the
-  iPhone. Both should work.
 - Chrome on Windows: Windows Hello won't know an iCloud passkey, so sign in with
   **Use a phone or tablet** and the iPhone's camera (Bluetooth must be on, on both).
-  Then the usual checks from step 2. Playback here goes through hls.js: try the quality
-  menu.
+  Then the usual checks from step 2.
+- No Windows computer to hand? Chrome on the Mac does the same if you choose **Use a
+  phone or tablet** instead of the passkey Chrome offers from iCloud Keychain.
 
-## Android, desktop Firefox and a password manager
+### Android and a password manager
 
 - Android Chrome: the usual checks, signing in with the iPhone's QR code, or with an
   **Add a sign-in method** link from your person page (which makes a passkey in Google
   Password Manager). Try playback on mobile data.
-- Desktop Firefox: the usual checks. Firefox can use the passkeys the computer keeps,
-  or the phone's QR code. Playback goes through hls.js.
 - A password manager (1Password or Bitwarden, say): with its browser extension on,
   open an **Add a sign-in method** link from your person page and let the password
   manager save the passkey. Sign out, then sign in with it. Your account should show
   it as a second passkey, added with a recovery link.
-- A security key, if you have one: the same, with the key.
+- Optional: a security key, the same way.
 
-## In-app browsers
+### In-app browsers
 
-Send yourself both links (the one only for you, and the one for anyone) in WhatsApp
-and in an Instagram message, and open each from inside the app.
+Send yourself both Test Pattern links (the one only for you, and the plain one for
+anyone) in WhatsApp and in an Instagram message, and open each from inside the app.
 
 - **The link for anyone** should play in the app's own browser.
 - **The link only for you** either works (some apps open links in a Safari or Chrome
@@ -92,13 +93,10 @@ and in an Instagram message, and open each from inside the app.
   Safari or Chrome opens the ticket.
 - Note which apps did which: it tells friends what to expect.
 
-## TV browser, AirPlay and Chromecast
+### AirPlay and Chromecast
 
-- **A TV's own browser**: open the plain link for anyone (type it, or send it in a
-  message the TV can open). It should play. The link only for you shows a sign-in page
-  the TV probably can't complete: that's expected, and why TVs get tickets for anyone.
-- **AirPlay** from the iPhone, signed in, to an Apple TV or AirPlay speaker-TV: start
-  Test Pattern, then AirPlay it. Does the picture carry on, with sound?
+- **AirPlay** from the iPhone, signed in, to an Apple TV or an AirPlay TV: start Test
+  Pattern, then AirPlay it. Does the picture carry on, with sound?
 - **Chromecast** from Android Chrome (or Chrome on the Mac), signed in: cast the tab,
   or the video if Chrome offers it. Does it play?
 - If the receiver stops after a few seconds, look for `media 403` in the server log
@@ -107,28 +105,49 @@ and in an Instagram message, and open each from inside the app.
   plan set aside for separate work (screening-bound media addresses), not a reason to
   loosen the media check.
 
-## Milestone 1's open checks
-
-- **Non-HDR screen**: play a film with HDR renditions on an ordinary (SDR) monitor or
-  TV. The picture should look natural, not grey or washed out.
-- Android, desktop Firefox and keyboard only are covered above.
-
-## Results
+### Results: milestone 2
 
 | Where | Signed in | Your tickets, member film | Plays (audio, subtitles, quality) | Account page, sign out | Notes |
 |---|---|---|---|---|---|
 | iPhone Safari | Yes: passkey created with the setup link, 27 Oct | Yes (reported) | Yes, 27 Oct: Play and Resume on the ticket for you, no media errors | Not yet | Synced passkey (iCloud Keychain) |
-| Mac Safari | Yes, 27 Oct, with the iPhone's synced passkey from iCloud Keychain; a private window carried its link ticket into the account | Your ticket's page, signed in | Yes, 27 Oct, from a link ticket with no sign-in | Not yet | Keep it: not yet (needs the Hedwig ticket) |
-| Mac Safari, keyboard only | – | – | | – | Chromium checked 27 Oct: Play, Space, menu |
-| Chrome on Mac | | | | | |
-| Chrome on Windows (QR code) | | | | | |
+| Mac Safari | Yes, 27 Oct, with the iPhone's synced passkey from iCloud Keychain; a private window carried its link ticket into the account | Your ticket's page, signed in | Yes, 27 Oct, from a link ticket with no sign-in | Not yet | Keeping: not yet (the Hedwig ticket) |
+| Chrome, signed in with the QR code (Windows or Mac) | | | | | |
 | Android Chrome | | | | | |
-| Desktop Firefox | | | | | |
 | Password manager | | | | | |
 | Security key (optional) | | | | | |
 | WhatsApp in-app | – | – | | – | |
 | Instagram in-app | – | – | | – | |
-| TV browser (link for anyone) | – | – | | – | |
 | AirPlay from iPhone | – | – | | – | |
 | Chromecast | – | – | | – | |
-| Non-HDR screen | – | – | | – | |
+
+Milestone 2 is done when every row but the security key has a result, and AirPlay and
+Chromecast either play or are written up as their own work.
+
+## For milestone 3
+
+Playback checks, folded into milestone 3's compatibility testing with milestone 1's
+open ones. They use the same setup and the plain Test Pattern link for anyone.
+
+- **A TV's own browser**: open the plain link for anyone (type it, or send it in a
+  message the TV can open). It should play. The link only for you shows a sign-in page
+  the TV probably can't complete: that's expected, and why TVs get tickets for anyone.
+- **Desktop Firefox**: the usual checks. Firefox can use the passkeys the computer
+  keeps, or the phone's QR code. Playback goes through hls.js: try the quality menu.
+- **Chrome on Mac and Windows playback**: the quality menu and audio switching through
+  hls.js, if the QR-code checks above didn't already cover them.
+- **Non-HDR screen**: play a film with HDR renditions on an ordinary (SDR) monitor or
+  TV. The picture should look natural, not grey or washed out.
+- **Keyboard only, Mac Safari**: turn on Safari ▸ Settings ▸ Advanced ▸ "Press Tab to
+  highlight each item" (Safari skips links otherwise). Tab to Play, press Return, then
+  Space pauses and the arrow keys seek. The name menu opens with Return and closes
+  with Escape. (Checked in Chromium on 27 October.)
+
+### Results: milestone 3
+
+| Where | Plays (audio, subtitles, quality) | Notes |
+|---|---|---|
+| TV browser (link for anyone) | | |
+| Desktop Firefox | | |
+| Chrome on Mac and Windows | | |
+| Non-HDR screen | | |
+| Mac Safari, keyboard only | | Chromium checked 27 Oct: Play, Space, menu |

@@ -46,16 +46,21 @@ Planned in [milestone-2.md](milestone-2.md) and built in six slices, all deploye
 - [x] Films shown to members: listed and readable, never playable without a ticket
 - [x] An account page: passkeys, signed-in browsers, Sign out everywhere
 - [x] Keyboard only (Chromium): Play, pausing, the name menu
-- [ ] Device checks: Safari on iPhone and Mac, Chrome on Mac and Windows (with the
-  phone's QR code), Android, desktop Firefox, a password manager, in-app browsers, a
-  TV browser, AirPlay and Chromecast, a non-HDR screen
+- [x] Signing in and playing on iPhone and Mac Safari (27 October)
+- [ ] Device checks that close the milestone ([device-checks.md](device-checks.md#to-close-milestone-2)):
+  keeping a ticket and signing out on Safari; signing in with the phone's QR code;
+  Android; a password manager; WhatsApp and Instagram's browsers; AirPlay and
+  Chromecast
 - [x] The bare `openmatte.dev` redirects to `www` (`REDIRECT_FROM`, 27 October)
 
 ## Milestone 3: polish and public release
 
 - Branding settings (colours, logo)
 - Better audio and subtitle controls
-- Playback compatibility testing across browsers and devices
+- Playback compatibility testing across browsers and devices, starting with the
+  checks moved here from milestone 2 on 1 November: a TV browser, desktop Firefox,
+  Chrome's hls.js playback, a non-HDR screen and keyboard only in Safari
+  ([device-checks.md](device-checks.md#for-milestone-3))
 - Installation, backup and upgrade documentation
 - Refined activity views and retention controls for viewing data
 
