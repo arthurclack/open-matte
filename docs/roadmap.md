@@ -109,6 +109,12 @@ personal. Whether it comes before or after the v1.0.0 release is still open.
 - Preferences that follow a member rather than a browser: audio and subtitle language,
   subtitles on by default, content notes shown before Play. Advisories are yours to
   write, not guessed; "warn me" and "hide this film" are different choices
+- Letterboxd, through links and files only: no API, no scraping, never a Letterboxd
+  password. "View on Letterboxd" from a film's TMDB id, a setting you switch on; a member
+  can export the films they marked watched (never ones they only pressed Play on, and
+  their private notes only if they choose) as a file Letterboxd imports; and a programme
+  can be exported as a Letterboxd list, with your notes on each film. Check Letterboxd's
+  link format and import columns before building
 
 What stays true throughout:
 
@@ -158,6 +164,11 @@ ticket. Programmes, after-notes, responses and the journal are now milestone 4.
 - "Watching with…": another member, who agrees, or "with guests", so the film goes in
   both journals from one screening. Never a ticket or access for the companion. After
   the journal
+- Importing a member's Letterboxd history (watched films, a watchlist), so you can see
+  whether someone has already seen a film before picking it. Opt-in and plain about it:
+  it puts their whole history on a server you run and can read, most of it films the
+  cinema doesn't have. Never their ratings. Following their public Letterboxd feed only
+  if importing proves useful first
 - Programme templates other installations can import: the title, introduction, film
   identifiers (TMDB) and, if you choose, your notes, matched against the films they
   have. Never media, tickets or people
