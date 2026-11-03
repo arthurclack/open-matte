@@ -65,13 +65,16 @@ v1.0.0.
 - [ ] Media Session on the lock screen, and a Playback help panel with a copyable
   summary
 - [ ] Activity filters and summaries, and retention: progress reports for 30 days,
-  other events for 12 months
+  other events for 12 months, ended browser sessions cleared; a "projection booth" page
+  saying what needs attention and whether the server is well
 - [ ] Playback compatibility testing, starting with the checks moved here from
   milestone 2 on 1 November: a TV browser, desktop Firefox, Chrome's hls.js playback,
   a non-HDR screen and keyboard only in Safari
-  ([device-checks.md](device-checks.md#for-milestone-3))
+  ([device-checks.md](device-checks.md#for-milestone-3)); the main journeys as
+  Playwright tests in Chromium, Firefox and WebKit
 - [ ] Installation, update, backup and restore documentation, rehearsed on a clean
-  server; a changelog; v1.0.0 tagged and released on GitHub
+  server; a changelog; licence notices for the code sent to browsers; v1.0.0 tagged and
+  released on GitHub
 
 ## Milestone 4: curation
 
@@ -93,6 +96,19 @@ personal. Whether it comes before or after the v1.0.0 release is still open.
   me", "Let's talk") with an optional message, shared only with you, and saying so
 - A viewing journal that belongs to the member: watched films, an optional date,
   private notes, a "watch again" list, marked and unmarked by hand
+- Asking for a recommendation: a member sends "Pick something for me", with an optional
+  note ("nothing too heavy", "I have 100 minutes"). It waits in an admin inbox, marked
+  unread, and you answer with a film and a message. No email or notifications at first
+- Best watched blind: a recommendation or a member's own choice can hide the synopsis,
+  stills and your more revealing notes until the viewer chooses to see them. Access
+  details and content notes always stay visible
+- Readiness before a programme goes out: artwork and media there, each recipient able
+  to play each film, no ticket expiring before a suggested date, subtitles in the
+  languages they need, no draft note showing. And "Preview as this person": a read-only
+  view built from their rules, never their session
+- Preferences that follow a member rather than a browser: audio and subtitle language,
+  subtitles on by default, content notes shown before Play. Advisories are yours to
+  write, not guessed; "warn me" and "hide this film" are different choices
 
 What stays true throughout:
 
@@ -130,6 +146,21 @@ ticket. Programmes, after-notes, responses and the journal are now milestone 4.
   watching on their own ticket (not synchronised)
 - A short test clip to check picture, sound and subtitles before the first Play, which
   never uses a screening
+- "Start now, finishes around 10:42": the end time from the running time, and an
+  optional "I'd like to finish by 11" that highlights the films that fit. An estimate,
+  never a promise
+- "What kind of evening?": a choice of time and mood (comforting, tense, surprise me)
+  from a small vocabulary of your own, over the films that person can watch. Worth it
+  once there are dozens of films; with a handful, the front page does the job
+- A short introduction from you, audio or video, before a film or a programme: played
+  only when asked, skippable, with a transcript. Needs media other than films, so after
+  uploads
+- "Watching with…": another member, who agrees, or "with guests", so the film goes in
+  both journals from one screening. Never a ticket or access for the companion. After
+  the journal
+- Programme templates other installations can import: the title, introduction, film
+  identifiers (TMDB) and, if you choose, your notes, matched against the films they
+  have. Never media, tickets or people
 
 Browser features that would make the player feel native (most fit milestone 3's
 playback work):
