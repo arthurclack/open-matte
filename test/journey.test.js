@@ -153,11 +153,11 @@ describe('a ticket from opening to revocation', () => {
   test('reaching 92% of the running time marks the screening finished, once', async () => {
     const { screeningId } = (await viewer.post('/api/films/arrival/screenings')).data;
     await viewer.post(`/api/screenings/${screeningId}/heartbeat`, { position: FILM_SECONDS * 0.9 });
-    let events = (await admin.get(`/api/admin/activity?ticket=${ticket.id}`)).data;
+    let events = (await admin.get(`/api/admin/activity?ticket=${ticket.id}`)).data.events;
     assert.equal(events.filter((e) => e.type === 'finished').length, 0);
     await viewer.post(`/api/screenings/${screeningId}/heartbeat`, { position: FILM_SECONDS * 0.93 });
     await viewer.post(`/api/screenings/${screeningId}/heartbeat`, { position: FILM_SECONDS });
-    events = (await admin.get(`/api/admin/activity?ticket=${ticket.id}`)).data;
+    events = (await admin.get(`/api/admin/activity?ticket=${ticket.id}`)).data.events;
     assert.equal(events.filter((e) => e.type === 'finished').length, 1);
     assert.ok(events.some((e) => e.type === 'opened'));
     assert.ok(events.some((e) => e.type === 'play'));

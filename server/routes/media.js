@@ -15,10 +15,46 @@ function denialReason(req, who, access, film) {
   return 'no screening held by this browser';
 }
 
-function logDenied(req, status, reason) {
+// What kind of file a refused request was for, from its extension.
+const KINDS = {
+  '.m3u8': 'playlist',
+  '.vtt': 'subtitles',
+  ...Object.fromEntries(['.m4s', '.mp4', '.m4a', '.m4v', '.cmfv', '.cmfa', '.ts', '.aac'].map((e) => [e, 'segment'])),
+  ...Object.fromEntries(['.jpg', '.jpeg', '.png', '.webp', '.avif'].map((e) => [e, 'artwork'])),
+};
+
+// Refused media requests, remembered in memory for the projection booth: the
+// last `keep`, and how many of each reason since the server started. Playback
+// help sends nothing, so these are all the server knows of playback going
+// wrong. Only what's here is kept: no address, cookie, session, ticket, person,
+// path or user agent, just the coarse client label the log line uses.
+export function createRefusals({ keep = 50, now = () => Date.now() } = {}) {
+  const since = now();
+  const recent = [];
+  const byReason = {};
+  let total = 0;
+
+  function add({ status, reason, kind, film, client }) {
+    total++;
+    byReason[reason] = (byReason[reason] ?? 0) + 1;
+    recent.unshift({ at: now(), status, reason, kind, film, client });
+    recent.length = Math.min(recent.length, keep);
+  }
+
+  // Newest first.
+  const view = (n = keep) => ({ since, total, byReason: { ...byReason }, recent: recent.slice(0, n) });
+
+  return { add, view };
+}
+
+// `code` is the error code of a failed read, whose message (the reason) names
+// the file's full path: the booth gets the code alone.
+function logDenied(req, status, reason, { refusals, film, ext, code }) {
   const ua = req.get('user-agent') || '';
   const client = /AppleCoreMedia/.test(ua) ? `Apple media player (${deviceLabel(ua).split(' on ')[1]})` : deviceLabel(ua);
   console.warn(`media ${status}: ${req.path} - ${reason} - ${client}${req.headers.range ? ` - range ${req.headers.range}` : ''}`);
+  const kept = status >= 500 ? `couldn't read the file${code ? ` (${code})` : ''}` : reason;
+  refusals?.add({ status, reason: kept, kind: KINDS[ext] ?? 'other', film: film.slug, client });
 }
 
 export const TYPES = {
@@ -55,7 +91,7 @@ export async function folderFile(mediaDir, film, rel) {
     // Anything but a missing file (permissions, network storage briefly
     // unavailable) is the server's problem, and players retry those.
     const missing = ['ENOENT', 'ENOTDIR', 'ENAMETOOLONG'].includes(err.code);
-    return missing ? { status: 404, reason: 'file missing from the film folder' } : { status: 500, reason: err.message };
+    return missing ? { status: 404, reason: 'file missing from the film folder' } : { status: 500, reason: err.message, code: err.code };
   }
   if (!real.startsWith(realRoot + path.sep)) return { status: 404, reason: 'symlink to a file outside the film folder' };
   return { root: realRoot, file: path.relative(realRoot, real) };
@@ -66,7 +102,7 @@ export async function folderFile(mediaDir, film, rel) {
 // in, for a film shown to members); master and child playlists, init and media
 // segments, audio and subtitles need a screening that this browser holds.
 // Knowing a file path is not enough.
-export function mediaRoutes({ db, sessions, access, mediaDir, metadata }) {
+export function mediaRoutes({ db, sessions, access, mediaDir, metadata, refusals }) {
   const router = express.Router();
   const filmBySlug = db.prepare('SELECT * FROM films WHERE slug = ?');
 
@@ -75,19 +111,20 @@ export function mediaRoutes({ db, sessions, access, mediaDir, metadata }) {
     const rel = path.posix.normalize([].concat(req.params.rest).join('/'));
     const ext = path.extname(rel).toLowerCase();
     if (!film || !TYPES[ext] || film.media_status === 'missing') return res.status(404).end();
+    const about = { refusals, film, ext };
 
     const who = { viewer: sessions.load(req, 'viewer'), admin: sessions.load(req, 'admin') };
     const media = filmMedia(film);
     const isArtwork = rel === media.poster || rel === media.backdrop;
     const allowed = isArtwork ? access.filmAccess(who, film).canView : access.mayStream(who, film);
     if (!allowed) {
-      logDenied(req, 403, denialReason(req, who, access, film));
+      logDenied(req, 403, denialReason(req, who, access, film), about);
       return res.status(403).end();
     }
 
     const found = await folderFile(mediaDir, film, rel);
     if (found.status) {
-      if (found.reason) logDenied(req, found.status, found.reason);
+      if (found.reason) logDenied(req, found.status, found.reason, { ...about, code: found.code });
       return res.status(found.status).end();
     }
 
@@ -102,7 +139,7 @@ export function mediaRoutes({ db, sessions, access, mediaDir, metadata }) {
       // 4xx; failing to read the file is a 500, which players retry.
       const hidden = err.statusCode === 403;
       const status = hidden || err.code === 'ENOENT' ? 404 : err.statusCode >= 400 && err.statusCode < 500 ? err.statusCode : 500;
-      logDenied(req, status, hidden ? 'hidden file' : status === 404 ? 'file missing from the film folder' : err.message);
+      logDenied(req, status, hidden ? 'hidden file' : status === 404 ? 'file missing from the film folder' : err.message, { ...about, code: err.code });
       // The error isn't the file: don't describe or cache it as if it were.
       for (const h of ['Content-Type', 'Content-Length', 'Cache-Control']) res.removeHeader(h);
       res.status(status).end();

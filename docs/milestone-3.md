@@ -144,37 +144,67 @@ title in it.
 
 ### 4. Activity and retention
 
-- **Activity, filtered**: by film, person, ticket, and kind (viewing, or accounts and
-  links), with **Show older** instead of today's last 300.
-- **Summaries**: on a film's page, how many tickets, opened, started, finished; on a
-  person's page, the films they've opened and finished. Built from tickets and
-  screenings, so they survive the retention below.
-- **Retention**: in Settings, how long to keep progress reports (30 days) and other
-  events (12 months), with what deleting would remove right now. It runs daily, next
-  to the backup, and on start. It deletes events only: screening limits, "finished",
-  resume positions and first-opened times come from tickets and screenings, so nothing
-  a viewer can do changes. The admin ticket list's "last activity" falls back to the
-  screening when the event has gone.
+- **Activity, filtered**: by film, person, ticket and kind (viewing, or accounts and
+  links), with **Show older** instead of today's last 300: each press fetches the next
+  page, as far back as events go. The filters live in the page's address, so a
+  filtered view can be linked and survives a reload; a ticket filter, arriving from a
+  ticket's page, shows as a chip you can remove. The page says how long events are
+  kept.
+- **Summaries**: on a film's page, tickets issued (and how many of those revoked),
+  opened, played and finished, and screenings started in all; on a person's page,
+  each film from their own tickets with opened, played and finished, newest first,
+  and when they last signed in. Built from tickets and screenings, so they survive
+  the retention below.
+- **Retention**: a **Keeping records** card in Settings, after Backups, sets how long
+  to keep progress reports (30 days; 1 to 365), other events (365 days; 30 to 3,650)
+  and signed-out browsers (30 days; 1 to 365). It shows what a clean-up would delete
+  right now and the last run since the server started, with **Clear now**. The
+  clean-up runs about a minute after the server starts and then every 24 hours; a
+  failure goes to the log and the booth, and never stops the server. It deletes
+  events and ended sessions only: screening limits, "finished", resume positions,
+  start-by deadlines, expiry and first-opened and first-played times come from
+  tickets and screenings, which it never touches, so nothing a viewer can do
+  changes. The admin ticket list's "last activity" falls back to the ticket's
+  latest screening when the event has gone, and to when it was first opened when
+  there's no screening either.
 - **Backups keep what they had.** Monthly backups hold up to a year of old events
   until they expire themselves; access.md and the backup docs say so.
-- **Old browser sessions go too.** Today nothing deletes a session once it has expired
-  or been signed out, so the table only grows. They're deleted a while after they end,
-  with the tickets those browsers held; screenings and their counts don't change.
+- **Old browser sessions go too.** Until now nothing deleted a session once it had
+  expired or been signed out, so the table only grew. Now an ended one is deleted 30
+  days after it ended (the third setting), but only when no event names it any more
+  (Activity finds a viewing event's person and device through its session) and it
+  holds no screening that can still be resumed. The tickets those browsers held go
+  with them; screenings and their counts don't change, and a live session is never
+  deleted.
 - **A test pins the rule** that deleting anything here never gives a ticket a screening
-  back, nor reopens a "start by" deadline.
-- access.md's **What is recorded** gains how long each thing is kept.
-- **The projection booth**: an admin page, and a short summary at the top of the admin,
-  answering what needs attention and whether the server is well. Setup links nobody has
-  used; tickets close to their start-by date that haven't been played; media requests
-  the server refused recently (Playback help sends nothing, so the server's own refusals
-  are all it knows); whether the media folder is there and readable; disk space for
-  the data and the media; the last backup and the off-server copy's age; when old
-  events and sessions were last cleared; the version running. Each line says exactly
-  what it checked: "Backup file written at 04:03", never "recovery verified", since
-  nothing tests a restore automatically. It shows facts to act on, not a log of who
-  watched what.
-- Probably migration 7, for an index on events by film and person. Any migration
-  means going back to milestone 2's code needs a restore, as before.
+  back, nor reopens a "start by" deadline: with tickets in every state, a clean-up
+  with tiny windows, run far in the future, leaves each one reading the same.
+- access.md's **What is recorded** gains how long each thing is kept
+  ([How long it's kept](access.md#how-long-its-kept)).
+- **The projection booth**: **Status** in the admin, a page headed Projection booth,
+  answering what needs attention and whether the server is well, and a one-line
+  summary at the top of the Films page when something needs attention (nothing when
+  all is quiet). **Needs attention**: setup and recovery links still waiting, and
+  those that expired unused in the last 7 days; tickets never played whose start-by
+  date is in the next 3 days or passed in the last 3; media requests the server
+  refused since it started, counted by reason, with the latest ten (Playback help
+  sends nothing, so the server's own refusals are all it knows). **The server**:
+  whether the media folder is there and readable, and how many film folders the last
+  scan found; free and total disk space for the data and the media; the newest backup
+  file and the last backup error; the newest file in the off-server copy, when
+  `BACKUP_COPY_DIR` points the app at it (read-only); the last clean-up; the version,
+  Node, SQLite and schema versions, and when the server started. Each line says
+  exactly what it checked: "Backup file written at 04:03", never "recovery verified",
+  since nothing tests a restore automatically. It shows facts to act on, not a log of
+  who watched what, and reading it records nothing.
+- **Refused media requests, remembered briefly.** The last 50 refusals are kept in
+  memory for the booth, as well as logged: the time, status, reason, kind of file,
+  film and the coarse device label the log already uses. No IP address, cookie,
+  session, ticket, person or full path. A restart forgets them.
+- **Migration 7**: when each person last signed in, kept on the person (filled in from
+  their sessions, then set at every sign-in), so **Last signed in** survives their old
+  sessions being deleted; and indexes on events by film and by type, for the filters
+  and the clean-up. Like any migration, going back to older code needs a restore.
 
 **Done when** deleting with the defaults on a copy of the production database removes
 only events and ended sessions, every test still passes, the ticket and person pages

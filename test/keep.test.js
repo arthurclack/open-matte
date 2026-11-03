@@ -368,12 +368,12 @@ describe('keeping', () => {
     const { p, device } = await member();
     const b = await device(await opened(fresh(), t));
     await kept(b);
-    const e = (await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.find((x) => x.type === 'ticket-kept');
+    const e = (await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.events.find((x) => x.type === 'ticket-kept');
     assert.ok(e, 'ticket-kept event');
     assert.equal(e.personId, p.id);
     assert.equal(e.filmId, films.arrival);
     assert.ok(e.device);
-    assert.ok((await admin.get(`/api/admin/activity?person=${p.id}`)).data.some((x) => x.type === 'ticket-kept'));
+    assert.ok((await admin.get(`/api/admin/activity?person=${p.id}`)).data.events.some((x) => x.type === 'ticket-kept'));
   });
 
   test('Your tickets lists a kept ticket from when it was kept', async () => {
@@ -463,7 +463,7 @@ describe('giving and releasing', () => {
     // Sam's browser was still "playing", but can't any more: Alex takes over at once.
     const s = await play(alex.phone);
     assert.equal(s.screeningId, screeningId);
-    const types = (await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.map((e) => [e.type, e.personId]);
+    const types = (await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.events.map((e) => [e.type, e.personId]);
     assert.ok(types.some(([type, pid]) => type === 'ticket-released' && pid === sam.p.id));
     assert.ok(types.some(([type, pid]) => type === 'ticket-given' && pid === alex.p.id));
   });

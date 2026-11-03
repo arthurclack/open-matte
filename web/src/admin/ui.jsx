@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { formatClock, plural } from '../api.js';
+import { formatClock, formatDateTime, plural } from '../api.js';
 
 export const AdminContext = createContext({ signedOut: () => {} });
 
@@ -118,6 +118,21 @@ export const msToDateInput = (ms) => {
 
 // How long a setup or recovery link works, in words.
 export const linkLifetime = (hours) => (!hours ? '' : hours % 24 === 0 ? plural(hours / 24, 'day') : plural(hours, 'hour'));
+
+// How long records are kept, in words: "30 days", "12 months", "2 years".
+export const keptFor = (days) => (days === 365 ? '12 months' : days % 365 === 0 ? plural(days / 365, 'year') : plural(days, 'day'));
+
+// What a clean-up deleted, or would: "120 progress reports, 4 events and 2 browsers".
+export const clearedCounts = (c, browsers = 'browser') =>
+  `${plural(c.progressReports ?? 0, 'progress report')}, ${plural(c.events ?? 0, 'event')} and ${plural(c.sessions ?? 0, browsers)}`;
+
+// The clean-up's last run since the server started, in a sentence.
+export function lastClearedText(lastRun) {
+  if (!lastRun) return 'Not run yet since the server started.';
+  const d = lastRun.deleted;
+  if (!d.progressReports && !d.events && !d.sessions) return `Last run ${formatDateTime(lastRun.at)}: nothing was old enough to clear.`;
+  return `Cleared ${clearedCounts(d)} at ${formatDateTime(lastRun.at)}.`;
+}
 
 const signedOutOf = (n) => (n ? `signed out of ${plural(n, 'browser')}` : 'no browsers were signed in');
 

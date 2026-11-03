@@ -10,6 +10,8 @@ const db = openDb(path.join(config.dataDir, 'open-matte.db'));
 const app = createApp({ db });
 // Daily database backups, and one shortly after start if the last is over a day old.
 app.locals.backups.start();
+// Deleting old events and ended sessions: about a minute after start, then daily.
+app.locals.retention.start();
 const server = app.listen(config.port, () => {
   console.log(`Open Matte listening on :${config.port} (media: ${config.mediaDir}, data: ${config.dataDir})`);
   const { rp } = app.locals;

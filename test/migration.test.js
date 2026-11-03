@@ -1,12 +1,14 @@
-// Upgrading a milestone 1 database to milestone 2, and refusing one written by
-// newer code. docs/milestone-2.md: "Data model" and "Existing rows".
+// Upgrading a milestone 1 database to milestone 2, and a schema 6 database to migration 7
+// (milestone 3, slice 4), and refusing one written by newer code. docs/milestone-2.md:
+// "Data model" and "Existing rows"; docs/milestone-3.md and the slice 4 spec.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, before, describe, test } from 'node:test';
+import { softAuthenticator } from './softauth.js';
 
-const { makeFilm, tempDir } = await import('./helpers.js');
+const { adminBrowser, browser, enroll, makeFilm, setupLink, signIn, tempDir } = await import('./helpers.js');
 const { MIGRATIONS, openDb } = await import('../server/db.js');
 const { scanMedia } = await import('../server/scan.js');
 const { createApp } = await import('../server/app.js');
@@ -268,5 +270,159 @@ describe('ids and constraints', () => {
     const link = addLink(id);
     const hash = db.prepare('SELECT token_hash FROM person_links WHERE id = ?').get(link).token_hash;
     assert.throws(() => db.prepare("INSERT INTO person_links (person_id, token_hash, purpose, created_at, expires_at) VALUES (?, ?, 'setup', 0, 1)").run(id, hash), /UNIQUE/);
+  });
+});
+
+// ====================================================================== migration 7
+// Milestone 3, slice 4. Written from docs/milestone-3.md and the slice 4 spec, not from
+// the implementation. Upgrading a schema 6 database (production when slice 4 started):
+// people gain last_signed_in_at, filled in from their sessions, so "Last signed in"
+// survives the clean-up deleting old sessions; events gain indexes for Activity's
+// filters and the clean-up. Nothing else changes.
+describe('a schema 6 database', () => {
+  const dir = tempDir();
+  const file = path.join(dir, 'open-matte.db');
+  const now = Date.now();
+  const DAY = 24 * HOUR;
+  const TABLES = ['settings', 'films', 'tickets', 'sessions', 'session_tickets', 'screenings', 'events', 'people', 'person_links', 'passkeys'];
+  const ids = {};
+  let before6;
+  let oldColumns;
+  let db;
+  let server;
+  let base;
+
+  before(() => {
+    assert.ok(MIGRATIONS.length >= 7, 'migration 7 exists');
+    const m6 = new DatabaseSync(file);
+    m6.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+    for (let i = 0; i < 6; i++) {
+      m6.exec('BEGIN');
+      m6.exec(MIGRATIONS[i]);
+      m6.exec(`PRAGMA user_version = ${i + 1}`);
+      m6.exec('COMMIT');
+    }
+    const film = Number(m6.prepare("INSERT INTO films (slug, title, media_status, published, created_at, updated_at) VALUES ('arrival', 'Arrival', 'ok', 1, ?, ?)").run(now, now).lastInsertRowid);
+    const person = (name) => Number(m6.prepare('INSERT INTO people (name, webauthn_user_id, created_at) VALUES (?, ?, ?)').run(name, crypto.randomBytes(32).toString('base64url'), now - 100 * DAY).lastInsertRowid);
+    ids.alex = person('Alex');
+    ids.morgan = person('Morgan');
+    ids.sam = person('Sam');
+    const key = Number(m6.prepare("INSERT INTO passkeys (person_id, credential_id, public_key, device_type, backed_up, created_at) VALUES (?, 'credential', x'00', 'multiDevice', 1, ?)").run(ids.alex, now - 90 * DAY).lastInsertRowid);
+    m6.prepare("INSERT INTO person_links (person_id, token_hash, purpose, created_at, expires_at, used_at) VALUES (?, 'hash', 'setup', ?, ?, ?)").run(ids.alex, now - 91 * DAY, now - 88 * DAY, now - 90 * DAY);
+    const session = (hash, kind, personId, signedInAt, { revoked = null, expires = now + 80 * DAY } = {}) =>
+      m6.prepare('INSERT INTO sessions (id_hash, kind, device, created_at, last_seen_at, expires_at, revoked_at, person_id, passkey_id, signed_in_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(hash, kind, 'Safari on iPhone', signedInAt ?? now - 50 * DAY, now - DAY, expires, revoked, personId, personId === ids.alex ? key : null, signedInAt);
+    // Alex: a phone signed in two days ago, a laptop ten days ago and signed out since.
+    session(sha256('alex phone'), 'viewer', ids.alex, now - 2 * DAY);
+    session(sha256('alex laptop'), 'viewer', ids.alex, now - 10 * DAY, { revoked: now - 9 * DAY });
+    // Morgan: once, a month ago, long expired. Sam: never.
+    session(sha256('morgan'), 'viewer', ids.morgan, now - 30 * DAY, { expires: now - 5 * DAY });
+    session(sha256('anonymous'), 'viewer', null, null);
+    session(sha256('admin'), 'admin', null, null, { expires: now + 12 * HOUR });
+    const ticket = Number(m6.prepare('INSERT INTO tickets (code, film_id, label, first_opened_at, first_played_at, created_at) VALUES (?, ?, ?, ?, ?, ?)').run('abcdefghjkmnp', film, 'For anyone', now - 3 * DAY, now - 3 * DAY, now - 4 * DAY).lastInsertRowid);
+    m6.prepare('INSERT INTO tickets (code, film_id, label, person_id, created_at) VALUES (?, ?, ?, ?, ?)').run('qrstuvwxyz234', film, 'For Alex', ids.alex, now - 4 * DAY);
+    m6.prepare('INSERT INTO session_tickets (session_hash, ticket_id, added_at) VALUES (?, ?, ?)').run(sha256('anonymous'), ticket, now - 3 * DAY);
+    const screening = Number(
+      m6.prepare('INSERT INTO screenings (ticket_id, film_id, session_hash, started_at, resumable_until, last_heartbeat_at, active_until, position_seconds, furthest_seconds) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(ticket, film, sha256('anonymous'), now - 3 * DAY, now - DAY, now - 3 * DAY, now - 3 * DAY, 42, 42).lastInsertRowid,
+    );
+    const event = m6.prepare('INSERT INTO events (at, type, film_id, ticket_id, session_hash, screening_id, position, detail, person_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    event.run(now - 3 * DAY, 'opened', film, ticket, sha256('anonymous'), null, null, null, null);
+    event.run(now - 3 * DAY, 'play', film, ticket, sha256('anonymous'), screening, 0, '{"resumed":false}', null);
+    event.run(now - 3 * DAY, 'heartbeat', film, ticket, sha256('anonymous'), screening, 42, null, null);
+    event.run(now - 2 * DAY, 'signed-in', null, null, sha256('alex phone'), null, null, '{"device":"Safari on iPhone"}', ids.alex);
+    before6 = Object.fromEntries(TABLES.map((t) => [t, rows(m6, t)]));
+    oldColumns = Object.fromEntries(TABLES.map((t) => [t, columns(m6, t)]));
+    assert.equal(userVersion(m6), 6);
+    m6.close();
+
+    db = openDb(file);
+  });
+
+  after(async () => {
+    if (server) await new Promise((r) => server.close(r));
+    db?.close();
+  });
+
+  const lastSignedIn = (id) => db.prepare('SELECT last_signed_in_at FROM people WHERE id = ?').get(id).last_signed_in_at;
+
+  test('migrates to the current schema version, with last_signed_in_at and the new indexes', () => {
+    assert.equal(userVersion(db), MIGRATIONS.length);
+    assert.ok(columns(db, 'people').includes('last_signed_in_at'));
+    const indexed = (name) => db.prepare(`PRAGMA index_info(${name})`).all().map((c) => c.name);
+    assert.deepEqual(indexed('events_film'), ['film_id', 'at']);
+    assert.deepEqual(indexed('events_type_at'), ['type', 'at']);
+    assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  });
+
+  test("each person's last sign-in is filled in from their sessions", () => {
+    assert.equal(lastSignedIn(ids.alex), now - 2 * DAY, 'the latest of their sessions');
+    assert.equal(lastSignedIn(ids.morgan), now - 30 * DAY, 'an expired session counts');
+    assert.equal(lastSignedIn(ids.sam), null, 'never signed in');
+  });
+
+  test('every existing row is unchanged', () => {
+    for (const t of TABLES) {
+      const now6 = rows(db, t);
+      assert.equal(now6.length, before6[t].length, t);
+      now6.forEach((row, i) => {
+        const old = Object.fromEntries(oldColumns[t].map((c) => [c, row[c]]));
+        assert.deepEqual(old, before6[t][i], `${t} row ${i}`);
+      });
+    }
+    // The new column is the only new one.
+    for (const t of TABLES) {
+      const added = columns(db, t).filter((c) => !oldColumns[t].includes(c));
+      assert.deepEqual(added, t === 'people' ? ['last_signed_in_at'] : [], t);
+    }
+  });
+
+  test('opening it again changes nothing', () => {
+    const again = openDb(file);
+    assert.equal(userVersion(again), MIGRATIONS.length);
+    assert.equal(again.prepare('SELECT last_signed_in_at FROM people WHERE id = ?').get(ids.alex).last_signed_in_at, now - 2 * DAY);
+    again.close();
+  });
+
+  test('a later sign-in moves it on, and Last signed in survives deleting the old sessions', async () => {
+    const app = createApp({
+      db,
+      mediaDir: tempDir(),
+      dataDir: dir,
+      metadataOptions: { envKey: '' },
+      backupOptions: { backupDir: path.join(dir, 'backups') },
+      webDist: path.join(dir, 'no-web-build'),
+      webauthn: { publicUrl: '', rpId: '', production: false },
+    });
+    server = await new Promise((resolve) => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    base = `http://127.0.0.1:${server.address().port}`;
+    const admin = await adminBrowser(base);
+    const lastSignedInAt = async (id) => (await admin.get(`/api/admin/people/${id}`)).data.lastSignedInAt;
+    const listed = async (id) => (await admin.get('/api/admin/people')).data.find((p) => p.id === id).lastSignedInAt;
+    assert.equal(await lastSignedInAt(ids.alex), now - 2 * DAY);
+    assert.equal(await listed(ids.morgan), now - 30 * DAY);
+
+    // Sam sets up a passkey (which signs Sam in), then signs in on another browser.
+    const auth = softAuthenticator();
+    const phone = browser(base);
+    assert.equal((await enroll(phone, (await setupLink(admin, ids.sam)).token, { auth })).status, 200);
+    const signedIn = (hash) => db.prepare('SELECT signed_in_at FROM sessions WHERE id_hash = ?').get(hash).signed_in_at;
+    const first = signedIn(sha256(phone.jar.get('om_session')));
+    assert.equal(lastSignedIn(ids.sam), first, 'creating a passkey signs in');
+    await new Promise((r) => setTimeout(r, 5));
+    const laptop = browser(base);
+    assert.equal((await signIn(laptop, auth)).status, 200);
+    const latest = signedIn(sha256(laptop.jar.get('om_session')));
+    assert.ok(latest > first);
+    assert.equal(lastSignedIn(ids.sam), latest);
+    assert.equal(await lastSignedInAt(ids.sam), latest);
+
+    // Every session of Sam's and Alex's deleted, as the clean-up does once they've ended.
+    db.prepare('DELETE FROM sessions WHERE person_id IN (?, ?)').run(ids.sam, ids.alex);
+    assert.equal(await lastSignedInAt(ids.sam), latest);
+    assert.equal(await listed(ids.sam), latest);
+    assert.equal(await lastSignedInAt(ids.alex), now - 2 * DAY);
   });
 });

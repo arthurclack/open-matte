@@ -53,7 +53,7 @@ const metadataRoute = (fn) => async (req, res) => {
 };
 
 export function adminRoutes(deps) {
-  const { db, sessions, access, settings, mediaDir, metadata, backups, rp, limit, branding } = deps;
+  const { db, sessions, access, settings, mediaDir, metadata, backups, rp, limit, branding, retention, booth } = deps;
   const router = express.Router();
   const loginLimit = limit({ windowMs: 15 * 60 * 1000, max: 10 });
 
@@ -90,7 +90,26 @@ export function adminRoutes(deps) {
     return f;
   };
 
-  function adminFilm(f) {
+  // How the film's tickets have been used, from tickets and screenings only, so
+  // deleting old events never changes it. Revoked tickets count among those
+  // issued (and are counted again on their own); played means any screening,
+  // finished one that reached the end and wasn't given back.
+  const filmViewing = {
+    tickets: db.prepare(`
+      SELECT COUNT(*) AS issued, COALESCE(SUM(revoked_at IS NOT NULL), 0) AS revoked,
+             COALESCE(SUM(first_opened_at IS NOT NULL), 0) AS opened,
+             COALESCE(SUM(EXISTS (SELECT 1 FROM screenings s WHERE s.ticket_id = t.id)), 0) AS played,
+             COALESCE(SUM(EXISTS (SELECT 1 FROM screenings s WHERE s.ticket_id = t.id AND s.finished_at IS NOT NULL AND s.voided_at IS NULL)), 0) AS finished
+      FROM tickets t WHERE t.film_id = ?`),
+    screenings: db.prepare('SELECT COUNT(*) AS started, COALESCE(SUM(voided_at IS NOT NULL), 0) AS voided FROM screenings WHERE film_id = ?'),
+  };
+  function viewingOf(filmId) {
+    const s = filmViewing.screenings.get(filmId);
+    return { ...filmViewing.tickets.get(filmId), screenings: s.started, voided: s.voided };
+  }
+
+  // One film for the admin. The list leaves out `viewing`, which only the film's own page shows.
+  function adminFilm(f, { viewing = true } = {}) {
     const media = filmMedia(f);
     const artwork = filmArtwork(f);
     const out = { id: f.id, slug: f.slug };
@@ -122,6 +141,7 @@ export function adminRoutes(deps) {
       lookup: looksLikeReleaseName(f.title) ? guessTitleYear(f.title) : { title: f.title, year: f.year },
       metaSources: parseJson(f.meta_sources, {}),
       media,
+      ...(viewing && { viewing: viewingOf(f.id) }),
     };
   }
 
@@ -143,7 +163,7 @@ export function adminRoutes(deps) {
       db.prepare('SELECT film_id, COUNT(*) AS total, SUM(revoked_at IS NULL) AS active FROM tickets GROUP BY film_id').all().map((r) => [r.film_id, r]),
     );
     const films = db.prepare('SELECT * FROM films ORDER BY published DESC, sort_order, title COLLATE NOCASE').all();
-    res.json(films.map((f) => ({ ...adminFilm(f), tickets: { total: counts.get(f.id)?.total ?? 0, active: counts.get(f.id)?.active ?? 0 } })));
+    res.json(films.map((f) => ({ ...adminFilm(f, { viewing: false }), tickets: { total: counts.get(f.id)?.total ?? 0, active: counts.get(f.id)?.active ?? 0 } })));
   });
 
   router.get('/api/admin/films/:id', (req, res) => res.json(adminFilm(getFilm(req.params.id))));
@@ -273,13 +293,20 @@ export function adminRoutes(deps) {
         .map((f) => [f.id, { film: { id: f.id, slug: f.slug, title: f.title }, durationSeconds: filmMedia(f).durationSeconds ?? null }]),
     );
     const people = new Map(db.prepare('SELECT id, name, disabled_at FROM people').all().map((p) => [p.id, { id: p.id, name: p.name, disabled: Boolean(p.disabled_at) }]));
-    if (ids && !ids.length) return { films, people, browsers: new Map(), lastEvent: new Map(), progress: new Map() };
+    if (ids && !ids.length) return { films, people, browsers: new Map(), lastEvent: new Map(), lastScreening: new Map(), progress: new Map() };
     return {
       films,
       people,
       browsers: byTicket(db.prepare(`SELECT ticket_id, COUNT(*) AS n FROM session_tickets WHERE 1 ${only} GROUP BY ticket_id`).all(...args)),
-      // SQLite takes `type` from the row that holds MAX(at).
-      lastEvent: byTicket(db.prepare(`SELECT ticket_id, MAX(at) AS at, type FROM events WHERE ticket_id IS NOT NULL ${only} GROUP BY ticket_id`).all(...args)),
+      // The latest in Activity's order, (at, id), so of two events at the same
+      // moment it's the one Activity lists first.
+      lastEvent: byTicket(db.prepare(`
+        SELECT ticket_id, at, type FROM (
+          SELECT ticket_id, at, type, ROW_NUMBER() OVER (PARTITION BY ticket_id ORDER BY at DESC, id DESC) AS n
+          FROM events WHERE ticket_id IS NOT NULL ${only})
+        WHERE n = 1`).all(...args)),
+      // The latest screening's last report, which outlives the events the clean-up deletes.
+      lastScreening: byTicket(db.prepare(`SELECT ticket_id, MAX(COALESCE(last_heartbeat_at, started_at)) AS at FROM screenings WHERE 1 ${only} GROUP BY ticket_id`).all(...args)),
       progress: byTicket(
         db.prepare(`SELECT ticket_id, MAX(furthest_seconds) AS furthest, MAX(finished_at IS NOT NULL) AS finished
                     FROM screenings WHERE voided_at IS NULL ${only} GROUP BY ticket_id`).all(...args),
@@ -291,7 +318,13 @@ export function adminRoutes(deps) {
     const status = access.ticketStatus(t, now);
     const film = ctx.films.get(t.film_id);
     const progress = ctx.progress.get(t.id) || {};
-    const last = ctx.lastEvent.get(t.id);
+    // The latest event. Once the clean-up has deleted them all, the latest
+    // screening's last report, and without a screening the first open: both
+    // outlive the events, so a ticket that was used never shows as untouched.
+    const screening = ctx.lastScreening.get(t.id);
+    const last = ctx.lastEvent.get(t.id)
+      ?? (screening && { at: screening.at, type: 'play' })
+      ?? (t.first_opened_at && { at: t.first_opened_at, type: 'opened' });
     // Browsers that opened the link. Once the ticket has a person they can't use
     // it: they're waiting, and get it back if it's released.
     const opened = ctx.browsers.get(t.id)?.n ?? 0;
@@ -476,6 +509,10 @@ export function adminRoutes(deps) {
   });
 
   // ------------------------------------------------------------ activity
+  // Newest first, a page at a time: `next` is passed back as `before` for the
+  // page after, which holds the events strictly older in (at, id) order, so
+  // events at the same moment are neither repeated nor skipped.
+  const VIEWING = "('opened', 'play', 'heartbeat', 'finished')";
   router.get('/api/admin/activity', (req, res) => {
     const where = [];
     const args = [];
@@ -484,7 +521,17 @@ export function adminRoutes(deps) {
     // Account events name their person; viewing events find theirs through the session.
     if (req.query.person) where.push('COALESCE(e.person_id, s.person_id) = ?'), args.push(Number(req.query.person));
     if (req.query.heartbeats !== '1') where.push("e.type <> 'heartbeat'");
-    const limit = Math.min(Number(req.query.limit) || 200, 1000);
+    // Viewing, or accounts and links (everything else).
+    if (req.query.kind === 'viewing') where.push(`e.type IN ${VIEWING}`);
+    else if (req.query.kind === 'accounts') where.push(`e.type NOT IN ${VIEWING}`);
+    else if (req.query.kind) throw bad('kind must be viewing or accounts');
+    if (req.query.before) {
+      const m = /^(\d+)\.(\d+)$/.exec(String(req.query.before));
+      if (!m) throw bad('before must be the next value of a previous page');
+      where.push('(e.at, e.id) < (?, ?)'), args.push(Number(m[1]), Number(m[2]));
+    }
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 200, 1), 1000);
+    // One more than asked for, to know whether there is a page after this one.
     const rows = db
       .prepare(`
         SELECT e.id, e.at, e.type, e.position, e.detail, e.screening_id AS screeningId,
@@ -497,8 +544,30 @@ export function adminRoutes(deps) {
         LEFT JOIN people p ON p.id = COALESCE(e.person_id, s.person_id)
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY e.at DESC, e.id DESC LIMIT ?`)
-      .all(...args, limit);
-    res.json(rows.map((r) => ({ ...r, detail: r.detail ? JSON.parse(r.detail) : null })));
+      .all(...args, limit + 1);
+    const more = rows.length > limit;
+    const events = rows.slice(0, limit).map((r) => ({ ...r, detail: r.detail ? JSON.parse(r.detail) : null }));
+    const last = events.at(-1);
+    res.json({ events, next: more ? `${last.at}.${last.id}` : null });
+  });
+
+  // ------------------------------------------------------------ the projection booth
+  // What needs attention and whether the server is well. Reading it records nothing.
+  router.get('/api/admin/booth', async (req, res) => res.json(await booth.report()));
+
+  // ------------------------------------------------------------ keeping records
+  // The clean-up's settings, its last run since the server started, and what it
+  // would delete now.
+  const retentionView = () => ({ ...retention.status(), preview: retention.preview(Date.now()) });
+  router.get('/api/admin/retention', (req, res) => res.json(retentionView()));
+  router.post('/api/admin/retention/run', (req, res) => {
+    try {
+      retention.run(Date.now());
+    } catch (err) {
+      console.error('Clean-up failed:', err);
+      return res.status(500).json({ error: `The clean-up failed: ${err.message}.` });
+    }
+    res.json(retentionView());
   });
 
   // ------------------------------------------------------------ settings

@@ -84,6 +84,8 @@ export function createSessionStore(db) {
       SELECT s.*, p.name AS person_name, p.disabled_at AS person_disabled_at, p.id AS person_found
       FROM sessions s LEFT JOIN people p ON p.id = s.person_id
       WHERE s.id_hash = ? AND s.kind = ?`),
+    // Kept on the person, so it outlives the session (retention.js deletes ended ones).
+    signedIn: db.prepare('UPDATE people SET last_signed_in_at = ? WHERE id = ?'),
     touch: db.prepare(`UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?`),
     revoke: db.prepare(`UPDATE sessions SET revoked_at = ? WHERE id_hash = ? AND revoked_at IS NULL`),
     moveTickets: db.prepare('UPDATE session_tickets SET session_hash = ? WHERE session_hash = ?'),
@@ -136,6 +138,7 @@ export function createSessionStore(db) {
     const idHash = sha256(token);
     const ttl = config.viewerSessionDays * DAY;
     q.insertSignedIn.run(idHash, deviceLabel(req.get('user-agent')), now, now, now + ttl, personId, passkeyId, now);
+    q.signedIn.run(now, personId);
     const current = currentHash ? q.get.get(currentHash, 'viewer') : null;
     if (current && current.id_hash !== idHash) {
       if (live(current, now) && (current.person_id == null || current.person_id === personId)) {

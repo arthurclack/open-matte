@@ -285,6 +285,14 @@ td a:hover { text-decoration: underline; }
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1.2rem; margin: 0; }
 .kv dt { color: var(--text-faint); }
 .kv dd { margin: 0; }
+/* The projection booth's server card: paths and file names wrap, and on a phone each
+   label sits above its value. */
+.booth .kv dd { min-width: 0; overflow-wrap: anywhere; }
+.booth .kv dd > div + div { margin-top: 0.2rem; }
+@media (max-width: 520px) {
+  .booth .kv { grid-template-columns: 1fr; gap: 0; }
+  .booth .kv dd { margin-bottom: 0.7rem; }
+}
 .link-box { display: flex; gap: 0.5rem; align-items: center; background: var(--bg-sunk); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0.4rem 0.4rem 0.4rem 0.8rem; }
 .link-box code { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 0.88rem; }
 .progress { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; min-width: 60px; }

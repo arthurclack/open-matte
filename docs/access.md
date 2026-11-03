@@ -9,7 +9,8 @@ tickets that only one person can use, signed in, keeping a ticket in an account,
 films shown to members and an account page. Checks on real devices are listed in
 [device-checks.md](device-checks.md). Milestone 3 ([milestone-3.md](milestone-3.md))
 changes none of these rules; it adds [link previews](#link-previews) that show a
-ticket's film, and shows the film playing [on the lock screen](#on-the-lock-screen).
+ticket's film, shows the film playing [on the lock screen](#on-the-lock-screen), and
+deletes old activity after a time you choose ([How long it's kept](#how-long-its-kept)).
 
 ## The records
 
@@ -486,7 +487,8 @@ included.
 - **Remove** a passkey: it stops working at once, and the browsers it signed in are
   signed out. Their other passkeys, and the browsers those signed in, are
   unaffected. The passkey stays in their password manager, but is refused here.
-  Removed passkeys are deleted; Activity keeps the device they were added from.
+  Removed passkeys are deleted; Activity keeps the device they were added from, for
+  as long as it keeps the event (see [How long it's kept](#how-long-its-kept)).
 
 ## Secrets and sessions
 
@@ -584,3 +586,46 @@ passkey, the one it was added from. No IP addresses and no full user-agent strin
 are stored, nor how often a link was opened (only when it first was). Viewers are
 told on the film page that progress is recorded. This is operational information,
 not proof that anyone watched.
+
+**Refused media requests** aren't stored in the database. Besides a line in the
+server's log, the last 50 are kept in memory for **Status** in the admin (the
+projection booth): the time, status and reason, the kind of file (playlist, segment,
+subtitles, artwork or other), the film and the coarse device label. They hold no IP
+address, cookie, session, ticket, person or full address, and a restart forgets
+them. Opening the booth records nothing.
+
+### How long it's kept
+
+A clean-up deletes old records about a minute after the app starts, and then once a
+day. You set how long each kind is kept in the admin, under **Settings → Keeping
+records**:
+
+| What | Kept for, by default | Can be set to |
+|---|---|---|
+| Progress reports (**heartbeat**) | 30 days | 1 to 365 days |
+| Every other event: **opened**, **play**, **finished**, and all those under People and passkeys and Keeping tickets above | 365 days | 30 to 3,650 days |
+| A browser's session, once it has ended (signed out or expired) | 30 days from when it ended | 1 to 365 days |
+
+The same card shows what the clean-up would delete right now and what it last
+deleted, and **Clear now** runs it at once.
+
+**A session lives as long as its events.** Activity finds the person and device
+behind a viewing event through the browser's session, so a session that has ended is
+kept, however long ago that was, while any event still names it. Nor is one deleted
+while it holds a screening that can still be resumed, and a session that hasn't ended
+never is. The link tickets a browser held go with its session.
+
+**The clean-up never changes tickets or screenings.** Screening limits, **finished**,
+resume positions, start-by deadlines, expiry, and when a ticket was first opened and
+first played all come from those, so the clean-up changes nothing a viewer can do,
+and a test checks it. The counts on a film's and a person's admin page come from
+tickets and screenings too, and a person's **Last signed in** is kept with the
+person, not worked out from their sessions. On the ticket list, a ticket whose events
+have gone shows its latest screening as its last activity, or else when it was first
+opened.
+
+**Backups keep what they had.** A backup is the database as it was when it was
+written, so the events and sessions deleted since stay in it until the backup itself
+expires: by default after 14 days for a daily one and a year for a monthly one (see
+[deploying.md](deploying.md#backups)). Restoring an older backup brings them back
+until the clean-up runs again, about a minute after the app starts.

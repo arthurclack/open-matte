@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, formatAgo, formatBytes, formatClock } from '../api.js';
+import { api, formatAgo, formatBytes, formatClock, plural } from '../api.js';
 import FilmInfo from './FilmInfo.jsx';
 import { IssueTicket, TicketTable } from './Tickets.jsx';
 import { ErrorNote, MediaBadge, useAction, useLoad } from './ui.jsx';
@@ -24,6 +24,8 @@ export default function FilmDetail() {
   const { id } = useParams();
   const { data: film, setData, error } = useLoad(() => api.get(`/api/admin/films/${id}`), [id]);
   const tickets = useLoad(() => api.get(`/api/admin/tickets?film=${id}`), [id]);
+  // Counted again after issuing a ticket, without reloading the film (and its form).
+  const [viewing, setViewing] = useState(null);
   const [form, setForm] = useState(null);
   const [saved, setSaved] = useState(false);
   const action = useAction();
@@ -145,7 +147,14 @@ export default function FilmDetail() {
 
       <h2>Tickets</h2>
       {!film.published && <p className="dim">Tickets only open the film once it's published. You can issue them now and send them later.</p>}
-      <IssueTicket film={film} onIssued={tickets.reload} />
+      <Viewing filmId={film.id} v={viewing ?? film.viewing} />
+      <IssueTicket
+        film={film}
+        onIssued={() => {
+          tickets.reload();
+          api.get(`/api/admin/films/${id}`).then((f) => setViewing(f.viewing), () => {});
+        }}
+      />
       {tickets.data && tickets.data.length > 0 && (
         <div style={{ marginTop: '1rem' }}>
           <TicketTable tickets={tickets.data} showFilm={false} />
@@ -268,5 +277,37 @@ export default function FilmDetail() {
         </div>
       </div>
     </>
+  );
+}
+
+// How the film's tickets have been used. The server counts it from the tickets and
+// their screenings, so clearing old activity never changes it.
+function Viewing({ filmId, v }) {
+  if (!v?.issued) return null;
+  return (
+    <div className="card" style={{ marginBottom: '1rem' }}>
+      <dl className="kv">
+        <dt>Issued</dt>
+        <dd>
+          {plural(v.issued, 'ticket')}
+          {v.revoked > 0 && <span className="faint">, {v.revoked} since revoked</span>}
+        </dd>
+        <dt>Opened</dt>
+        <dd>{plural(v.opened, 'ticket')}</dd>
+        <dt>Played</dt>
+        <dd>
+          {plural(v.played, 'ticket')}
+          <span className="faint">
+            {' '}
+            · {plural(v.screenings, 'screening')} started{v.voided > 0 && `, ${v.voided} given back`}
+          </span>
+        </dd>
+        <dt>Finished</dt>
+        <dd>{plural(v.finished, 'ticket')}</dd>
+      </dl>
+      <p style={{ margin: '0.8rem 0 0', fontSize: '0.9rem' }}>
+        <Link to={`/admin/activity?film=${filmId}`}>This film's activity</Link>
+      </p>
+    </div>
   );
 }

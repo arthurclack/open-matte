@@ -21,7 +21,6 @@ export function peopleRoutes({ db, people }) {
     counts: db.prepare(`
       SELECT (SELECT COUNT(*) FROM passkeys WHERE person_id = ?1) AS passkeys,
              (SELECT COUNT(*) FROM tickets WHERE person_id = ?1) AS tickets,
-             (SELECT MAX(signed_in_at) FROM sessions WHERE person_id = ?1) AS lastSignedInAt,
              EXISTS (SELECT 1 FROM person_links WHERE person_id = ?1 AND used_at IS NOT NULL) AS setUp`),
     waiting: db.prepare(`
       SELECT purpose, created_at AS createdAt, expires_at AS expiresAt, opened_at AS openedAt FROM person_links
@@ -40,6 +39,17 @@ export function peopleRoutes({ db, people }) {
       SELECT id, purpose, reset, created_at AS createdAt, expires_at AS expiresAt, opened_at AS openedAt,
              used_at AS usedAt, used_device AS usedDevice, cancelled_at AS cancelledAt
       FROM person_links WHERE person_id = ? ORDER BY created_at DESC LIMIT 20`),
+    // Each film they have a ticket for, from their tickets and those tickets'
+    // screenings only, so deleting old events never changes it. Newest ticket
+    // first, a kept ticket counting from when it was kept.
+    viewing: db.prepare(`
+      SELECT f.id, f.slug, f.title, COUNT(DISTINCT t.id) AS tickets,
+             MIN(t.first_opened_at) AS openedAt, MIN(s.started_at) AS playedAt,
+             MIN(CASE WHEN s.voided_at IS NULL THEN s.finished_at END) AS finishedAt,
+             COUNT(s.id) AS screenings, MAX(COALESCE(t.claimed_at, t.created_at)) AS since
+      FROM tickets t JOIN films f ON f.id = t.film_id LEFT JOIN screenings s ON s.ticket_id = t.id
+      WHERE t.person_id = ?
+      GROUP BY f.id ORDER BY since DESC, f.id DESC`),
   };
 
   // The note is for the admin only; nothing here ever goes to a viewer.
@@ -55,7 +65,8 @@ export function peopleRoutes({ db, people }) {
       setUp: Boolean(c.setUp),
       passkeys: c.passkeys,
       tickets: c.tickets,
-      lastSignedInAt: c.lastSignedInAt,
+      // Kept on the person, so it outlives the sessions the clean-up deletes.
+      lastSignedInAt: p.last_signed_in_at,
       linkWaiting: q.waiting.get(p.id, now) || null,
     };
   }
@@ -67,6 +78,7 @@ export function peopleRoutes({ db, people }) {
       passkeys: q.passkeys.all(p.id).map((k) => ({ ...k, synced: Boolean(k.synced) })),
       browsers: q.browsers.all(p.id, now),
       links: q.links.all(p.id).map((l) => ({ ...l, reset: Boolean(l.reset) })),
+      viewing: q.viewing.all(p.id).map(({ id, slug, title, ...v }) => ({ film: { id, slug, title }, ...v })),
     };
   }
 

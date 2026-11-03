@@ -197,6 +197,17 @@ export const MIGRATIONS = [
   ALTER TABLE tickets ADD COLUMN claimed_at INTEGER
     CHECK (claimed_at IS NULL OR person_id IS NOT NULL);
   `,
+  // Activity and retention. Old events and ended browser sessions are deleted
+  // from here on (retention.js), so "last signed in" moves onto the person, where
+  // it outlives the sessions it was read from. Indexes for Activity's filters and
+  // the clean-up. As with every migration, going back to older code now needs a
+  // restore of the backup taken before the update.
+  `
+  ALTER TABLE people ADD COLUMN last_signed_in_at INTEGER;
+  UPDATE people SET last_signed_in_at = (SELECT MAX(signed_in_at) FROM sessions WHERE person_id = people.id);
+  CREATE INDEX events_film ON events(film_id, at);
+  CREATE INDEX events_type_at ON events(type, at);
+  `,
 ];
 
 export function openDb(file) {

@@ -296,6 +296,13 @@ export default function PersonDetail() {
         </div>
       )}
 
+      {p.viewing?.length > 0 && (
+        <>
+          <h2>Films</h2>
+          <FilmsWatched person={p} />
+        </>
+      )}
+
       <h2>Tickets</h2>
       <ErrorNote error={tickets.error} />
       {tickets.data?.length > 0 && <TicketTable tickets={tickets.data} showFilm showKind={false} />}
@@ -332,11 +339,11 @@ export default function PersonDetail() {
       )}
 
       <h2>Activity</h2>
-      {events.data?.length ? (
+      {events.data?.events.length ? (
         <div className="table-wrap">
           <table className="stack">
             <tbody>
-              {events.data.map((e) => (
+              {events.data.events.map((e) => (
                 <tr key={e.id}>
                   <td className="nowrap faint" data-label="When">{formatDateTime(e.at)}</td>
                   <td className="card-title">{describeEvent(e)}</td>
@@ -348,9 +355,60 @@ export default function PersonDetail() {
           </table>
         </div>
       ) : (
-        <p className="dim">Nothing yet. Links, sign-ins and passkeys show up here.</p>
+        <p className="dim">
+          {p.lastSignedInAt || p.viewing?.length
+            ? 'None kept: older events are cleared after a while (Settings, Keeping records).'
+            : 'Nothing yet. Links, sign-ins and passkeys show up here.'}
+        </p>
+      )}
+      {events.data?.next && (
+        <p style={{ marginTop: '1rem' }}>
+          <Link to={`/admin/activity?person=${p.id}`}>All of {name}'s activity</Link>
+        </p>
       )}
     </>
+  );
+}
+
+// Each film they have a ticket of their own for, newest first. The server works it out
+// from those tickets and their screenings, so clearing old activity never changes it.
+function FilmsWatched({ person: p }) {
+  const when = (ms) => (ms ? formatDateTime(ms) : <span className="faint">Not yet</span>);
+  return (
+    <div className="table-wrap">
+      <table className="stack">
+        <thead>
+          <tr>
+            <th>Film</th>
+            <th>Opened</th>
+            <th>First played</th>
+            <th>Finished</th>
+          </tr>
+        </thead>
+        <tbody>
+          {p.viewing.map((v) => (
+            <tr key={v.film.id}>
+              <td className="card-title">
+                <Link to={`/admin/films/${v.film.id}`}>{v.film.title}</Link>
+                {v.tickets > 1 && <span className="faint" style={{ fontWeight: 400 }}> · {plural(v.tickets, 'ticket')}</span>}
+              </td>
+              <td className="nowrap" data-label="Opened">{when(v.openedAt)}</td>
+              <td data-label="First played">
+                {v.playedAt ? (
+                  <span>
+                    {formatDateTime(v.playedAt)} ·{' '}
+                    <Link to={`/admin/activity?person=${p.id}&film=${v.film.id}&kind=viewing`}>{plural(v.screenings, 'screening')}</Link>
+                  </span>
+                ) : (
+                  when(null)
+                )}
+              </td>
+              <td className="nowrap" data-label="Finished">{when(v.finishedAt)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

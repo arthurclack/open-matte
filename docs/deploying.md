@@ -178,6 +178,13 @@ From milestone 2's second update (tickets for one person) on, going back to olde
 code always needs a restore of the backup you took before it: see
 [Rolling back](#rolling-back).
 
+Milestone 3's activity and retention update (slice 4) has a migration, to schema 7, so
+take the backup above first: going back to older code needs it. About a minute after
+the new code starts, its first clean-up deletes progress reports over 30 days old,
+other events over 12 months old, and browser sessions that ended over 30 days ago
+and that no remaining event names (see
+[access.md](access.md#how-long-its-kept)). Backups taken before then still have them.
+
 ## Backups
 
 Nearly everything Open Matte knows lives in its database: films' details, tickets,
@@ -195,10 +202,17 @@ downloaded from TMDB are copied to `backups/artwork`, and the logo and tab icon 
 `backups/branding`. Backups only add to those two folders, never remove from them,
 so an older backup's logo is still there to restore. If the server was down at
 04:00, a backup runs shortly after it starts. **Settings → Backups** in the admin
-shows the latest and has a **Back up now** button.
+shows the latest and has a **Back up now** button. **Status** in the admin (the
+projection booth) shows when the newest backup file was written, the last error, and
+the off-server copy if you let it see one (below).
 
 Change the timing with `BACKUP_HOUR`, `BACKUP_KEEP_DAYS` and `BACKUP_KEEP_MONTHS`;
 turn backups off with `BACKUP_DIR=off`.
+
+**Backups keep what they had.** The app deletes old activity and ended browser
+sessions after a while (see [access.md](access.md#how-long-its-kept)), but a backup
+is the database as it was, so it keeps them until the backup itself is deleted: the
+monthly backups hold up to a year of events the app has since deleted.
 
 **Keep a copy off the server.** Backups on the VPS protect against mistakes, not
 against losing the VPS. If you have network storage mounted (a Hetzner Storage
@@ -210,6 +224,35 @@ sudo cp /srv/open-matte/app/deploy/systemd/open-matte-backup-copy.* /etc/systemd
 sudo systemctl daemon-reload && sudo systemctl enable --now open-matte-backup-copy.timer
 sudo systemctl start open-matte-backup-copy.service     # once now, to check it works
 ```
+
+To see the copy from the admin, set `BACKUP_COPY_DIR` in `deploy/.env` to the copy's
+folder as the app's container sees it. The projection booth then shows the newest
+backup there and its time, so you can tell whether the timer is keeping up. The app
+only reads the folder. Like the rest of the booth, it says what it found, a file and
+its time, and doesn't claim a restore from it would work. Here the timer copies to the
+Storage Box, which the container already sees, read-only, as its media folder:
+
+```bash
+BACKUP_COPY_DIR=/media/.open-matte-backups
+```
+
+If your copy is somewhere the container can't see, mount it for the app, read-only,
+in `deploy/compose.yml`, next to the other `volumes`, and point `BACKUP_COPY_DIR` at
+where it appears. Make the change on your computer: `scripts/deploy.sh` copies
+`deploy/compose.yml` over the server's.
+
+```yaml
+      # The off-server copy of the backups, so the projection booth can see it.
+      - /mnt/storage/open-matte-backups:/backup-copy:ro
+```
+
+```bash
+BACKUP_COPY_DIR=/backup-copy
+```
+
+Then run `scripts/deploy.sh my-server`, or, if you only changed `.env`,
+`docker compose up -d app` on the server in `/srv/open-matte/app/deploy`. Without
+`BACKUP_COPY_DIR`, the booth says no off-server copy is set up.
 
 Your hosting provider's own snapshots (Hetzner's server backups, or Storage Box
 snapshots) are a good extra layer. Backups hold people's names and your notes about
@@ -331,3 +374,8 @@ cd /srv/open-matte/app/deploy && docker compose logs -f app
 
 Each container keeps at most 50 MB of logs (five files of 10 MB), set in
 `deploy/compose.yml`.
+
+For a quicker look, **Status** in the admin (the projection booth) shows the media
+requests the app refused since it started, counted by reason, with the latest ten;
+whether the media folder is readable; the disk space left for the data and the
+media; the last backup and clean-up; and the version running.

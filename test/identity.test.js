@@ -321,7 +321,7 @@ describe('opening a ticket for one person', () => {
     const first = ticketRow(t.id).first_opened_at;
     assert.ok(first, 'first_opened_at is set by the page');
     assert.ok(eventsOf(t.id).some((e) => e.type === 'opened' && e.session_hash === hashOf(laptop)));
-    const openedEvent = (await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.find((e) => e.type === 'opened');
+    const openedEvent = (await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.events.find((e) => e.type === 'opened');
     assert.equal(openedEvent.personName, sam.p.name, 'Activity names the person, read from the session');
 
     const s = await playsEverything(laptop);

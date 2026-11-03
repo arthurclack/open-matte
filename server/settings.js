@@ -19,6 +19,13 @@ export const DEFAULT_SETTINGS = {
   // Lock screens and media controls show the film's title and poster while it
   // plays. Off: only the cinema's name, for when the title is part of the surprise.
   mediaSessionTitle: true,
+  // How long records are kept, in days (retention.js). Progress reports are the
+  // heartbeat events; every other event (opened, play, finished, sign-ins,
+  // links) is kept for retainEventsDays. Ended browser sessions go
+  // retainSessionsDays after they end, once no event names them.
+  retainProgressDays: 30,
+  retainEventsDays: 365,
+  retainSessionsDays: 30,
   // { file, width, height } of an image in DATA_DIR/branding, or null. Only the
   // upload routes write these (setFile); viewers get a URL instead (branding.js).
   logo: null,
@@ -35,6 +42,9 @@ const RULES = {
   backgroundColor: (v) => typeof v === 'string' && COLOR.test(v),
   logoWithName: (v) => typeof v === 'boolean',
   mediaSessionTitle: (v) => typeof v === 'boolean',
+  retainProgressDays: (v) => Number.isInteger(v) && v >= 1 && v <= 365,
+  retainEventsDays: (v) => Number.isInteger(v) && v >= 30 && v <= 3650,
+  retainSessionsDays: (v) => Number.isInteger(v) && v >= 1 && v <= 365,
 };
 
 // previewKey signs the addresses of ticket links' preview posters (page.js).

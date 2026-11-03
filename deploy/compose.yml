@@ -21,6 +21,9 @@ services:
       WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-}
       TMDB_API_KEY: ${TMDB_API_KEY:-}
       BACKUP_DIR: /backups
+      # Optional: the off-server copy's folder as this container sees it, for the
+      # admin's projection booth. Only read. Unset: no copy is shown.
+      BACKUP_COPY_DIR: ${BACKUP_COPY_DIR:-}
     volumes:
       - ${DATA_PATH:-/srv/open-matte/data}:/data
       # Daily database backups. Create the folder first, owned by uid 1000.

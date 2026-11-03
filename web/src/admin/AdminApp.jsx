@@ -7,6 +7,7 @@ import Films from './Films.jsx';
 import People from './People.jsx';
 import PersonDetail from './PersonDetail.jsx';
 import Settings from './Settings.jsx';
+import Status, { AttentionStrip } from './Status.jsx';
 import TicketDetail from './TicketDetail.jsx';
 import Tickets from './Tickets.jsx';
 import { AdminContext } from './ui.jsx';
@@ -45,6 +46,7 @@ export default function AdminApp() {
             <NavLink to="/admin/tickets">Tickets</NavLink>
             <NavLink to="/admin/people">People</NavLink>
             <NavLink to="/admin/activity">Activity</NavLink>
+            <NavLink to="/admin/status">Status</NavLink>
             <NavLink to="/admin/settings">Settings</NavLink>
           </div>
           <div className="bottom">
@@ -56,13 +58,23 @@ export default function AdminApp() {
         </nav>
         <main className="admin-main">
           <Routes>
-            <Route index element={<Films />} />
+            {/* The first page starts with what needs attention, if anything does. */}
+            <Route
+              index
+              element={
+                <>
+                  <AttentionStrip />
+                  <Films />
+                </>
+              }
+            />
             <Route path="films/:id" element={<FilmDetail />} />
             <Route path="tickets" element={<Tickets />} />
             <Route path="tickets/:id" element={<TicketDetail />} />
             <Route path="people" element={<People />} />
             <Route path="people/:id" element={<PersonDetail />} />
             <Route path="activity" element={<Activity />} />
+            <Route path="status" element={<Status />} />
             <Route path="settings" element={<Settings />} />
           </Routes>
         </main>

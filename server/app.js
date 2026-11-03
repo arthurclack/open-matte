@@ -4,6 +4,7 @@ import path from 'node:path';
 import express from 'express';
 import { createAccess } from './access.js';
 import { createBackups } from './backup.js';
+import { createBooth } from './booth.js';
 import { IMAGE_TYPES, createBranding } from './branding.js';
 import { createCeremonies } from './ceremonies.js';
 import { config } from './config.js';
@@ -11,9 +12,10 @@ import { createMetadata } from './metadata.js';
 import { createPage, createTicketPreviews } from './page.js';
 import { createPeople } from './people.js';
 import { rateCounter, rateLimit } from './ratelimit.js';
+import { createRetention } from './retention.js';
 import { accountRoutes } from './routes/account.js';
 import { adminRoutes } from './routes/admin.js';
-import { mediaRoutes } from './routes/media.js';
+import { createRefusals, mediaRoutes } from './routes/media.js';
 import { publicRoutes } from './routes/public.js';
 import { viewerRoutes } from './routes/viewer.js';
 import { createSessionStore } from './sessions.js';
@@ -37,6 +39,7 @@ export function createApp({
   limits = {},
 }) {
   const app = express();
+  const startedAt = Date.now();
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxy);
 
@@ -58,9 +61,16 @@ export function createApp({
   const previewCount = rateCounter({ windowMs: 10 * 60 * 1000, max: 60, scale: limits.scale ?? 1 });
   const previewKey = settings.ensureSecret('previewKey', () => crypto.randomBytes(32).toString('base64url'));
   const previews = createTicketPreviews({ db, access, counter: previewCount, key: previewKey });
-  const deps = { db, mediaDir, settings, metadata, backups, sessions, access, rp, people, limit, branding, site, previews };
+  // Deleting old events and ended sessions, daily (index.js starts it).
+  const retention = createRetention({ db, settings });
+  // Refused media requests, in memory only, for the projection booth.
+  const refusals = createRefusals();
+  const booth = createBooth({ db, mediaDir, dataDir, backups, retention, refusals, startedAt });
+  const deps = { db, mediaDir, dataDir, settings, metadata, backups, sessions, access, rp, people, limit, branding, site, previews, retention, refusals, booth };
   app.locals.metadata = metadata;
   app.locals.backups = backups;
+  app.locals.retention = retention;
+  app.locals.refusals = refusals;
   app.locals.rp = rp;
 
   app.use((req, res, next) => {

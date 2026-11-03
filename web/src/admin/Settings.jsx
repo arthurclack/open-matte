@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, formatBytes, formatDateTime, plural } from '../api.js';
 import Branding from './Branding.jsx';
-import { ErrorNote, useAction, useLoad } from './ui.jsx';
+import { ErrorNote, clearedCounts, lastClearedText, useAction, useLoad } from './ui.jsx';
 
 // The main form holds only its own fields. The other cards (Branding, Film information)
 // save theirs separately: saving one of them leaves unsaved edits here alone, and saving
@@ -89,6 +89,9 @@ export default function Settings() {
 
       <h2>Backups</h2>
       <Backups />
+
+      <h2>Keeping records</h2>
+      <Retention settings={settings} onSaved={setData} />
 
       <h2>Sessions</h2>
       <div className="card" style={{ maxWidth: 720 }}>
@@ -300,5 +303,86 @@ function Backups() {
         </span>
       </div>
     </div>
+  );
+}
+
+const RETENTION = [
+  ['retainProgressDays', 'Progress reports', 1, 365, 'Where a film had got to, every 5 minutes while playing.'],
+  ['retainEventsDays', 'Other events', 30, 3650, 'Opened, played, finished, sign-ins, links.'],
+  ['retainSessionsDays', 'Signed-out browsers', 1, 365, 'Counted from when they signed out or expired, and kept while any event still names them.'],
+];
+const retentionForm = (s) => Object.fromEntries(RETENTION.map(([k]) => [k, String(s[k] ?? '')]));
+const errorText = (e) => (typeof e === 'string' ? e : e?.message);
+
+// How long old activity and signed-out browsers are kept, and clearing them now. It
+// saves only its own three settings, like the cards above.
+function Retention({ settings, onSaved }) {
+  const { data, setData, error, reload } = useLoad(() => api.get('/api/admin/retention'), []);
+  const [form, setForm] = useState(() => retentionForm(settings));
+  const [notice, setNotice] = useState(null);
+  const action = useAction();
+  if (error) return <ErrorNote error={error} />;
+  if (!data) return null;
+
+  const dirty = RETENTION.some(([k]) => form[k] !== String(settings[k] ?? ''));
+  const p = data.preview;
+  const nothing = !p.progressReports && !p.events && !p.sessions;
+
+  async function save(e) {
+    e.preventDefault();
+    setNotice(null);
+    const r = await action.run(() => api.patch('/api/admin/settings', Object.fromEntries(RETENTION.map(([k]) => [k, Number(form[k])]))));
+    if (r) {
+      onSaved(r);
+      setForm(retentionForm(r));
+      setNotice('Saved.');
+      reload(); // what clearing would delete depends on these
+    }
+  }
+
+  async function clearNow() {
+    if (!window.confirm(`Clear old records now? By the saved settings that's ${clearedCounts(p, 'signed-out browser')}. Tickets and screenings don't change.`)) return;
+    setNotice(null);
+    const r = await action.run(() => api.post('/api/admin/retention/run'));
+    if (r) {
+      setData(r);
+      setNotice(`Cleared ${clearedCounts(r.lastRun.deleted, 'signed-out browser')}.`);
+    }
+  }
+
+  return (
+    <form className="card" onSubmit={save} style={{ maxWidth: 720 }}>
+      <p className="dim">
+        Old activity is cleared every day, and a minute after the server starts. Clearing never changes a ticket: its screenings, limits, “finished”,
+        resume positions and deadlines are kept with the ticket. Backups keep what they had until they expire.
+      </p>
+      <ErrorNote error={action.error} />
+      {notice && <div className="notice good">{notice}</div>}
+      {data.lastError && <div className="notice bad">The last clean-up failed: {errorText(data.lastError)}</div>}
+      <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
+        {RETENTION.map(([k, label, min, max, hint]) => (
+          <label className="field" key={k}>
+            <span>{label} (days)</span>
+            <input type="number" min={min} max={max} required value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
+            <small>{hint}</small>
+          </label>
+        ))}
+      </div>
+      <p>
+        {nothing ? 'Nothing is old enough to clear right now.' : `Clearing now would delete ${clearedCounts(p, 'signed-out browser')}.`}
+        {dirty && <span className="dim"> That's by the saved settings: save to see what yours would clear.</span>}
+      </p>
+      <p className="dim" style={{ fontSize: '0.9rem' }}>
+        {lastClearedText(data.lastRun)}
+      </p>
+      <div className="row">
+        <button className="btn primary" disabled={!dirty || action.busy}>
+          Save
+        </button>
+        <button type="button" className="btn" onClick={clearNow} disabled={action.busy || nothing}>
+          Clear now
+        </button>
+      </div>
+    </form>
   );
 }

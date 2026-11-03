@@ -1482,7 +1482,7 @@ describe('ticket link previews', () => {
     assert.equal(a.firstOpenedAt, null);
     assert.equal(a.browsers, 0);
     assert.equal(a.lastActivity, null);
-    assert.deepEqual((await admin.get(`/api/admin/activity?ticket=${t.id}`)).data, []);
+    assert.deepEqual((await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.events, []);
     assert.equal(srv.db.prepare('SELECT last_seen_at FROM sessions WHERE id_hash = ?').get(hash).last_seen_at, anHourAgo);
   });
 

@@ -22,6 +22,30 @@ function backupName(at) {
   return `open-matte-${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}.db`;
 }
 
+// fn's result, or a rejection marked timedOut if it takes longer than ms. For
+// folders on network storage, which can hang rather than fail.
+export function within(ms, fn) {
+  let timer;
+  const timeout = new Promise((resolve, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error(`no answer within ${ms / 1000} seconds`), { timedOut: true })), ms);
+    timer.unref();
+  });
+  return Promise.race([fn(), timeout]).finally(() => clearTimeout(timer));
+}
+
+// One check of a folder at a time. A network share that stops answering then
+// holds one of the few threads Node reads files with, not one more for every
+// admin page load, which would leave none for viewers' media.
+const inFlight = new Map();
+export function oneAtATime(key, fn) {
+  if (!inFlight.has(key)) inFlight.set(key, fn().finally(() => inFlight.delete(key)));
+  return inFlight.get(key);
+}
+
+// Why a folder couldn't be read, for the admin: never a path or a stack.
+export const folderProblem = (err) =>
+  err.timedOut ? err.message : err.code === 'ENOENT' ? 'the folder does not exist' : `the folder can't be read (${err.code || err.message})`;
+
 export function parseBackupName(name) {
   const m = NAME.exec(name);
   if (!m) return null;
@@ -55,6 +79,8 @@ export function createBackups({
   hour = config.backupHour,
   keepDays = config.backupKeepDays,
   keepMonths = config.backupKeepMonths,
+  // Where the off-server copy lands (BACKUP_COPY_DIR), read only by copyStatus.
+  copyDir = config.backupCopyDir,
   now = () => Date.now(),
 }) {
   let running = null;
@@ -160,5 +186,27 @@ export function createBackups({
     return { enabled: Boolean(backupDir), dir: backupDir, hour, keepDays, keepMonths, backups: list(), lastError, running: Boolean(running) };
   }
 
-  return { run, list, due, start, status };
+  // The newest backup in the off-server copy's folder, and its modification time
+  // (which the copy timer's rsync -t keeps from the original). This says a file
+  // is there, not that it would restore. The folder is often network storage, so
+  // a check that doesn't answer within `timeoutMs` is reported as such.
+  async function copyStatus({ timeoutMs = 5000 } = {}) {
+    if (!copyDir) return { configured: false };
+    const checkedAt = now();
+    try {
+      const newest = await within(timeoutMs, () =>
+        oneAtATime(`copy:${copyDir}`, async () => {
+          const names = (await fsp.readdir(copyDir)).map(parseBackupName).filter(Boolean).sort((a, b) => b.at - a.at);
+          if (!names.length) return null;
+          const stat = await fsp.stat(path.join(copyDir, names[0].name));
+          return { name: names[0].name, at: names[0].at, mtime: Math.round(stat.mtimeMs), size: stat.size };
+        }),
+      );
+      return { configured: true, dir: copyDir, checkedAt, newest, error: null };
+    } catch (err) {
+      return { configured: true, dir: copyDir, checkedAt, newest: null, error: folderProblem(err) };
+    }
+  }
+
+  return { run, list, due, start, status, copyStatus };
 }

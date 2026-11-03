@@ -32,6 +32,10 @@ export const config = {
   backupHour: int('BACKUP_HOUR', 4),
   backupKeepDays: int('BACKUP_KEEP_DAYS', 14),
   backupKeepMonths: int('BACKUP_KEEP_MONTHS', 12),
+  // Optional: the folder the off-server copy of the backups lands in, as this
+  // server sees it (mounted read-only), so the admin can show the newest copy.
+  // Only read, never written. Unset: the admin says no copy is configured.
+  backupCopyDir: env.BACKUP_COPY_DIR ? path.resolve(env.BACKUP_COPY_DIR) : null,
   // Film information and artwork. The key can also be set in the admin.
   tmdbApiKey: env.TMDB_API_KEY || '',
   tmdbApiBase: (env.TMDB_API_BASE || 'https://api.themoviedb.org/3').replace(/\/$/, ''),

@@ -88,7 +88,7 @@ async function detail(id) {
   assert.equal(r.status, 200, JSON.stringify(r.data));
   return r.data;
 }
-const activity = async (query) => (await admin.get(`/api/admin/activity?${query}`)).data;
+const activity = async (query) => (await admin.get(`/api/admin/activity?${query}`)).data.events;
 const webauthnId = (personId) => srv.db.prepare('SELECT webauthn_user_id FROM people WHERE id = ?').get(personId).webauthn_user_id;
 const sessionRow = (token) => srv.db.prepare('SELECT * FROM sessions WHERE id_hash = ?').get(sha256(token));
 const passkeyCount = (personId) => srv.db.prepare('SELECT COUNT(*) AS n FROM passkeys WHERE person_id = ?').get(personId).n;

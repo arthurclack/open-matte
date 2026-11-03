@@ -285,11 +285,11 @@ export default function TicketDetail() {
       )}
 
       <h2>Activity</h2>
-      {events.data?.length ? (
+      {events.data?.events.length ? (
         <div className="table-wrap">
           <table className="stack">
             <tbody>
-              {events.data.map((e) => (
+              {events.data.events.map((e) => (
                 <tr key={e.id}>
                   <td className="nowrap faint" data-label="When">{formatDateTime(e.at)}</td>
                   <td className="card-title">{describeEvent(e)}</td>
@@ -300,7 +300,15 @@ export default function TicketDetail() {
           </table>
         </div>
       ) : (
-        <p className="dim">No activity yet. Opening the link and playing show up here.</p>
+        <p className="dim">
+          {/* The ticket's own record outlives its events: see Settings, Keeping records. */}
+          {t.firstOpenedAt ? 'None kept: older events are cleared after a while (Settings, Keeping records).' : 'No activity yet. Opening the link and playing show up here.'}
+        </p>
+      )}
+      {events.data?.next && (
+        <p style={{ marginTop: '1rem' }}>
+          <Link to={`/admin/activity?ticket=${t.id}&heartbeats=1`}>All of this ticket's activity</Link>
+        </p>
       )}
       <p className="faint" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
         This shows what the browser reported: playback progress, not proof anyone was watching. Positions are rounded to the last report (every 30
