@@ -55,14 +55,23 @@ Planned in [milestone-2.md](milestone-2.md) and built in six slices, all deploye
 
 ## Milestone 3: polish and public release
 
-- Branding settings (colours, logo)
-- Better audio and subtitle controls
-- Playback compatibility testing across browsers and devices, starting with the
-  checks moved here from milestone 2 on 1 November: a TV browser, desktop Firefox,
-  Chrome's hls.js playback, a non-HDR screen and keyboard only in Safari
+Planned in [milestone-3.md](milestone-3.md) (3 November), in six slices, ending in
+v1.0.0.
+
+- [ ] Branding: an accent colour and a logo, from the first paint, and link previews
+  that show the cinema, never the film
+- [ ] Audio and subtitles: remembered choices, forced subtitles, subtitle size and
+  background, the bar and the native menus in agreement
+- [ ] Media Session on the lock screen, and a Playback help panel with a copyable
+  summary
+- [ ] Activity filters and summaries, and retention: progress reports for 30 days,
+  other events for 12 months
+- [ ] Playback compatibility testing, starting with the checks moved here from
+  milestone 2 on 1 November: a TV browser, desktop Firefox, Chrome's hls.js playback,
+  a non-HDR screen and keyboard only in Safari
   ([device-checks.md](device-checks.md#for-milestone-3))
-- Installation, backup and upgrade documentation
-- Refined activity views and retention controls for viewing data
+- [ ] Installation, update, backup and restore documentation, rehearsed on a clean
+  server; a changelog; v1.0.0 tagged and released on GitHub
 
 ## Later
 
@@ -101,7 +110,7 @@ ticket.
 Browser features that would make the player feel native (most fit milestone 3's
 playback work):
 
-- Media Session: title, poster and position on the lock screen and in media
+- Media Session (in milestone 3): title, poster and position on the lock screen and in media
   notifications, and hardware play/pause keys, routed through the player's own
   controls. Showing the title outside the page should be optional (and off for
   "surprise me" tickets)
@@ -117,5 +126,5 @@ playback work):
   default, with a pure-black mode), benchmarked on phones first
 - Listening aids through Web Audio (a dialogue preset, a late-night preset), tested
   carefully: iPhone Safari's own HLS player and Web Audio have a history of silence
-- A "Playback help" panel: stream, codec, buffer, recent errors, and a copyable
+- A "Playback help" panel (in milestone 3): stream, codec, buffer, recent errors, and a copyable
   summary that leaves out ticket links, cookies and names
