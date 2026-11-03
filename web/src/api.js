@@ -27,8 +27,9 @@ export const api = {
   post: (url, body = {}, opts) => request('POST', url, body, opts),
   patch: (url, body = {}) => request('PATCH', url, body),
   // A file as the whole body, labelled with its own type. The server goes by the bytes:
-  // the type only gets the request past the rule that /api takes JSON.
-  upload: (url, file) => send(url, { method: 'POST', headers: { 'content-type': file.type }, body: file }),
+  // the type only gets the request past the rule that /api takes JSON. A file with no
+  // type goes without a label, never with an empty one.
+  upload: (url, file) => send(url, { method: 'POST', headers: file.type ? { 'content-type': file.type } : {}, body: file }),
 };
 
 // ---- formatting

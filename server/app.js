@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
@@ -48,10 +49,16 @@ export function createApp({
   const limit = (opts) => rateLimit({ ...opts, scale: limits.scale ?? 1 });
   const people = createPeople({ db, sessions, access, settings, rp, ceremonies: createCeremonies() });
   const branding = createBranding({ settings, dataDir });
-  // Ticket links' previews. The page and the poster count against one limit per client.
+  // What the viewer site shows in its header and footer: /api/site, /api/me's
+  // `site`, and the copy written into every page. TMDb asks for credit wherever
+  // its data and images appear.
+  const site = (s = settings.get()) => ({ ...branding.publicView(s), tmdbCredit: metadata.status().configured });
+  // Ticket links' previews. The page and the poster count against one limit per
+  // client. The key signs the posters' addresses; it is made once and never sent.
   const previewCount = rateCounter({ windowMs: 10 * 60 * 1000, max: 60, scale: limits.scale ?? 1 });
-  const previews = createTicketPreviews({ db, access, counter: previewCount });
-  const deps = { db, mediaDir, settings, metadata, backups, sessions, access, rp, people, limit, branding, previews };
+  const previewKey = settings.ensureSecret('previewKey', () => crypto.randomBytes(32).toString('base64url'));
+  const previews = createTicketPreviews({ db, access, counter: previewCount, key: previewKey });
+  const deps = { db, mediaDir, settings, metadata, backups, sessions, access, rp, people, limit, branding, site, previews };
   app.locals.metadata = metadata;
   app.locals.backups = backups;
   app.locals.rp = rp;
@@ -94,7 +101,7 @@ export function createApp({
   // with the cinema's name, colours and link-preview tags written in (page.js).
   const indexFile = path.join(webDist, 'index.html');
   if (fs.existsSync(indexFile)) {
-    const page = createPage({ indexFile, settings, previews });
+    const page = createPage({ indexFile, settings, previews, site });
     const sendPage = (req, res) => {
       // A ticket link's page may name its film: no shared caches.
       res.set('Cache-Control', req.path.startsWith('/t/') ? 'private, no-cache' : 'no-cache');

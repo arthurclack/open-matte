@@ -1,5 +1,6 @@
 // Branding: milestone 3, slice 1. Written from docs/milestone-3.md (the Branding
-// decisions and slice 1) and the slice 1 spec, not from the implementation.
+// decisions and slice 1), the slice 1 spec and the fixes that followed its review,
+// not from the implementation.
 // Contrast is worked out here (WCAG 2), not taken from theme.js, so the checks are
 // checked rather than repeated. Link previews are fetched the way a messaging app's
 // server fetches them: no cookies, no scripts, and nothing it reads is written down.
@@ -14,6 +15,7 @@ import { adminBrowser, browser, enroll, makeFilm, newPerson, pngImage, setupLink
 
 const { DEFAULT_ACCENT, DEFAULT_BACKGROUND, check, contrast, faviconSvg, palette } = await import('../server/theme.js');
 const { imageInfo } = await import('../server/images.js');
+const { createApp } = await import('../server/app.js');
 
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
@@ -28,7 +30,27 @@ const FAVICON =
 // out by hand (channel by channel, rounded; none of them lands on a half).
 const ACCENT = '#4fb3d9';
 const BACKGROUND = '#101820';
-const BG_THEME = { '--bg': '#101820', '--bg-raised': '#1a2129', '--bg-sunk': '#0b1116', '--line': '#2d343b', '--line-strong': '#3c4349' };
+const BG_THEME = {
+  // The five surfaces.
+  '--bg': '#101820',
+  '--bg-raised': '#1a2129',
+  '--bg-sunk': '#0b1116',
+  '--line': '#2d343b',
+  '--line-strong': '#3c4349',
+  // The background and the raised surface as r, g, b, for the shades over a backdrop.
+  '--bg-rgb': '16, 24, 32',
+  '--bg-raised-rgb': '26, 33, 41',
+  // Notices' and badges' lines and tints (40% and 7% of each status colour), and the
+  // poster placeholder's gradient (9.5% and 2% white).
+  '--good-line': '#3c5c4b',
+  '--good-tint': '#182427',
+  '--warn-line': '#665531',
+  '--warn-tint': '#1f2323',
+  '--bad-line': '#653e3f',
+  '--bad-tint': '#1f1f25',
+  '--poster-from': '#272e35',
+  '--poster-to': '#151d24',
+};
 const ACCENT_THEME = { '--accent': '#4fb3d9', '--accent-ink': '#091418', '--accent-hover': '#72c2e1' };
 const THEME = { ...BG_THEME, ...ACCENT_THEME };
 // The drawn icon's rounded square on BACKGROUND: mixed with 2% white.
@@ -65,6 +87,8 @@ function hsl(h, s, l) {
   };
   return toHex([f(0), f(8), f(4)].map((v) => Math.round(v * 255)));
 }
+// The status colours, which notices and badges are tinted with.
+const STATUS = { good: '#7fc28b', warn: '#e8b04a', bad: '#e5776d' };
 // What text and status colours need on the background and the raised surface.
 const FOREGROUNDS = [
   ['text', '#ece8e1', 7],
@@ -93,9 +117,34 @@ describe('colours', () => {
     }
   });
 
-  test('a custom background derives all five surfaces, and nothing of the accent', () => {
+  test('a custom background derives the five surfaces, two of them as r, g, b, and the tints and stops, and nothing of the accent', () => {
     assert.deepEqual(palette({ accentColor: DEFAULTS.accentColor, backgroundColor: BACKGROUND }), BG_THEME);
     assert.deepEqual(check({ accentColor: DEFAULTS.accentColor, backgroundColor: BACKGROUND }), []);
+  });
+
+  test('every custom background tints everything from itself: notices, badges, the poster placeholder and the shades', () => {
+    const backgrounds = [BACKGROUND, '#000000', '#ffffff', '#0d0c10', '#202020'];
+    for (let h = 0; h < 360; h += 30) for (const l of [0.02, 0.08, 0.14, 0.4]) backgrounds.push(hsl(h, 0.35, l));
+    for (const backgroundColor of backgrounds) {
+      if (backgroundColor === DEFAULTS.backgroundColor) continue;
+      // Whether check() would let it be saved doesn't matter: palette() derives from any background.
+      const theme = palette({ accentColor: DEFAULTS.accentColor, backgroundColor });
+      const what = `${backgroundColor}: ${JSON.stringify(theme)}`;
+      assert.deepEqual(Object.keys(theme).sort(), Object.keys(BG_THEME).sort(), what);
+      assert.equal(theme['--bg'], backgroundColor, what);
+      assert.ok(close(theme['--bg-raised'], mix(backgroundColor, '#ffffff', 0.04)), what);
+      // The r, g, b triples are those two colours, exactly.
+      assert.equal(theme['--bg-rgb'], channels(theme['--bg']).join(', '), what);
+      assert.equal(theme['--bg-raised-rgb'], channels(theme['--bg-raised']).join(', '), what);
+      for (const [status, colour] of Object.entries(STATUS)) {
+        assert.ok(close(theme[`--${status}-line`], mix(backgroundColor, colour, 0.4)), `${what}: ${status} line`);
+        assert.ok(close(theme[`--${status}-tint`], mix(backgroundColor, colour, 0.07)), `${what}: ${status} tint`);
+      }
+      assert.ok(close(theme['--poster-from'], mix(backgroundColor, '#ffffff', 0.095)), what);
+      assert.ok(close(theme['--poster-to'], mix(backgroundColor, '#ffffff', 0.02)), what);
+    }
+    // Open Matte's own background still needs none of them: styles.css has its colours.
+    assert.deepEqual(palette(DEFAULTS), {});
   });
 
   test('a custom accent derives its ink and its hover, and nothing of the surfaces', () => {
@@ -103,7 +152,7 @@ describe('colours', () => {
     assert.deepEqual(check({ accentColor: ACCENT, backgroundColor: DEFAULTS.backgroundColor }), []);
   });
 
-  test('both custom: all eight variables, and they pass', () => {
+  test('both custom: all eighteen variables, and they pass', () => {
     assert.deepEqual(palette({ accentColor: ACCENT, backgroundColor: BACKGROUND }), THEME);
     assert.deepEqual(check({ accentColor: ACCENT, backgroundColor: BACKGROUND }), []);
   });
@@ -200,8 +249,10 @@ describe('colours', () => {
 
   test("the drawn tab icon is Open Matte's own, to the byte, in Open Matte's colours", () => {
     assert.equal(faviconSvg(DEFAULTS), FAVICON);
-    // The copy the Vite dev server serves is the same.
-    assert.equal(fs.readFileSync(new URL('../web/public/favicon.svg', import.meta.url), 'utf8'), FAVICON);
+    // The copy the Vite dev server serves is the same. The server's image has no web/
+    // folder, and this suite runs there too (docs/deploying.md).
+    const devCopy = new URL('../web/public/favicon.svg', import.meta.url);
+    if (fs.existsSync(devCopy)) assert.equal(fs.readFileSync(devCopy, 'utf8'), FAVICON);
   });
 
   test("the drawn tab icon takes the cinema's accent for its frame and play mark, and its background for the square", () => {
@@ -472,15 +523,39 @@ async function plain() {
 const urlOf = (kind, bytes, ext) => `/branding/${kind}-${sha256(bytes).slice(0, 16)}.${ext}`;
 const cookieOf = (b) => [...b.jar].map(([k, v]) => `${k}=${v}`).join('; ');
 
-// Any file, with no cookie (or b's): status, headers and bytes. Nothing it serves
-// sets a cookie.
-async function fetchFile(url, b = null) {
-  const res = await fetch(srv.base + url, { headers: b ? { cookie: cookieOf(b) } : {} });
+// Any file, with no cookie (or b's) and any other headers: status, headers and bytes.
+// Nothing it serves sets a cookie. Reading the whole body also checks the response
+// is framed as it says: a stale Content-Length would hang here until the server
+// dropped the connection.
+async function fetchFile(url, b = null, headers = {}) {
+  const res = await fetch(srv.base + url, { headers: { ...headers, ...(b ? { cookie: cookieOf(b) } : {}) } });
   const bytes = Buffer.from(await res.arrayBuffer());
   assert.deepEqual(res.headers.getSetCookie(), [], `${url}: no cookie`);
   return { status: res.status, headers: res.headers, bytes };
 }
-const posterOf = (code, b) => fetchFile(`/t/${code}/poster`, b);
+
+// A ticket's preview poster has an address of its own, /poster/<ticket id>.<mac>, made
+// for the preview: it holds no ticket code, and nothing in it opens the ticket. Only
+// the server can make the mac, so the tests take addresses from the pages that give
+// them out, and change them.
+const POSTER_PATH = /^\/poster\/(\d{1,12})\.([A-Za-z0-9_-]{22})$/;
+// Well-formed, but no ticket's poster.
+const NO_POSTER = '/poster/999999999.AAAAAAAAAAAAAAAAAAAAAA';
+const posterOf = (address, b) => fetchFile(address, b);
+const refOf = (address) => {
+  const [, id, mac] = POSTER_PATH.exec(address);
+  return { id, mac };
+};
+// The mac with its i-th character changed to its neighbour in the alphabet: one bit,
+// even in the last character.
+const BASE64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+const flip = (mac, i) => mac.slice(0, i) + BASE64URL[BASE64URL.indexOf(mac[i]) ^ 1] + mac.slice(i + 1);
+// Headers that describe or cache a file: an error must carry none of them.
+const FILE_HEADERS = ['cache-control', 'etag', 'last-modified', 'accept-ranges'];
+function notTheFile(f, what) {
+  assert.doesNotMatch(f.headers.get('content-type') || '', /^image\//, `${what}: not an image`);
+  for (const h of FILE_HEADERS) assert.equal(f.headers.get(h), null, `${what}: no ${h}`);
+}
 
 // ------------------------------------------------------------ reading a page
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
@@ -546,17 +621,41 @@ function asCinema(p, { name = 'Open Matte', logo = null } = {}) {
   for (const word of FILM_WORDS) assert.ok(!p.html.includes(word), `nothing about ${word}`);
 }
 
-// A ticket's preview: the film, from the cinema, with the poster's narrow address.
-function asFilm(p, code, { title = 'Arrival (2016)', name = 'Open Matte', poster = true } = {}) {
+// A ticket's preview: the film, from the cinema, with the poster at its own address,
+// and the ticket's code nowhere in the page. Returns the poster's address (a path), or
+// null for a film with no poster to show.
+function asFilm(p, t, { title = 'Arrival (2016)', name = 'Open Matte', poster = true } = {}) {
   assert.equal(p.title, name, 'the tab still says the cinema');
   assert.equal(p.meta['og:site_name'], name);
   assert.equal(p.meta['og:type'], 'website');
   assert.equal(p.meta['og:title'], title);
   assert.equal(p.meta['og:description'], `A ticket from ${name}.`);
   assert.equal(p.meta['twitter:card'], 'summary');
-  if (poster) assert.equal(p.meta['og:image'], `${srv.base}/t/${code}/poster`);
-  else assert.doesNotMatch(p.meta['og:image'] ?? '', /\/poster$/);
   for (const directive of ['private', 'no-cache']) assert.match(p.headers.get('cache-control'), new RegExp(directive));
+  assert.ok(!p.html.toLowerCase().includes(t.code), 'the code is nowhere in the page');
+  if (!poster) {
+    assert.doesNotMatch(p.html, /\/poster/, 'no poster');
+    return null;
+  }
+  const image = p.meta['og:image'] ?? '';
+  assert.ok(image.startsWith(`${srv.base}/poster/`), image);
+  const address = image.slice(srv.base.length);
+  assert.match(address, POSTER_PATH);
+  assert.equal(Number(refOf(address).id), t.id, "the ticket's id");
+  return address;
+}
+
+// The site's public settings as the page carries them, for the header's first paint:
+// one JSON <script id="site-data"> in the head, with nothing in it that could end the
+// script early (no <, nor > or &).
+function siteDataOf(html) {
+  const found = [...html.matchAll(/<script\b([^>]*)>(.*?)<\/script>/gs)].filter((m) => /\bid="site-data"/.test(m[1]));
+  assert.equal(found.length, 1, 'one #site-data');
+  const [m] = found;
+  assert.match(m[1], /\btype="application\/json"/);
+  assert.ok(m.index < html.indexOf('</head>'), 'in the head');
+  assert.doesNotMatch(m[2], /[<>&]/, 'escaped');
+  return JSON.parse(m[2]);
 }
 
 // ------------------------------------------------------------ tickets and people
@@ -925,6 +1024,78 @@ describe('uploading a logo and a tab icon', () => {
     for (const f of strays) fs.rmSync(path.join(brandingDir, f));
     await plain();
   });
+
+  test('a current logo or icon whose file has gone is not found, and that is never cached, least of all for good', async () => {
+    const logo = await uploaded('logo', pngImage(120, 40, [1, 1, 1]));
+    const icon = await uploaded('icon', pngImage(48, 48, [2, 2, 2]));
+    for (const { url } of [logo, icon]) {
+      fs.rmSync(path.join(brandingDir, path.basename(url)));
+      const f = await fetchFile(url);
+      assert.equal(f.status, 404, url);
+      notTheFile(f, url);
+      assert.ok(!f.bytes.toString().includes(brandingDir) && !/ENOENT/.test(f.bytes.toString()), `${url}: never saying why`);
+    }
+    // The settings still name them: put back, they're served again.
+    fs.writeFileSync(path.join(brandingDir, path.basename(logo.url)), pngImage(120, 40, [1, 1, 1]));
+    assert.equal((await fetchFile(logo.url)).status, 200);
+    await plain();
+  });
+
+  test("an image the server can no longer read is a plain 500 that arrives in full, with none of the file's headers", { skip: process.getuid?.() === 0 && 'root reads any file' }, async () => {
+    const bytes = pngImage(120, 40, [5, 5, 5]);
+    const { url } = await uploaded('logo', bytes);
+    const file = path.join(brandingDir, path.basename(url));
+    fs.chmodSync(file, 0o000);
+    try {
+      // Sent with the file's length, the empty answer would hang until the server dropped the connection.
+      const res = await fetch(srv.base + url, { signal: AbortSignal.timeout(3000) });
+      const f = { status: res.status, headers: res.headers, bytes: Buffer.from(await res.arrayBuffer()) };
+      assert.equal(f.status, 500);
+      assert.notEqual(f.headers.get('content-length'), String(bytes.length));
+      notTheFile(f, 'unreadable');
+    } finally {
+      fs.chmodSync(file, 0o644);
+    }
+    assert.equal((await fetchFile(url)).status, 200);
+    await plain();
+  });
+
+  test("removing the logo answers as it should even when its file can't be deleted; the file left behind is never served", { skip: process.getuid?.() === 0 && 'root deletes any file' }, async () => {
+    const logo = await uploaded('logo', pngImage(120, 40, [6, 6, 6]));
+    const file = path.join(brandingDir, path.basename(logo.url));
+    fs.chmodSync(brandingDir, 0o555);
+    let r;
+    try {
+      r = await remove('logo');
+    } finally {
+      fs.chmodSync(brandingDir, 0o755);
+    }
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data.logo, null);
+    assert.deepEqual(r.data, await adminSettings(), 'the same as Settings');
+    assert.ok(fs.existsSync(file), 'left behind');
+    assert.equal((await fetchFile(logo.url)).status, 404, 'never served');
+    fs.rmSync(file);
+    await plain();
+  });
+
+  test('a range past the end of an image is a 416 that gives its length, and a failed If-Match a 412; neither is described or cached as the image', async () => {
+    const bytes = pngImage(120, 40, [3, 3, 3]);
+    const { url } = await uploaded('logo', bytes);
+    const beyond = await fetchFile(url, null, { range: 'bytes=99999999-' });
+    assert.equal(beyond.status, 416);
+    assert.equal(beyond.headers.get('content-range'), `bytes */${bytes.length}`);
+    notTheFile(beyond, 'a range past the end');
+    const changed = await fetchFile(url, null, { 'if-match': '"nope"' });
+    assert.equal(changed.status, 412);
+    assert.equal(changed.headers.get('content-range'), null);
+    notTheFile(changed, 'a failed If-Match');
+    // A range within it is still a part of it.
+    const part = await fetchFile(url, null, { range: 'bytes=0-7' });
+    assert.equal(part.status, 206);
+    assert.deepEqual(part.bytes, bytes.subarray(0, 8));
+    await plain();
+  });
 });
 
 // ====================================================================== the page
@@ -957,11 +1128,70 @@ describe('the page as the server sends it', () => {
       }
       const t = await issue();
       const p = await page(`/t/${t.code}`);
-      asFilm(p, t.code, { name });
+      asFilm(p, t, { name });
       assert.ok(!p.html.includes(name));
     } finally {
       await save({ cinemaName: 'Open Matte' });
     }
+  });
+
+  test("every page carries the site's public settings, exactly as /api/site gives them, so the header has them from the first paint", async () => {
+    const t = await issue();
+    const urls = [...PAGES, `/t/${t.code}`];
+    const site = async () => (await fresh().get('/api/site')).data;
+    for (const url of urls) assert.deepEqual(siteDataOf((await page(url)).html), await site(), url);
+    try {
+      // Every branding setting changed: still exactly /api/site.
+      await save({ cinemaName: 'The Rex', accentColor: ACCENT, backgroundColor: BACKGROUND, logoWithName: false });
+      const logo = await uploaded('logo', pngImage(300, 100));
+      await uploaded('icon', pngImage(64, 64));
+      const now = await site();
+      assert.deepEqual(now.logo, logo);
+      for (const url of urls) assert.deepEqual(siteDataOf((await page(url)).html), now, url);
+      // The same for a viewer as for a stranger: it's the site's, not the browser's.
+      const viewer = await opened(fresh(), await issue());
+      assert.deepEqual(siteDataOf((await page('/arrival', viewer)).html), now);
+    } finally {
+      await plain();
+    }
+  });
+
+  test('a cinema name that tries to end the script, or the head, cannot', async () => {
+    const name = `Rex</script><script>alert(1)</script><!--<script></head>&amp;`;
+    await save({ cinemaName: name });
+    try {
+      const t = await issue();
+      for (const url of ['/', '/arrival', `/t/${UNKNOWN}`, `/t/${t.code}`]) {
+        const p = await page(url);
+        assert.equal(siteDataOf(p.html).cinemaName, name, url);
+        assert.equal(p.title, name, url);
+        assert.ok(!p.html.includes(name) && !p.html.includes('<script>alert'), `${url}: never written as it is`);
+        // The template's script and the site's: no more.
+        assert.equal([...p.html.matchAll(/<script\b/g)].length, 2, url);
+        assert.equal(p.html.split('</head>').length, 2, `${url}: one </head>`);
+      }
+    } finally {
+      await save({ cinemaName: 'Open Matte' });
+    }
+  });
+
+  test('with a logo, every viewer page asks for it with the page, before the app has run; the admin and a cinema without one, never', async () => {
+    const t = await issue();
+    const urls = [...PAGES, `/t/${t.code}`];
+    const admin = (url) => /^\/admin(\/|$)/.test(url);
+    const preloads = (p) => p.links.filter((l) => l.rel === 'preload' && l.as === 'image');
+    for (const url of urls) assert.deepEqual(preloads(await page(url)), [], url);
+    const logo = await uploaded('logo', pngImage(600, 200, [4, 4, 4]));
+    try {
+      for (const url of urls) {
+        const p = await page(url);
+        assert.deepEqual(preloads(p).map((l) => l.href), admin(url) ? [] : [logo.url], url);
+        if (!admin(url)) assert.ok(preloads(p)[0].at < p.html.indexOf('</head>'), `${url}: in the head`);
+      }
+    } finally {
+      await remove('logo');
+    }
+    assert.deepEqual(preloads(await page('/')), []);
   });
 
   test('saved colours are in the page from its first byte, after the stylesheet, with a matching theme-color', async () => {
@@ -1038,7 +1268,7 @@ describe('the page as the server sends it', () => {
     for (const url of PAGES) asCinema(await page(url), { logo });
     // A ticket's preview shows its film's poster instead.
     const t = await issue();
-    asFilm(await page(`/t/${t.code}`), t.code);
+    asFilm(await page(`/t/${t.code}`), t);
     await remove('logo');
     asCinema(await page('/'));
   });
@@ -1085,20 +1315,156 @@ describe('the page as the server sends it', () => {
 describe('ticket link previews', () => {
   before(plain);
 
-  test('a ticket link for anyone previews its film: the title and year, from the cinema, with the poster', async () => {
+  test('a ticket link for anyone previews its film: the title and year, from the cinema, with the poster at an address of its own', async () => {
     const t = await issue();
     const p = await page(`/t/${t.code}`);
-    asFilm(p, t.code);
-    const poster = await posterOf(t.code);
+    const address = asFilm(p, t);
+    const poster = await posterOf(address);
     assert.equal(poster.status, 200);
     assert.deepEqual(poster.bytes, POSTER);
     assert.equal(poster.headers.get('content-type').split(';')[0], 'image/jpeg');
     assert.equal(poster.headers.get('cache-control'), 'public, max-age=600');
     assert.equal(poster.headers.get('x-content-type-options'), 'nosniff');
+    // The same address each time; another ticket's is another.
+    assert.equal(asFilm(await page(`/t/${t.code}`), t), address);
+    const other = await issue();
+    assert.notEqual(asFilm(await page(`/t/${other.code}`), other), address);
+  });
+
+  test("the poster's address works only as it was given: a wrong mac, another ticket's id or anything malformed is not found, saying nothing", async () => {
+    const a = await issue();
+    const b = await issue({}, 'heat');
+    const addressA = asFilm(await page(`/t/${a.code}`), a);
+    const addressB = asFilm(await page(`/t/${b.code}`), b, { title: 'Heat (1995)' });
+    const { id, mac } = refOf(addressA);
+    const other = refOf(addressB);
+    const nothing = await posterOf(NO_POSTER);
+    assert.equal(nothing.status, 404);
+    const refused = [
+      // One character of the mac changed: the first, one in the middle, the last.
+      ...[0, 11, 21].map((i) => `${id}.${flip(mac, i)}`),
+      // Another ticket's id with this mac, and this id with the other's mac.
+      `${other.id}.${mac}`,
+      `${id}.${other.mac}`,
+      // An id that is no ticket's.
+      `${Number(id) + 1000}.${mac}`,
+      // Malformed.
+      id,
+      `${id}.`,
+      `.${mac}`,
+      `${id}.${mac.slice(0, 21)}`,
+      `${id}.${mac}A`,
+      `${id}.${mac}.jpg`,
+      `${id},${mac}`,
+      `${id}..${mac}`,
+      `+${id}.${mac}`,
+      `-${id}.${mac}`,
+      `0x${Number(id).toString(16)}.${mac}`,
+      `${'1'.repeat(13)}.${mac}`,
+      `${id}.${mac.slice(0, 21)}=`,
+      `${id}.${mac.slice(0, 21)}+`,
+      `${id}.${mac.slice(0, 21)}%2F`,
+      `${id}.${mac}%00`,
+      `%20${id}.${mac}`,
+      `${id}.${mac}%20`,
+      // The ticket's code is no poster's address either.
+      a.code,
+      `${a.code}.${mac}`,
+    ];
+    if (mac.toUpperCase() !== mac) refused.push(`${id}.${mac.toUpperCase()}`);
+    for (const ref of refused) {
+      const f = await posterOf(`/poster/${ref}`);
+      assert.equal(f.status, 404, ref);
+      assert.deepEqual(f.bytes, nothing.bytes, `${ref}: never saying why`);
+      assert.doesNotMatch(f.headers.get('content-type') || '', /^image\//, ref);
+    }
+    // As given, both still work.
+    for (const address of [addressA, addressB]) assert.equal((await posterOf(address)).status, 200, address);
+  });
+
+  test('a range past the end of the poster is a 416, and a failed If-Match a 412; neither is described or cached as the poster', async () => {
+    const t = await issue();
+    const address = asFilm(await page(`/t/${t.code}`), t);
+    const beyond = await fetchFile(address, null, { range: 'bytes=99999999-' });
+    assert.equal(beyond.status, 416);
+    assert.equal(beyond.headers.get('content-range'), `bytes */${POSTER.length}`);
+    notTheFile(beyond, 'a range past the end');
+    const changed = await fetchFile(address, null, { 'if-match': '"nope"' });
+    assert.equal(changed.status, 412);
+    notTheFile(changed, 'a failed If-Match');
+  });
+
+  test("the page of a ticket's link never holds its code, and the poster's address opens nothing: not the ticket, not a session", async () => {
+    const t = await issue();
+    // asFilm checks the page for the code, whatever its case.
+    const address = asFilm(await page(`/t/${t.code}`), t);
+    const { id, mac } = refOf(address);
+    const b = fresh();
+    assert.equal((await posterOf(address, b)).status, 200);
+    for (const code of [`${id}.${mac}`, mac, id, `${id}${mac}`, address, srv.base + address]) {
+      const r = await b.post('/api/tickets/open', { code });
+      assert.notEqual(r.status, 200, code);
+      assert.equal(r.data.slug, undefined, code);
+    }
+    for (const url of [`/t/${id}.${mac}`, `/t/${mac}`, `/t/${id}`]) asCinema(await page(url, b));
+    assert.equal(b.jar.size, 0, 'no session');
+    assert.deepEqual((await b.get('/api/me')).data.tickets, []);
+    assert.equal((await b.get('/api/films/arrival')).status, 404);
+    assert.equal((await adminTicket(t.id)).firstOpenedAt, null);
+  });
+
+  test('the key that makes poster addresses stays on the server, and is the same after a restart', async () => {
+    const t = await issue();
+    const address = asFilm(await page(`/t/${t.code}`), t);
+    const rows = srv.db.prepare("SELECT value FROM settings WHERE key LIKE '%previewKey%'").all();
+    assert.equal(rows.length, 1, 'kept with the settings');
+    let key = rows[0].value;
+    try {
+      key = JSON.parse(key);
+    } catch {
+      // Stored as it is.
+    }
+    assert.ok(typeof key === 'string' && key.length >= 43, '32 random bytes, at least');
+    const viewer = await opened(fresh(), await issue());
+    const sent = [
+      (await page(`/t/${t.code}`)).html,
+      (await page('/admin', admin)).html,
+      (await fresh().get('/api/site')).data,
+      (await viewer.get('/api/me')).data,
+      await adminSettings(),
+      (await admin.get('/api/admin/tickets')).data,
+      await adminTicket(t.id),
+    ];
+    for (const body of sent) assert.ok(!JSON.stringify(body).includes(key), JSON.stringify(body).slice(0, 80));
+    // Another server on the same database, as after a restart: the same address.
+    const app = createApp({ db: srv.db, mediaDir, dataDir, webDist, backupOptions: { backupDir: null }, metadataOptions: { envKey: '' }, webauthn: { publicUrl: '', rpId: '', production: false } });
+    const server = await new Promise((resolve) => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    try {
+      const base = `http://127.0.0.1:${server.address().port}`;
+      const p = parsePage(await (await fetch(`${base}/t/${t.code}`)).text());
+      assert.equal(p.meta['og:image'], base + address);
+      assert.equal(srv.db.prepare("SELECT value FROM settings WHERE key LIKE '%previewKey%'").all().length, 1);
+    } finally {
+      await new Promise((r) => server.close(r));
+    }
+  });
+
+  test('/t/<code>/poster is no longer a poster: no image address holds a code', async () => {
+    const t = await issue();
+    asFilm(await page(`/t/${t.code}`), t);
+    const f = await fetchFile(`/t/${t.code}/poster`);
+    assert.doesNotMatch(f.headers.get('content-type') || '', /^image\//);
+    assert.notDeepEqual(f.bytes, POSTER);
+    // Just another address under /t/ that isn't a ticket's.
+    if (f.status === 200) asCinema(await page(`/t/${t.code}/poster`));
+    else assert.equal(f.status, 404);
   });
 
   test('reading the preview and its poster records nothing: no session, no "opened", no event, not even "last seen"', async () => {
     const t = await issue();
+    const address = asFilm(await page(`/t/${t.code}`), t);
     // A browser holding a session from another ticket, last seen an hour ago.
     const b = await opened(fresh(), await issue({}, 'heat'), 'heat');
     const hash = sha256(b.jar.get('om_session'));
@@ -1106,10 +1472,10 @@ describe('ticket link previews', () => {
     srv.db.prepare('UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?').run(anHourAgo, hash);
     const before = totals();
     for (let i = 0; i < 3; i++) {
-      asFilm(await page(`/t/${t.code}`), t.code);
-      asFilm(await page(`/t/${t.code}`, b), t.code);
-      assert.equal((await posterOf(t.code)).status, 200);
-      assert.equal((await posterOf(t.code, b)).status, 200);
+      assert.equal(asFilm(await page(`/t/${t.code}`), t), address);
+      assert.equal(asFilm(await page(`/t/${t.code}`, b), t), address);
+      assert.equal((await posterOf(address)).status, 200);
+      assert.equal((await posterOf(address, b)).status, 200);
     }
     assert.deepEqual(totals(), before, 'no session, session_tickets row, screening, event or first open');
     const a = await adminTicket(t.id);
@@ -1129,142 +1495,196 @@ describe('ticket link previews', () => {
     assert.equal((await adminTicket(expired.id)).state, 'expired');
     assert.equal((await adminTicket(usedUp.id)).state, 'used_up');
     for (const t of [expired, usedUp]) {
-      asFilm(await page(`/t/${t.code}`), t.code);
-      assert.equal((await posterOf(t.code)).status, 200);
+      const address = asFilm(await page(`/t/${t.code}`), t);
+      assert.equal((await posterOf(address)).status, 200);
     }
   });
 
   test("a ticket for one person previews as the cinema, even to them: neither the film nor the person's name, and no poster", async () => {
     const sam = await member('Samantha Previewson');
-    // Kept: opened while it was for anyone, then kept in Sam's account.
+    // Kept: opened while it was for anyone, then kept in Sam's account. Its preview
+    // gave out its poster's address while it was for anyone.
     const kept = await issue({ claimable: true });
+    const keptPoster = asFilm(await page(`/t/${kept.code}`), kept);
     await opened(sam.phone, kept);
     const k = await sam.phone.post('/api/films/arrival/keep');
     assert.equal(k.status, 200, JSON.stringify(k.data));
     const forSam = await issue({ personId: sam.p.id });
     // Given: a ticket for anyone that the admin gave to Sam.
     const given = await issue();
+    const givenPoster = asFilm(await page(`/t/${given.code}`), given);
     assert.equal((await admin.post(`/api/admin/tickets/${given.id}/holder`, { personId: sam.p.id })).status, 200);
+    // Sam's phone, last seen an hour ago.
+    const hash = sha256(sam.phone.jar.get('om_session'));
+    const anHourAgo = Date.now() - 60 * 60 * 1000;
+    srv.db.prepare('UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?').run(anHourAgo, hash);
 
     const unknown = await page(`/t/${UNKNOWN}`);
     asCinema(unknown);
-    const nothing = await posterOf(UNKNOWN);
+    const nothing = await posterOf(NO_POSTER);
     assert.equal(nothing.status, 404);
-    for (const t of [forSam, kept, given]) {
+    const before = totals();
+    for (const [t, poster] of [[forSam, null], [kept, keptPoster], [given, givenPoster]]) {
       assert.equal((await adminTicket(t.id)).person?.id, sam.p.id);
       for (const b of [null, sam.phone]) {
         const p = await page(`/t/${t.code}`, b);
         asCinema(p);
         assert.equal(p.html, unknown.html, "the same page as for a code that isn't a ticket");
         assert.ok(!p.html.includes('Samantha'));
-        const poster = await posterOf(t.code, b);
-        assert.equal(poster.status, 404);
-        assert.deepEqual(poster.bytes, nothing.bytes, 'never saying why');
+        // A ticket issued for Sam never had a preview to give its poster's address out.
+        if (!poster) continue;
+        const f = await posterOf(poster, b);
+        assert.equal(f.status, 404);
+        assert.deepEqual(f.bytes, nothing.bytes, 'never saying why');
       }
     }
-    // Let anyone with the link use it again, and it previews the film again.
+    // None of that was recorded: no session, no "opened", no event, Sam's phone not even seen.
+    assert.deepEqual(totals(), before, 'no session, session_tickets row, screening, event or first open');
+    for (const t of [forSam, given]) assert.equal((await adminTicket(t.id)).firstOpenedAt, null);
+    assert.equal(srv.db.prepare('SELECT last_seen_at FROM sessions WHERE id_hash = ?').get(hash).last_seen_at, anHourAgo);
+
+    // Let anyone with the link use it again, and it previews the film again, with the same poster.
     assert.equal((await admin.post(`/api/admin/tickets/${given.id}/holder`, { personId: null })).status, 200);
-    asFilm(await page(`/t/${given.code}`), given.code);
+    assert.equal(asFilm(await page(`/t/${given.code}`), given), givenPoster);
+    assert.equal((await posterOf(givenPoster)).status, 200);
   });
 
-  test("a revoked ticket, a film that isn't showing and a code that isn't a ticket preview as the cinema", async () => {
+  test("a revoked ticket, a film that isn't showing and a code that isn't a ticket preview as the cinema, and no poster", async () => {
+    // Their posters' addresses, given out while they still previewed their films.
     const revoked = await issue();
+    const revokedPoster = asFilm(await page(`/t/${revoked.code}`), revoked);
     assert.equal((await admin.post(`/api/admin/tickets/${revoked.id}/revoke`)).status, 200);
-    const unpublished = await issue({}, 'solaris');
+    const showSolaris = async (published) => assert.equal((await admin.patch(`/api/admin/films/${films.solaris}`, { published })).status, 200);
+    await showSolaris(true);
+    let unpublished;
+    let unpublishedPoster;
+    try {
+      unpublished = await issue({}, 'solaris');
+      unpublishedPoster = asFilm(await page(`/t/${unpublished.code}`), unpublished, { title: 'Solaris (1972)' });
+    } finally {
+      await showSolaris(false);
+    }
+
     const unknown = await page(`/t/${UNKNOWN}`);
-    const nothing = await posterOf(UNKNOWN);
-    for (const code of [revoked.code, unpublished.code, 'abcd', 'a'.repeat(64)]) {
+    const nothing = await posterOf(NO_POSTER);
+    assert.equal(nothing.status, 404);
+    const before = totals();
+    for (const code of [revoked.code, unpublished.code, UNKNOWN, 'abcd', 'a'.repeat(64)]) {
       const p = await page(`/t/${code}`);
       asCinema(p);
       assert.equal(p.html, unknown.html, code);
-      const poster = await posterOf(code);
-      assert.equal(poster.status, 404, code);
-      assert.deepEqual(poster.bytes, nothing.bytes, code);
     }
+    for (const address of [revokedPoster, unpublishedPoster]) {
+      const f = await posterOf(address);
+      assert.equal(f.status, 404, address);
+      assert.deepEqual(f.bytes, nothing.bytes, `${address}: never saying why`);
+    }
+    assert.deepEqual(totals(), before, 'no session, session_tickets row, screening, event or first open');
+    for (const t of [revoked, unpublished]) assert.equal((await adminTicket(t.id)).firstOpenedAt, null);
+
+    // Restored, it previews its film again, with the same poster.
     assert.equal((await admin.post(`/api/admin/tickets/${revoked.id}/restore`)).status, 200);
-    asFilm(await page(`/t/${revoked.code}`), revoked.code);
+    assert.equal(asFilm(await page(`/t/${revoked.code}`), revoked), revokedPoster);
+    assert.equal((await posterOf(revokedPoster)).status, 200);
   });
 
-  test('the code in the address may be in capitals', async () => {
+  test('the code in the address may be in capitals: the same preview, and the code in neither case in the page', async () => {
     const t = await issue();
     const upper = t.code.toUpperCase();
     assert.notEqual(upper, t.code);
-    const p = await page(`/t/${upper}`);
-    assert.equal(p.meta['og:title'], 'Arrival (2016)');
-    assert.ok([t.code, upper].map((c) => `${srv.base}/t/${c}/poster`).includes(p.meta['og:image']), p.meta['og:image']);
-    const poster = await posterOf(upper);
+    const address = asFilm(await page(`/t/${upper}`), t);
+    assert.equal(address, asFilm(await page(`/t/${t.code}`), t));
+    const poster = await posterOf(address);
     assert.equal(poster.status, 200);
     assert.deepEqual(poster.bytes, POSTER);
   });
 
-  test('a code with a letter percent-encoded previews as its poster does: both decode it', async () => {
+  test('a code with a letter percent-encoded previews its film too, and the page holds the code in neither form', async () => {
     const t = await issue();
     const encoded = `%${t.code.charCodeAt(0).toString(16)}${t.code.slice(1)}`;
     const p = await page(`/t/${encoded}`);
-    assert.equal(p.meta['og:title'], 'Arrival (2016)');
-    assert.equal((await posterOf(encoded)).status, 200);
+    const address = asFilm(p, t);
+    assert.ok(!p.html.toLowerCase().includes(encoded.toLowerCase()));
+    assert.equal(address, asFilm(await page(`/t/${t.code}`), t));
+    assert.equal((await posterOf(address)).status, 200);
   });
 
-  test("an address that isn't a ticket code is just the cinema's page", async () => {
+  test("an address that isn't a ticket code is just the cinema's page, and records nothing", async () => {
     const t = await issue();
     const unknown = await page(`/t/${UNKNOWN}`);
     const odd = ['abc', 'a'.repeat(65), `${t.code}-x`, `${t.code}_`, `${t.code}.`, `${t.code}%00`, "abcd'efgh", '%3Cscript%3Ealert(1)%3C%2Fscript%3E', `${t.code}%22%3E%3Cb%3E`];
+    const before = totals();
     for (const code of odd) {
       const p = await page(`/t/${code}`);
       assert.equal(p.html, unknown.html, code);
       assert.ok(!p.html.includes('<script>alert') && !p.html.includes('<b>'), code);
-      assert.equal((await posterOf(code)).status, 404, code);
     }
     // One segment after /t/, no more.
     asCinema(await page(`/t/${t.code}/more`));
+    assert.deepEqual(totals(), before);
+    assert.equal((await adminTicket(t.id)).firstOpenedAt, null);
   });
 
   test('a film with no year is previewed by its title alone, and one with no poster has no poster to show', async () => {
     const stalker = await issue({}, 'stalker');
-    asFilm(await page(`/t/${stalker.code}`), stalker.code, { title: 'Stalker' });
-    const png = await posterOf(stalker.code);
+    const png = await posterOf(asFilm(await page(`/t/${stalker.code}`), stalker, { title: 'Stalker' }));
     assert.equal(png.status, 200);
     assert.equal(png.headers.get('content-type').split(';')[0], 'image/png');
     assert.deepEqual(png.bytes, PNG_POSTER);
 
     const mirror = await issue({}, 'mirror');
-    asFilm(await page(`/t/${mirror.code}`), mirror.code, { title: 'Mirror (1975)', poster: false });
-    assert.equal((await posterOf(mirror.code)).status, 404);
+    asFilm(await page(`/t/${mirror.code}`), mirror, { title: 'Mirror (1975)', poster: false });
   });
 
   test("a film whose folder is missing previews without a poster, unless TMDb's was downloaded", async () => {
     const arrival = await issue();
     const heat = await issue({}, 'heat');
+    // Arrival's poster's address, given out while its folder was there.
+    const arrivalPoster = asFilm(await page(`/t/${arrival.code}`), arrival);
     const setStatus = srv.db.prepare('UPDATE films SET media_status = ? WHERE slug = ?');
     const was = srv.db.prepare('SELECT slug, media_status FROM films WHERE slug IN (?, ?)').all('arrival', 'heat');
     try {
       for (const slug of ['arrival', 'heat']) setStatus.run('missing', slug);
-      asFilm(await page(`/t/${arrival.code}`), arrival.code, { poster: false });
-      assert.equal((await posterOf(arrival.code)).status, 404);
-      asFilm(await page(`/t/${heat.code}`), heat.code, { title: 'Heat (1995)' });
-      assert.equal((await posterOf(heat.code)).status, 200);
+      asFilm(await page(`/t/${arrival.code}`), arrival, { poster: false });
+      assert.equal((await posterOf(arrivalPoster)).status, 404);
+      const heatPoster = asFilm(await page(`/t/${heat.code}`), heat, { title: 'Heat (1995)' });
+      assert.equal((await posterOf(heatPoster)).status, 200);
     } finally {
       for (const { slug, media_status } of was) setStatus.run(media_status, slug);
     }
+    assert.equal((await posterOf(arrivalPoster)).status, 200, 'its folder back, its poster back');
   });
 
   test("the film's title is escaped like everything else", async () => {
     const t = await issue({}, 'tomjerry');
     const p = await page(`/t/${t.code}`);
-    asFilm(p, t.code, { title: 'Tom & "Jerry" <Live> (1940)' });
+    asFilm(p, t, { title: 'Tom & "Jerry" <Live> (1940)' });
     assert.ok(!p.html.includes('<Live>'));
   });
 
   test("the poster is the film's current one: TMDb's when it was downloaded, and never a file outside the film's folder", async () => {
     const heat = await issue({}, 'heat');
-    asFilm(await page(`/t/${heat.code}`), heat.code, { title: 'Heat (1995)' });
-    const poster = await posterOf(heat.code);
+    const poster = await posterOf(asFilm(await page(`/t/${heat.code}`), heat, { title: 'Heat (1995)' }));
     assert.equal(poster.status, 200);
     assert.deepEqual(poster.bytes, TMDB_POSTER);
     assert.equal(poster.headers.get('content-type').split(';')[0], 'image/jpeg');
 
+    // Sneaky's poster is a link to a file outside its folder. Its address, given out
+    // while the poster was a file of the folder's own, serves nothing once it's the link again.
     const sneaky = await issue({}, 'sneaky');
-    const linked = await posterOf(sneaky.code);
+    const link = path.join(mediaDir, 'sneaky', 'poster.jpg');
+    const outside = fs.readlinkSync(link);
+    let address;
+    fs.rmSync(link);
+    fs.writeFileSync(link, POSTER);
+    try {
+      address = asFilm(await page(`/t/${sneaky.code}`), sneaky, { title: 'Sneaky (2001)' });
+      assert.equal((await posterOf(address)).status, 200);
+    } finally {
+      fs.rmSync(link);
+      fs.symlinkSync(outside, link);
+    }
+    const linked = await posterOf(address);
     assert.equal(linked.status, 404);
     assert.ok(!linked.bytes.toString().includes('not for anyone'));
   });
@@ -1272,45 +1692,80 @@ describe('ticket link previews', () => {
 
 // ====================================================================== the rate limit
 describe('the preview rate limit', () => {
-  let limited;
-  let code;
+  const servers = [];
+  after(() => Promise.all(servers.map((s) => s.close())));
 
-  before(async () => {
+  // A server of its own, so the count starts at nothing: one film, one ticket link
+  // for anyone, and every limit at a tenth (six previews in ten minutes, and one
+  // admin sign-in). get() fetches as a messaging app's server would, from the
+  // address `from` as the proxy in front passes it on (X-Forwarded-For), or from
+  // this machine.
+  async function limited() {
     const dir = tempDir();
     makeFilm(dir, 'arrival');
-    // Every limit at a tenth: six previews in ten minutes, and one admin sign-in.
-    limited = await startServer({ mediaDir: dir, webDist, limits: { scale: 0.1 } });
-    const a = await adminBrowser(limited.base);
+    const s = await startServer({ mediaDir: dir, webDist, limits: { scale: 0.1 } });
+    servers.push(s);
+    const a = await adminBrowser(s.base);
     await a.post('/api/admin/scan');
     const film = (await a.get('/api/admin/films')).data[0];
     assert.equal((await a.patch(`/api/admin/films/${film.id}`, { published: true })).status, 200);
-    code = (await a.post('/api/admin/tickets', { filmId: film.id })).data[0].code;
-  });
-  after(() => limited?.close());
-
-  test('the page and the poster count together; over the limit the page is still served, as the cinema, and the poster is not found', async () => {
-    const get = async (url) => {
-      const res = await fetch(limited.base + url);
+    const code = (await a.post('/api/admin/tickets', { filmId: film.id })).data[0].code;
+    const get = async (url, from) => {
+      const res = await fetch(s.base + url, { headers: from ? { 'x-forwarded-for': from } : {} });
       return { status: res.status, body: await res.text() };
     };
-    const first = await get(`/t/${code}`);
-    assert.equal(first.status, 200);
-    assert.equal(parsePage(first.body).meta['og:title'], 'Arrival (2016)');
-    // Posters until one is refused: well within the unscaled limit of 60.
+    // The page's preview, and its poster's address.
+    const preview = async (from) => {
+      const r = await get(`/t/${code}`, from);
+      assert.equal(r.status, 200, 'never a 429 for a page');
+      const p = parsePage(r.body);
+      return { title: p.meta['og:title'], html: p.html, poster: p.meta['og:image'] && new URL(p.meta['og:image']).pathname };
+    };
+    return { code, get, preview };
+  }
+
+  test('the page and the poster count together, 60 in ten minutes; over the limit the page is still served, as the cinema, and the poster is not found', async () => {
+    const { get, preview } = await limited();
+    const first = await preview();
+    assert.equal(first.title, 'Arrival (2016)');
+    assert.match(first.poster, POSTER_PATH);
+    // Posters until one is refused. At a tenth of the limit, six previews: the page,
+    // then five posters.
     let n = 1;
     let poster;
     do {
-      poster = await get(`/t/${code}/poster`);
+      poster = await get(first.poster);
       n++;
     } while (poster.status === 200 && n < 61);
     assert.equal(poster.status, 404, `refused after ${n} requests`);
+    assert.equal(n, 7, 'the page and five posters, and the sixth poster is refused');
     for (let i = 0; i < 5; i++) {
-      const r = await get(`/t/${code}`);
-      assert.equal(r.status, 200, 'never a 429 for a page');
-      const p = parsePage(r.body);
-      assert.equal(p.meta['og:title'], 'Open Matte');
+      const p = await preview();
+      assert.equal(p.title, 'Open Matte');
       assert.ok(!p.html.includes('Arrival') && !p.html.includes('/poster'));
-      assert.equal((await get(`/t/${code}/poster`)).status, 404);
+      assert.equal((await get(first.poster)).status, 404);
     }
+  });
+
+  test("page loads count on their own, codes that aren't tickets too; each visitor has a limit of their own", async () => {
+    const { get, preview } = await limited();
+    // The poster's address, as another visitor's preview gave it.
+    const { poster } = await preview('203.0.113.1');
+    assert.match(poster, POSTER_PATH);
+    // Six page loads of a code that is no ticket use up this visitor's previews...
+    const visitor = '198.51.100.7';
+    for (let i = 0; i < 6; i++) {
+      const r = await get(`/t/${UNKNOWN}`, visitor);
+      assert.equal(r.status, 200);
+      assert.equal(parsePage(r.body).meta['og:title'], 'Open Matte');
+    }
+    // ...so the ticket's page previews as the cinema, and its poster is not found.
+    const over = await preview(visitor);
+    assert.equal(over.title, 'Open Matte');
+    assert.ok(!over.html.includes('Arrival') && !over.html.includes('/poster'));
+    assert.equal((await get(poster, visitor)).status, 404);
+    // Someone else still gets the film, and its poster.
+    assert.equal((await preview('192.0.2.44')).title, 'Arrival (2016)');
+    assert.equal((await get(poster, '192.0.2.44')).status, 200);
   });
 });

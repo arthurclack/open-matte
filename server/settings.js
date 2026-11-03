@@ -33,7 +33,8 @@ const RULES = {
   logoWithName: (v) => typeof v === 'boolean',
 };
 
-const SECRETS = new Set(['tmdbApiKey']);
+// previewKey signs the addresses of ticket links' preview posters (page.js).
+const SECRETS = new Set(['tmdbApiKey', 'previewKey']);
 const FILES = new Set(['logo', 'icon']);
 
 // Colours are stored lower-case, other text without surrounding spaces.
@@ -46,6 +47,7 @@ export function createSettings(db) {
   const all = db.prepare('SELECT key, value FROM settings');
   const one = db.prepare('SELECT value FROM settings WHERE key = ?');
   const upsert = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+  const insertNew = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   const remove = db.prepare('DELETE FROM settings WHERE key = ?');
 
   function get() {
@@ -87,6 +89,16 @@ export function createSettings(db) {
     else remove.run(`secret.${name}`);
   }
 
+  // A secret the server makes for itself: the stored one, or a new one from
+  // make() saved for good. Read back after the insert, so two servers starting
+  // on one database at once end up with the same secret.
+  function ensureSecret(name, make) {
+    const existing = getSecret(name);
+    if (existing) return existing;
+    insertNew.run(`secret.${name}`, JSON.stringify(make()));
+    return getSecret(name);
+  }
+
   // The logo or the tab icon, for branding.js once the file is in place: { file, width, height }, or null.
   function setFile(kind, value) {
     if (!FILES.has(kind)) throw new Error(`Unknown file ${kind}`);
@@ -94,5 +106,5 @@ export function createSettings(db) {
     else remove.run(kind);
   }
 
-  return { get, validate, update, getSecret, setSecret, setFile };
+  return { get, validate, update, getSecret, setSecret, ensureSecret, setFile };
 }

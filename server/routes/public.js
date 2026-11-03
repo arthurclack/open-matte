@@ -12,11 +12,22 @@ import { TYPES, folderFile } from './media.js';
 export function publicRoutes({ settings, branding, metadata, mediaDir, previews }) {
   const router = express.Router();
 
-  // sendFile's errors as a bare status: the error isn't the file, so don't describe or cache it as if it were.
+  // sendFile's errors as a bare status, mapped as /media maps them: a missing or
+  // hidden file is a 404 that doesn't say why; send's own refusals (a range past
+  // the end, a failed If-Match) keep their 4xx; failing to read the file is a
+  // 500. The error isn't the file, so none of the file's headers go with it: it
+  // is never described, sized or cached as the file (a current logo whose file
+  // has gone must not be a 404 cached for a year).
   const sent = (res) => (err) => {
     if (!err || err.code === 'ECONNABORTED' || res.headersSent) return;
-    for (const h of ['Content-Type', 'Cache-Control']) res.removeHeader(h);
-    res.status(err.statusCode === 404 || err.code === 'ENOENT' ? 404 : 500).end();
+    const s = err.statusCode;
+    const status = s === 403 || s === 404 || err.code === 'ENOENT' ? 404 : s >= 400 && s < 500 ? s : 500;
+    // A file that is there but can't be read is the server's problem: say so in its log.
+    if (status === 500) console.error(err);
+    for (const h of ['Content-Type', 'Content-Length', 'Cache-Control', 'ETag', 'Last-Modified', 'Accept-Ranges']) res.removeHeader(h);
+    // A 416 says how long the file is, as it should; nothing else does.
+    if (status !== 416) res.removeHeader('Content-Range');
+    res.status(status).end();
   };
 
   // Only the current logo and icon. Their names change whenever the image does.
@@ -35,11 +46,12 @@ export function publicRoutes({ settings, branding, metadata, mediaDir, previews 
     res.send(Buffer.from(faviconSvg(settings.get())));
   });
 
-  // The film's poster, for a ticket link that previews its film (page.js says
-  // which do, and counts this against the same limit). Anything else is a 404
-  // that doesn't say why.
-  router.get('/t/:code/poster', async (req, res) => {
-    const film = previews(req, req.params.code)?.film;
+  // The film's poster, for a ticket link that previews its film, at the address
+  // page.js gives it: /poster/<ticket id>.<mac>, which holds no ticket code
+  // (page.js says which tickets preview, and counts this against the same
+  // limit). Anything else is a 404 that doesn't say why.
+  router.get('/poster/:ref', async (req, res) => {
+    const film = previews.poster(req, req.params.ref);
     if (!film) return res.status(404).end();
     // As on the film's page: TMDb's poster when there is one, else the folder's,
     // found the way /media finds it.

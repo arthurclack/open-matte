@@ -37,11 +37,19 @@ export function createBranding({ settings, dataDir }) {
     return info;
   }
 
-  // The setting first, then the file it no longer names.
+  // The setting first, then the file it no longer names. Deleting that file is
+  // tidying up: the setting decides what is served, and a leftover file never
+  // is, so failing to delete it doesn't undo the change or make it an error.
   function replace(kind, value) {
     const previous = settings.get()[kind]?.file;
     settings.setFile(kind, value);
-    if (previous && previous !== value?.file && BRANDING_FILE.test(previous)) fs.rmSync(path.join(dir, previous), { force: true });
+    if (previous && previous !== value?.file && BRANDING_FILE.test(previous)) {
+      try {
+        fs.rmSync(path.join(dir, previous), { force: true });
+      } catch (err) {
+        console.warn(`branding: couldn't delete the old ${kind} ${previous}: ${err.message}`);
+      }
+    }
   }
 
   function save(kind, buf) {

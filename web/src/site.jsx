@@ -4,12 +4,23 @@ import { api } from './api.js';
 
 const SiteContext = createContext(null);
 
+// The cinema as the server wrote it into the page (what /api/site returns), so the
+// header has its name and logo before /api/me answers. The Vite dev server's page has none.
+function embeddedSite() {
+  try {
+    return JSON.parse(document.getElementById('site-data').textContent);
+  } catch {
+    return null;
+  }
+}
+
 // The viewer-facing shell: the cinema's name, what this browser holds, and
 // a header and footer around every page.
 export function SiteProvider({ children }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [me, setMe] = useState(null);
+  const [embedded] = useState(embeddedSite);
   // Sign-in is never offered while the player is open: the film page says when it is.
   const [playerOpen, setPlayerOpen] = useState(false);
   const refresh = useCallback(() => api.get('/api/me').then(setMe).catch(() => setMe({ site: null, person: null, tickets: [] })), []);
@@ -35,7 +46,8 @@ export function SiteProvider({ children }) {
     [refresh, navigate],
   );
 
-  const site = me?.site;
+  // The page's copy until /api/me answers, and if it can't.
+  const site = me?.site ?? embedded;
   useEffect(() => {
     if (site?.cinemaName) document.title = site.cinemaName;
   }, [site?.cinemaName]);

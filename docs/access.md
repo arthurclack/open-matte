@@ -142,10 +142,16 @@ that the server writes into the page as it sends it. For a `/t/<code>` address:
 - **A revoked ticket, a ticket for an unpublished film, or an unknown code** previews
   as the cinema too, as every other page on the site does.
 
-The poster comes from `/t/<code>/poster`, which needs no session. It follows the same
-rule, and works only while that holds: once the ticket is revoked, kept or given, or
-its film unpublished, it answers 404 and says nothing more. It serves the poster the
-film page shows, TMDB's if one was downloaded, otherwise the film folder's.
+The poster has an address of its own, made for the preview: `/poster/<id>.<mac>`,
+where `<id>` is the ticket's number and `<mac>` is worked out from it with a key the
+server never sends anywhere. A preview image's address gets passed around: some chat
+apps repeat it in their own image servers' addresses, and people copy it. So this one
+holds neither the ticket's code nor anything that opens the ticket. It can fetch the
+poster and nothing else, and without the key nobody can make the address for another
+ticket. It needs no session, and works only while the link would preview its film:
+once the ticket is revoked, kept or given, or its film unpublished, it answers 404 and
+says nothing more. It serves the poster the film page shows, TMDB's if one was
+downloaded, otherwise the film folder's.
 
 Fetching the page or the poster creates and records nothing: no session or cookie,
 no "opened" event, and the ticket isn't marked as opened. Only the page's script,
@@ -289,7 +295,7 @@ stops future requests, playlists and segments included; none of them can take ba
 what is already in the player's buffer (typically under a minute of video).
 
 Outside `/media/`, two kinds of image need no session. A ticket's preview poster,
-`/t/<code>/poster`, follows the rule under [Link previews](#link-previews). The
+`/poster/<id>.<mac>`, follows the rule under [Link previews](#link-previews). The
 cinema's own logo and tab icon (`/branding/<file>`) and Open Matte's icon drawn in
 its colours (`/favicon.svg`) are public, unlike a film's artwork: the sign-in page
 and every link preview show them to anyone. An uploaded logo or icon is only ever a
@@ -472,6 +478,8 @@ included.
 - Ticket codes are about 64 random bits. They're stored as they are, so the admin
   can copy a link again later; anyone who can read the database could use the ones
   for anyone with the link. A ticket for one person still needs their passkey.
+- Poster addresses for [link previews](#link-previews) are made with a key of 256
+  random bits, created once and kept in the database. The key is never sent anywhere.
 - Session cookies are 256 random bits, HttpOnly, SameSite=Lax, and Secure over
   HTTPS. The database keeps only their SHA-256 hash. Admin sign-out, session
   expiry, ticket revocation, signing a person out and signing out every viewer (in
@@ -502,12 +510,14 @@ included.
   page on another subdomain mustn't be able to act for anyone.
 - The app never logs ticket codes, link tokens, cookies or the admin password, and
   Caddy keeps no access log. When a passkey is refused, the reason goes to the
-  server log, never to the browser. Pages send no Referer, so the code in a
-  `/t/<code>` address goes no further than the requests for that page (a ticket for
-  one person keeps it there until they sign in). The exception: if the
-  app is down or restarting when someone opens their ticket link, Caddy's error log
-  records the address, code included. (A setup link's token is never in an address
-  the server sees, so not even then.)
+  server log, never to the browser. Pages send no Referer, and the page the server
+  sends for a `/t/<code>` address doesn't contain the code, not even in its preview
+  tags: a preview's poster has [an address of its own](#link-previews). So the code
+  goes no further than the requests for that page (a ticket for one person keeps it
+  in the address until they sign in). The exception: if the app is down or
+  restarting when someone opens their ticket link, Caddy's error log records the
+  address, code included. (A setup link's token is never in an address the server
+  sees, so not even then.)
 
 ## What is recorded
 

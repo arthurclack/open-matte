@@ -64,13 +64,18 @@ are deployed; 6 comes last.
   and a new one replaces the old cleanly. Backups copy them, as they copy artwork. The
   logo appears in the header of every viewer page, sign-in and setup included, with or
   without the name beside it.
-- The colours and name are written into `index.html` as the server sends it, so the
-  page never flashes Open Matte's amber before switching. The same step adds the
-  link-preview tags (`og:title`, `og:image`).
-- A ticket link for anyone previews its film: the title, and the poster from a narrow
-  address (`/t/<code>/poster`) that works without a session under the same rule as the
-  preview, and only then. Reading either writes nothing: no session, no "opened", no
-  event. Both are rate limited; over the limit the page is still served, as the cinema.
+- The colours, name, tab icon and logo are written into `index.html` as the server
+  sends it, so the page never flashes Open Matte's amber before switching, and the
+  header shows the name and logo without waiting for `/api/me`. The logo's image is
+  requested with the page. The same step adds the link-preview tags (`og:title`,
+  `og:image`).
+- A ticket link for anyone previews its film: the title, and the poster from an
+  address made for the preview (`/poster/<id>.<mac>`) that works without a session
+  under the same rule as the preview, and only then. Reading either writes nothing: no
+  session, no "opened", no event. Both are rate limited; over the limit the page is
+  still served, as the cinema. The poster's address holds no ticket code and can fetch
+  nothing but the poster, because some chat apps' image servers repeat image addresses
+  and people copy them.
 - Served with `X-Content-Type-Options: nosniff`, and only the three image types.
 - No migration: everything lives in the settings table.
 

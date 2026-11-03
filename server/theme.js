@@ -1,8 +1,8 @@
 // The cinema's colours: an accent and a background, which stays dark. The other
-// surfaces (raised, sunk, lines) are worked out from the background, and a pair
-// of colours is refused if text, the status colours or the accent would be hard
-// to read on it. With Open Matte's own colours nothing is written into the page:
-// styles.css already has them.
+// surfaces (raised, sunk, lines) and the tints of notices and badges are worked
+// out from the background, and a pair of colours is refused if text, the status
+// colours or the accent would be hard to read on it. With Open Matte's own
+// colours nothing is written into the page: styles.css already has them.
 
 export const DEFAULT_ACCENT = '#e8b04a';
 export const DEFAULT_BACKGROUND = '#0d0c0f';
@@ -16,15 +16,18 @@ const DEFAULT_SURFACES = { '--bg-raised': '#17151b', '--bg-sunk': '#09080b', '--
 const DEFAULT_ACCENTS = { '--accent-ink': '#1a1306', '--accent-hover': '#f2c46d' };
 const DEFAULT_ICON_BACKGROUND = '#111014';
 
+// styles.css's status colours, which stay the same whatever the cinema's colours.
+const STATUS = { good: '#7fc28b', warn: '#e8b04a', bad: '#e5776d' };
+
 // The colours drawn on the background, and how much contrast each needs. Faint
 // text is only ever used for things you can do without.
 const ON_BACKGROUND = [
   { color: '#ece8e1', what: 'text', needs: 7 },
   { color: '#a59f97', what: 'secondary text', needs: 4.5 },
   { color: '#6f6a66', what: 'faint text', needs: 3 },
-  { color: '#7fc28b', what: 'the green of good news', needs: 4.5 },
-  { color: '#e8b04a', what: 'the amber of warnings', needs: 4.5 },
-  { color: '#e5776d', what: 'the red of errors', needs: 4.5 },
+  { color: STATUS.good, what: 'the green of good news', needs: 4.5 },
+  { color: STATUS.warn, what: 'the amber of warnings', needs: 4.5 },
+  { color: STATUS.bad, what: 'the red of errors', needs: 4.5 },
 ];
 
 // A stored colour, or the default if it isn't one (so nothing else ever reaches the page).
@@ -68,6 +71,28 @@ function surfaces(bg) {
   };
 }
 
+// Everything styles.css takes from a background of the cinema's own: the
+// surfaces, the status colours' borders and tints (notices, badges, the preview
+// banner), the placeholder poster's gradient, and the background and raised
+// surface as "r, g, b" for the see-through layers (the film backdrop's fade, the
+// ticket panel), which add their own alpha. styles.css has hand-picked values of
+// all of these for Open Matte's own background.
+function fromBackground(bg) {
+  const s = surfaces(bg);
+  const status = Object.entries(STATUS).flatMap(([name, color]) => [
+    [`--${name}-line`, mix(bg, color, 0.4)],
+    [`--${name}-tint`, mix(bg, color, 0.07)],
+  ]);
+  return {
+    ...s,
+    ...Object.fromEntries(status),
+    '--poster-from': mix(bg, WHITE, 0.095),
+    '--poster-to': mix(bg, WHITE, 0.02),
+    '--bg-rgb': channels(bg).join(', '),
+    '--bg-raised-rgb': channels(s['--bg-raised']).join(', '),
+  };
+}
+
 function accents(accent) {
   if (accent === DEFAULT_ACCENT) return { '--accent': accent, ...DEFAULT_ACCENTS };
   // The text on accent buttons: the accent's own darkest shade, or black when that isn't dark enough.
@@ -83,7 +108,7 @@ function accents(accent) {
 export function palette(settings) {
   const { accent, bg } = colors(settings);
   return {
-    ...(bg === DEFAULT_BACKGROUND ? {} : surfaces(bg)),
+    ...(bg === DEFAULT_BACKGROUND ? {} : fromBackground(bg)),
     ...(accent === DEFAULT_ACCENT ? {} : accents(accent)),
   };
 }

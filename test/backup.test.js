@@ -49,14 +49,15 @@ test('a backup runs daily after the set hour, and straight away when one is over
   assert.equal(b.due(at('2026-10-27T05:02:00Z')), true, 'over 25 hours since the last: overdue');
 });
 
-test('a backup is a checked, complete copy, and restores into a working server', async () => {
+test('a backup is a checked, complete copy that restores into a working server; artwork and logos are only ever added, so an older backup restores with its own logo', async () => {
   const mediaDir = tempDir();
   makeFilm(mediaDir, 'arrival');
   const srv = await startServer({ mediaDir });
   // A failed check mustn't leave the server running, or the run never ends.
+  const logoBytes = pngImage(240, 80);
   let logo;
   let backupDir;
-  let file;
+  let first;
   try {
     const admin = await adminBrowser(srv.base);
     await admin.post('/api/admin/scan');
@@ -67,7 +68,7 @@ test('a backup is a checked, complete copy, and restores into a working server',
     const { dataDir } = srv;
     fs.mkdirSync(path.join(dataDir, 'artwork', 'arrival'), { recursive: true });
     fs.writeFileSync(path.join(dataDir, 'artwork', 'arrival', 'poster-0123456789ab.jpg'), 'jpeg');
-    logo = await admin.upload('/api/admin/branding/logo', pngImage(240, 80));
+    logo = await admin.upload('/api/admin/branding/logo', logoBytes);
     assert.equal(logo.status, 200, JSON.stringify(logo.data));
     const icon = await admin.upload('/api/admin/branding/icon', pngImage(64, 64));
     assert.equal(icon.status, 200, JSON.stringify(icon.data));
@@ -79,21 +80,39 @@ test('a backup is a checked, complete copy, and restores into a working server',
     const made = await admin.post('/api/admin/backups');
     assert.equal(made.status, 201, JSON.stringify(made.data));
     backupDir = made.data.dir;
-    file = path.join(backupDir, made.data.backup.name);
+    const file = path.join(backupDir, made.data.backup.name);
     assert.ok(made.data.backup.size > 0);
     assert.deepEqual(fs.readdirSync(path.join(backupDir, 'artwork', 'arrival')), ['poster-0123456789ab.jpg']);
     assert.deepEqual(fs.readdirSync(path.join(backupDir, 'branding')).sort(), brandingFiles);
     for (const f of brandingFiles) assert.deepEqual(fs.readFileSync(path.join(backupDir, 'branding', f)), fs.readFileSync(path.join(dataDir, 'branding', f)));
     assert.deepEqual(fs.readdirSync(dataDir).filter((f) => f.startsWith('.backup-')), [], 'no snapshot left behind');
     assert.equal((await admin.get('/api/admin/backups')).data.backups[0].name, made.data.backup.name);
+    // Kept aside: backups are named to the second, so another one this second would take its place.
+    first = path.join(tempDir(), 'first.db');
+    fs.copyFileSync(file, first);
+
+    // A new logo, and new artwork in place of the old, then another backup. Backups
+    // only add to those folders: the first backup's logo and artwork are still there
+    // beside the new ones, though the data folder has only the new.
+    const newer = await admin.upload('/api/admin/branding/logo', pngImage(240, 80, [1, 2, 3]));
+    assert.equal(newer.status, 200, JSON.stringify(newer.data));
+    const newerFile = path.basename(newer.data.logo.url);
+    assert.ok(!brandingFiles.includes(newerFile));
+    assert.equal(fs.existsSync(path.join(dataDir, 'branding', path.basename(logo.data.logo.url))), false, 'the old logo is gone from the data folder');
+    fs.rmSync(path.join(dataDir, 'artwork', 'arrival', 'poster-0123456789ab.jpg'));
+    fs.writeFileSync(path.join(dataDir, 'artwork', 'arrival', 'poster-ba9876543210.jpg'), 'another jpeg');
+    const again = await admin.post('/api/admin/backups');
+    assert.equal(again.status, 201, JSON.stringify(again.data));
+    assert.deepEqual(fs.readdirSync(path.join(backupDir, 'branding')).sort(), [...brandingFiles, newerFile].sort());
+    assert.deepEqual(fs.readdirSync(path.join(backupDir, 'artwork', 'arrival')).sort(), ['poster-0123456789ab.jpg', 'poster-ba9876543210.jpg']);
   } finally {
     await srv.close();
   }
 
-  // Restore: a fresh server on a copy of the backup, with the branding folder put
-  // back beside it, has the films, the tickets and the logo.
+  // Restore the first backup: a fresh server on a copy of it, with the branding
+  // folder put back beside it, has the films, the tickets and the first logo.
   const restoredDir = tempDir();
-  fs.copyFileSync(file, path.join(restoredDir, 'open-matte.db'));
+  fs.copyFileSync(first, path.join(restoredDir, 'open-matte.db'));
   fs.cpSync(path.join(backupDir, 'branding'), path.join(restoredDir, 'branding'), { recursive: true });
   const db = openDb(path.join(restoredDir, 'open-matte.db'));
   const app = createApp({ db, mediaDir, dataDir: restoredDir, backupOptions: { backupDir: null }, webDist: tempDir() });
@@ -108,7 +127,9 @@ test('a backup is a checked, complete copy, and restores into a working server',
     assert.deepEqual(tickets.map((t) => [t.label, t.screeningLimit]), [['Sam', 2]]);
     const restoredLogo = (await restored.get('/api/admin/settings')).data.logo;
     assert.deepEqual(restoredLogo, logo.data.logo);
-    assert.equal((await fetch(`http://127.0.0.1:${server.address().port}${restoredLogo.url}`)).status, 200);
+    const res = await fetch(`http://127.0.0.1:${server.address().port}${restoredLogo.url}`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(Buffer.from(await res.arrayBuffer()), logoBytes);
   } finally {
     await new Promise((r) => server.close(r));
     db.close();

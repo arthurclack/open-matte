@@ -142,6 +142,23 @@ open ones. They use the same setup and the plain Test Pattern link for anyone.
   Space pauses and the arrow keys seek. The name menu opens with Return and closes
   with Escape. (Checked in Chromium on 27 October.)
 
+### Branding and link previews
+
+Once slice 1 is deployed, with colours, a logo and a tab icon set in **Settings ▸
+Branding**:
+
+- **Every viewer page**, on the iPhone and the Mac: the colours from the first moment
+  (no flash of amber), the logo and name in the header with the page rather than a moment
+  later, the tab icon. On the iPhone, the logo and name shouldn't crowd the Sign in link.
+- **Link previews**: paste a ticket link into a WhatsApp chat and an iMessage, and let
+  the preview appear before sending. The plain link **for anyone** should show Test
+  Pattern's poster and title. The link **only for you** should show only the cinema's
+  name and logo. Neither counts as opening the ticket: in the admin, the ticket isn't
+  marked opened and Activity shows nothing new. Where the app lets you copy the preview
+  picture's address, it should start `/poster/` and hold no ticket code.
+- A preview is made once and kept by the app, so check with a ticket that has never been
+  pasted anywhere.
+
 ### Results: milestone 3
 
 | Where | Plays (audio, subtitles, quality) | Notes |
@@ -151,3 +168,6 @@ open ones. They use the same setup and the plain Test Pattern link for anyone.
 | Chrome on Mac and Windows | | |
 | Non-HDR screen | | |
 | Mac Safari, keyboard only | | Chromium checked 27 Oct: Play, Space, menu |
+| Branding, iPhone and Mac Safari | – | |
+| WhatsApp preview (for anyone / only for you) | – | |
+| iMessage preview (for anyone / only for you) | – | |

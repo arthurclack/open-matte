@@ -38,7 +38,7 @@ Milestone 3, polish and public release, is under way (planned in
 [docs/milestone-3.md](docs/milestone-3.md), progress in
 [docs/roadmap.md](docs/roadmap.md)):
 
-- **Branding**: an accent and a background colour, a logo and a tab icon, set in the admin and shown on every viewer page from the first paint. A ticket link for anyone previews its film's poster and title in chat apps; every other link previews as the cinema ([docs/access.md](docs/access.md#link-previews))
+- **Branding**: an accent and a background colour, a logo and a tab icon, set in the admin and shown on every viewer page from the first paint: the server writes them into the page as it sends it, and the logo's image is requested along with the page. A ticket link for anyone previews its film's poster and title in chat apps; every other link previews as the cinema ([docs/access.md](docs/access.md#link-previews))
 
 ## Running it locally
 
@@ -52,9 +52,10 @@ npm run dev                 # server on http://localhost:3000
 ```
 
 To work on the web app with hot reload, run `npm run dev:web` alongside and use
-http://localhost:5173. Vite serves the page itself there, so it has Open Matte's own
-colours and tab icon rather than the cinema's, and no link-preview tags. The server
-on :3000 adds those.
+http://localhost:5173. Vite serves the page itself there, without what the server on
+:3000 writes into it: the page has Open Matte's own colours and tab icon rather than
+the cinema's, no link-preview tags, and a header that waits for `/api/me` before
+showing the cinema's name and logo.
 
 Use `localhost`, not `127.0.0.1`: passkeys belong to a domain, and browsers won't use
 them on an IP address. Locally they need no setting; on a server, see

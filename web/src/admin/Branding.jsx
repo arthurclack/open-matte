@@ -6,12 +6,13 @@ import { AdminContext, ErrorNote, useAction } from './ui.jsx';
 const HEX = /^#[0-9a-f]{6}$/i;
 const DEFAULT_COLORS = { accentColor: '#e8b04a', backgroundColor: '#0d0c0f' };
 
-// The server's own limits and words, so a wrong file is refused before it's sent.
-// The server still decides by the bytes, whatever the browser says the type is.
+// The server's own limits and words, so a wrong file is mostly refused before it's sent.
+// The server decides by the bytes, so the type is only checked here when the browser
+// reports one: it goes by the file's name, and has none for a name without an extension.
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const MAX_IMAGE_BYTES = 1048576;
 const imageProblem = (file) => {
-  if (!file.size || !IMAGE_TYPES.includes(file.type)) return "That isn't a PNG, JPEG or WebP image.";
+  if (!file.size || (file.type && !IMAGE_TYPES.includes(file.type))) return "That isn't a PNG, JPEG or WebP image.";
   if (file.size > MAX_IMAGE_BYTES) return 'That image is larger than 1 MB.';
   return null;
 };
@@ -92,8 +93,11 @@ export default function Branding({ settings, onSaved }) {
 function Colors({ settings, onSaved }) {
   const { signedOut } = useContext(AdminContext);
   const saved = { accentColor: settings.accentColor, backgroundColor: settings.backgroundColor };
-  // Set from the settings once: saving another part mustn't undo what's being picked here.
-  const [colors, setColors] = useState(saved);
+  // Only the colours the admin has picked. The others follow the saved colours, so
+  // colours saved elsewhere (which come back with any other card's save) never show up
+  // here as an unsaved edit that Save colours would send back, even mid-edit.
+  const [edit, setEdit] = useState(null);
+  const colors = { ...saved, ...edit };
   // The server's answer for the colours in the fields: { key, problems, theme } or { key, error }.
   const [check, setCheck] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -150,14 +154,14 @@ function Colors({ settings, onSaved }) {
     // Keep the new colours on this page once the preview goes, as a reload would show them.
     const theme = check?.key === key && check.theme ? check.theme : await api.post('/api/admin/branding/check', body).then((c) => c.theme, () => null);
     if (theme) adoptTheme(theme, r.backgroundColor);
-    setColors({ accentColor: r.accentColor, backgroundColor: r.backgroundColor });
+    setEdit(null);
     setNotice('Colours saved.');
     onSaved(r);
   }
 
   const pick = (name) => (value) => {
     setNotice(null);
-    setColors((c) => ({ ...c, [name]: value }));
+    setEdit((e) => ({ ...e, [name]: value }));
   };
 
   return (
@@ -194,11 +198,11 @@ function Colors({ settings, onSaved }) {
           Save colours
         </button>
         {unsaved && (
-          <button type="button" className="btn" onClick={() => setColors(saved)} disabled={action.busy}>
+          <button type="button" className="btn" onClick={() => setEdit(null)} disabled={action.busy}>
             Cancel
           </button>
         )}
-        <button type="button" className="btn" onClick={() => setColors(DEFAULT_COLORS)} disabled={action.busy || isDefault}>
+        <button type="button" className="btn" onClick={() => setEdit(DEFAULT_COLORS)} disabled={action.busy || isDefault}>
           Back to Open Matte's colours
         </button>
       </div>
@@ -297,7 +301,10 @@ function BrandImage({ kind, noun, image, onSaved, removeText, help, preview, chi
     const problem = imageProblem(file);
     if (problem) return action.setError(problem);
     setUploading(true);
-    const r = await action.run(() => api.upload(url, file));
+    // A file the browser has no type for goes labelled as a PNG: the server recognises
+    // the image by its bytes, and the label only gets it past the rule that /api takes JSON.
+    const body = file.type ? file : new Blob([file], { type: 'image/png' });
+    const r = await action.run(() => api.upload(url, body));
     setUploading(false);
     if (r) {
       setNotice(`${Noun} saved.`);
