@@ -123,8 +123,8 @@ test/           node:test suites
 
 ## Licence
 
-Open Matte is released under the GNU General Public License v3.0. See
-[LICENSE](LICENSE).
+Open Matte is released under the GNU General Public License, version 3 or (at your
+option) any later version (`GPL-3.0-or-later`). See [LICENSE](LICENSE).
 
 The web app the site sends to browsers is Open Matte's own code too, and the GPL gives
 everyone who receives it the right to its source. The licences file below starts by

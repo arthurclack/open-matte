@@ -211,7 +211,7 @@ describe('the build writes the file', { skip }, () => {
   test('it starts with Open Matte’s own licence, and where its source is: package.json’s repository', () => {
     const text = licenceNotices([], { source: 'https://example.com/open-matte' });
     assert.match(text, /^Licences\n\nThe web app this site sends to your browser is Open Matte\. It is free software:\n/);
-    assert.match(text, /GNU General Public License, version 3\n\(https:\/\/www\.gnu\.org\/licenses\/gpl-3\.0\.html\)\.\nIts source code is at https:\/\/example\.com\/open-matte\n/);
+    assert.match(text, /GNU General Public License, version 3 or\n\(at your option\) any later version\n\(https:\/\/www\.gnu\.org\/licenses\/gpl-3\.0\.html\)\.\nIts source code is at https:\/\/example\.com\/open-matte\n/);
     assert.match(licenceNotices([]), /\nThis copy doesn't say where its source code is: ask whoever runs this site\.\n/);
     // Without a repository the build says so, every time, until there is one.
     const { emitted, warnings } = run(bundle);

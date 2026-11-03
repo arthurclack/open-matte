@@ -180,14 +180,12 @@ There are two ways to put the code on the server. Pick one and keep to it.
 
 **With git, on the server.** Use this unless you change the code yourself. The server
 then knows exactly which release it runs, and updating or going back is a checkout.
-In the command, put the project's address in place of
-`https://github.com/OWNER/open-matte.git` (the **Code** button on its GitHub page
-gives it), and the newest release in [CHANGELOG.md](../CHANGELOG.md) in place of
-`v1.0.0`. On the server:
+In the command, put the newest release in [CHANGELOG.md](../CHANGELOG.md) in place
+of `v1.0.0` (and your own fork's address, if you run a changed copy). On the server:
 
 ```bash
 cd /srv/open-matte
-git clone --branch v1.0.0 https://github.com/OWNER/open-matte.git app
+git clone --branch v1.0.0 https://github.com/arthurclack/open-matte.git app
 ```
 
 Git ignores `deploy/.env`, so your settings stay put when you update.
@@ -303,7 +301,7 @@ Open Matte plays films you've prepared: one folder per film, with HLS playlists 
 file. `--seconds 60` encodes only the first minute, which makes a quick test:
 
 ```bash
-git clone https://github.com/OWNER/open-matte.git
+git clone https://github.com/arthurclack/open-matte.git
 cd open-matte
 npm run encode -- ~/Films/Arrival.mkv media/arrival --subs --seconds 60
 ```
