@@ -4,13 +4,19 @@
 // screening ids, ticket codes and the film's slug), names and the film's title.
 // playbackSummary and scrub are plain functions: no DOM, no React, no hls.js.
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { describe, test } from 'node:test';
 
 // Times are written in the viewer's own time zone. In UTC they read the same as in an
 // ISO date, so the tests don't depend on which the summary uses.
 process.env.TZ = 'UTC';
 
-const { playbackSummary, scrub } = await import('../web/src/playbackHelp.js');
+// The web app's source isn't in the server's image, where docs/deploying.md runs the
+// tests on the server's own Node: there these are skipped, not failed.
+const MODULE = new URL('../web/src/playbackHelp.js', import.meta.url);
+const present = fs.existsSync(MODULE);
+const skip = present ? false : 'web/src is not here (the server image has no web source)';
+const { playbackSummary, scrub } = present ? await import(MODULE) : {};
 
 const REMOVED = '[address removed]';
 
@@ -83,7 +89,7 @@ function lineWith(text, needle) {
   return found[0];
 }
 
-describe('scrub', () => {
+describe('scrub', { skip }, () => {
   test('text with no address in it comes back unchanged', () => {
     for (const text of [
       '',
@@ -132,7 +138,7 @@ describe('scrub', () => {
   });
 });
 
-describe('playbackSummary', () => {
+describe('playbackSummary', { skip }, () => {
   test('is plain text, a "Label: value" line for each thing, with the player and the browser it ran in', () => {
     const summary = playbackSummary(info());
     assert.equal(typeof summary, 'string');
