@@ -555,6 +555,9 @@ leaves out every address (they hold screening ids), cookies, ticket labels and c
 people's names, the film's title and the cinema's name, so a viewer can send it to
 you without giving any of those away.
 
+**Audio and subtitle choices** (the languages, and the subtitles' size and background)
+are remembered by the player in the viewer's own browser only, and never sent.
+
 People and passkeys:
 
 - **signed-in**: someone signed in with a passkey

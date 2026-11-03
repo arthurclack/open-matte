@@ -4,6 +4,8 @@ import { api } from './api.js';
 import { useMediaSession } from './mediaSession.js';
 import PlaybackHelp from './PlaybackHelp.jsx';
 import { codecName, scrub } from './playbackHelp.js';
+import { loadPrefs, savePrefs } from './playerPrefs.js';
+import { SUBTITLE_BACKGROUNDS, SUBTITLE_SIZES, audioLabel, initialAudio, initialSubtitle, languageName, menuSubtitles, showing } from './tracks.js';
 
 const HEARTBEAT_MS = 30 * 1000;
 
@@ -29,6 +31,11 @@ const HELP_FOR = new Set(['error', 'forbidden', 'unsupported']);
 const MEDIA_ERRORS = { 1: 'MEDIA_ERR_ABORTED', 2: 'MEDIA_ERR_NETWORK', 3: 'MEDIA_ERR_DECODE', 4: 'MEDIA_ERR_SRC_NOT_SUPPORTED' };
 // Playback help keeps the last few problems, in this page only.
 const ERRORS_KEPT = 10;
+// readyState once the tracks are known.
+const HAVE_METADATA = 1;
+
+const SIZE_LABELS = { small: 'Small', medium: 'Medium', large: 'Large' };
+const BACKGROUND_LABELS = { shadow: 'Shadow', box: 'Box' };
 
 // Safari plays HLS itself, and handles HDR and AirPlay best that way.
 // Everything else goes through hls.js on Media Source Extensions.
@@ -92,9 +99,31 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
   const hlsRef = useRef(null);
   const subtitles = film.media.subtitles;
   const trackRefs = useMemo(() => subtitles.map(() => createRef()), [subtitles]);
-  const [audioTracks, setAudioTracks] = useState([]); // { id, label }
+  // The subtitles the menu offers: forced tracks aren't among them, they show by themselves.
+  const listed = useMemo(() => menuSubtitles(subtitles), [subtitles]);
+  // What this browser remembers from earlier films (playerPrefs.js), read once.
+  const [remembered] = useState(loadPrefs);
+  const [audioTracks, setAudioTracks] = useState([]); // { id, name, language, label }
   const [audioTrack, setAudioTrack] = useState(null);
-  const [subtitle, setSubtitle] = useState(() => subtitles.findIndex((s) => s.default));
+  // The chosen subtitles, by index in the film's list; -1 is Off.
+  const [subtitle, setSubtitle] = useState(() => initialSubtitle(subtitles, remembered.subtitles));
+  // How subtitles look here, from the bar's Aa: classes on the picture's wrapper, drawn by ::cue.
+  const [cueSize, setCueSize] = useState(remembered.subtitleSize);
+  const [cueBackground, setCueBackground] = useState(remembered.subtitleBackground);
+  const [styleOpen, setStyleOpen] = useState(false);
+  const styleId = useId();
+  const styleRef = useRef(null);
+  const styleButtonRef = useRef(null);
+  // The subtitle track the player last set showing (-1 for none), and the audio track it
+  // last enabled in Safari's player. The browser's change events are checked against
+  // them, so the player's own changes are never taken for the viewer's.
+  const shownTrack = useRef(-1);
+  const enabledAudio = useRef(null);
+  // Whether playback has started or the viewer has touched the video. Before that, a
+  // track the browser shows or enables by itself is its own pick as the film loads, not
+  // the viewer's (Chrome shows the first subtitles it has once the player has shown any;
+  // Safari follows the system's caption settings): the player's start choice stands.
+  const settled = useRef(false);
   // Which player runs the stream: Safari's own ('native') or hls.js ('hls').
   const [engine, setEngine] = useState(null);
   // Why it moved from Safari's player to hls.js, if it did: 'error' or 'quality'.
@@ -118,6 +147,17 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
   const helpRef = useRef(null);
   const helpButtonRef = useRef(null);
   const errors = useRef([]);
+
+  // The language being heard: the audio track's, or before the tracks are known (or with
+  // the audio inside the picture's stream) the film's default audio. A forced track shows
+  // with subtitles Off when it's in this language.
+  const heard = audioTracks.find((t) => t.id === audioTrack);
+  const audioLanguage = heard ? heard.language : (film.media.audio.find((a) => a.default) || film.media.audio[0])?.language || null;
+  const shownIndex = showing(subtitles, subtitle, audioLanguage);
+  const forcedShowing = subtitle < 0 && shownIndex >= 0;
+
+  // An audio track for the menu, labelled with what the film's scan knows about it ("English · 5.1").
+  const audioEntry = (id, name, language) => ({ id, name: name || null, language: language || null, label: audioLabel({ id, name, language }, film.media.audio) });
 
   function logError(source, detail, { fatal = true, status = null } = {}) {
     errors.current = [...errors.current, { at: Date.now(), source, detail, fatal, status }].slice(-ERRORS_KEPT);
@@ -187,14 +227,31 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
 
     if (engine === 'native') {
       video.src = screening.masterUrl;
-      const onMeta = () => {
-        if (start) video.currentTime = start;
-      };
+      // The remembered audio language is applied once, when the tracks are known.
+      let audioStarted = false;
       const syncAudio = () => {
         const list = video.audioTracks ? Array.from(video.audioTracks) : [];
-        setAudioTracks(list.map((t, i) => ({ id: i, label: t.label || t.language || `Track ${i + 1}` })));
+        // Safari lists the film's audio only around loadedmetadata: wait for both,
+        // or French remembered would be used up on an empty list and never applied.
+        if (!audioStarted && list.length && video.readyState >= HAVE_METADATA) {
+          audioStarted = true;
+          // Safari has already enabled the track it would play: among equal matches, that one.
+          const id = initialAudio(list.map((t, i) => ({ id: i, language: t.language, default: t.enabled })), loadPrefs().audioLanguage);
+          if (id != null && !list[id].enabled) list.forEach((t, i) => (t.enabled = i === id));
+          enabledAudio.current = list.findIndex((t) => t.enabled);
+        }
+        setAudioTracks(list.map((t, i) => audioEntry(i, t.label, t.language)));
         const active = list.findIndex((t) => t.enabled);
         setAudioTrack(active >= 0 ? active : null);
+        // Picked in Safari's or the iPhone's own menu: remembered, as if picked in the bar.
+        if (audioStarted && active >= 0 && active !== enabledAudio.current) {
+          enabledAudio.current = active;
+          if (settled.current) savePrefs({ audioLanguage: list[active].language });
+        }
+      };
+      const onMeta = () => {
+        if (start) video.currentTime = start;
+        syncAudio();
       };
       // If Safari's own player gives up, carry on in hls.js from the same moment
       // (on Auto). If that fails too, its error handling explains why.
@@ -216,6 +273,8 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
       video.audioTracks?.addEventListener?.('change', syncAudio);
       video.play().catch(() => {});
       return () => {
+        // Also before metadata arrives: after a handover it would rewrite hls.js's audio list.
+        video.removeEventListener('loadedmetadata', onMeta);
         video.removeEventListener('error', onError);
         video.audioTracks?.removeEventListener?.('addtrack', syncAudio);
         video.audioTracks?.removeEventListener?.('change', syncAudio);
@@ -234,12 +293,19 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     hlsRef.current = hls;
     let networkRetries = 0;
 
+    // The first time the tracks are known: the audio track chosen in Safari's player, kept
+    // across the handover, or else the language this browser remembers. An empty list
+    // (audio inside the picture's stream) isn't knowing them yet.
+    let audioStarted = false;
     const syncAudio = () => {
-      // Keep the audio track chosen in Safari's player across the handover.
-      const carried = handoff.current.audioName && hls.audioTracks.find((t) => t.name === handoff.current.audioName);
-      handoff.current.audioName = null;
-      if (carried && carried.id !== hls.audioTrack) hls.audioTrack = carried.id;
-      setAudioTracks(hls.audioTracks.map((t) => ({ id: t.id, label: t.name || t.lang || `Track ${t.id + 1}` })));
+      if (!audioStarted && hls.audioTracks.length) {
+        audioStarted = true;
+        const carried = handoff.current.audioName && hls.audioTracks.find((t) => t.name === handoff.current.audioName);
+        handoff.current.audioName = null;
+        const id = carried ? carried.id : initialAudio(hls.audioTracks.map((t) => ({ id: t.id, language: t.lang, default: t.default })), loadPrefs().audioLanguage);
+        if (id != null && id !== hls.audioTrack) hls.audioTrack = id;
+      }
+      setAudioTracks(hls.audioTracks.map((t) => audioEntry(t.id, t.name, t.lang)));
       setAudioTrack(hls.audioTrack);
     };
     hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, syncAudio);
@@ -294,6 +360,17 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine]);
 
+  // From here on, a track the browser shows or enables is taken for the viewer's pick.
+  useEffect(() => {
+    const video = videoRef.current;
+    const settle = () => {
+      settled.current = true;
+    };
+    const events = ['playing', 'pointerdown', 'keydown'];
+    events.forEach((e) => video.addEventListener(e, settle));
+    return () => events.forEach((e) => video.removeEventListener(e, settle));
+  }, []);
+
   useEffect(() => {
     const video = videoRef.current;
     const onTime = () => {
@@ -339,12 +416,70 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- subtitles: one <track> per sidecar file, shown on request
-  useEffect(() => {
+  // Show one subtitle track (-1: none) and turn the others off, noting which, so the
+  // change events this causes aren't taken for the viewer's.
+  function showTrack(index) {
+    shownTrack.current = index;
     trackRefs.forEach((ref, i) => {
-      if (ref.current?.track) ref.current.track.mode = i === subtitle ? 'showing' : 'disabled';
+      if (ref.current?.track) ref.current.track.mode = i === index ? 'showing' : 'disabled';
     });
-  }, [subtitle, trackRefs]);
+  }
+
+  // ---- subtitles: one <track> per sidecar file. The chosen ones show, or with subtitles
+  // Off, the forced track for the audio being heard, following it when the audio changes.
+  useEffect(() => {
+    showTrack(shownIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shownIndex, trackRefs]);
+
+  // ---- the browser's own subtitle menu (Safari's, the iPhone's in full screen, Chrome's):
+  // a pick there moves the bar and is remembered, as if made in the bar.
+  useEffect(() => {
+    if (halted) return undefined;
+    const list = videoRef.current.textTracks;
+    const onChange = () => {
+      const on = trackRefs.flatMap((ref, i) => (ref.current?.track?.mode === 'showing' ? [i] : []));
+      // The browser may show its pick a moment before it turns the player's off.
+      const picked = on.find((i) => i !== shownTrack.current) ?? on[0] ?? -1;
+      if (picked === shownTrack.current) return;
+      if (!settled.current) {
+        showTrack(shownTrack.current);
+        return;
+      }
+      // A forced track picked there counts as Off, and is remembered as Off: it shows by
+      // itself whenever the audio calls for it.
+      const forced = picked >= 0 && Boolean(subtitles[picked].forced);
+      const chosen = forced ? -1 : picked;
+      savePrefs({ subtitles: chosen < 0 ? 'off' : subtitles[chosen].language });
+      setSubtitle(chosen);
+      showTrack(showing(subtitles, chosen, audioLanguage));
+    };
+    list.addEventListener('change', onChange);
+    return () => list.removeEventListener('change', onChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [halted, subtitles, trackRefs, audioLanguage]);
+
+  // Escape (focus goes back to Aa), a click elsewhere, or tabbing out closes the style panel.
+  useEffect(() => {
+    if (!styleOpen) return undefined;
+    const close = (e) => {
+      if (e.type === 'keydown') {
+        if (e.key !== 'Escape') return;
+        setStyleOpen(false);
+        styleButtonRef.current?.focus();
+      } else if (!styleRef.current?.contains(e.target)) {
+        setStyleOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', close);
+    document.addEventListener('focusin', close);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('keydown', close);
+      document.removeEventListener('focusin', close);
+    };
+  }, [styleOpen]);
 
   // In Safari: picking a quality moves playback to hls.js at the same moment.
   // hls.js turns AirPlay off, so Auto stays on Safari's own player until then.
@@ -357,7 +492,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     handoff.current = {
       position: position(),
       rendition,
-      audioName: audioTracks.find((t) => t.id === audioTrack)?.label || null,
+      audioName: audioTracks.find((t) => t.id === audioTrack)?.name || null,
     };
     setAudioTracks([]);
     setLevels([]);
@@ -376,14 +511,34 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     setLevel(n);
   }
 
+  // The bar's choices are the viewer's own, so they're remembered for the next film.
   function chooseAudio(id) {
     if (halted) return;
     const n = Number(id);
     if (hlsRef.current) hlsRef.current.audioTrack = n;
     else if (videoRef.current?.audioTracks) {
+      enabledAudio.current = n;
       Array.from(videoRef.current.audioTracks).forEach((t, i) => (t.enabled = i === n));
     }
     setAudioTrack(n);
+    savePrefs({ audioLanguage: audioTracks.find((t) => t.id === n)?.language });
+  }
+
+  function chooseSubtitle(value) {
+    if (halted) return;
+    const n = Number(value);
+    setSubtitle(n);
+    savePrefs({ subtitles: n < 0 ? 'off' : subtitles[n]?.language });
+  }
+
+  function chooseCueSize(size) {
+    setCueSize(size);
+    savePrefs({ subtitleSize: size });
+  }
+
+  function chooseCueBackground(background) {
+    setCueBackground(background);
+    savePrefs({ subtitleBackground: background });
   }
 
   // From the halt message: open the panel and bring it into view.
@@ -403,7 +558,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
 
   return (
     <>
-      <div style={{ position: 'relative' }}>
+      <div className={`cues-${cueSize} cues-${cueBackground}`} style={{ position: 'relative' }}>
         <video ref={videoRef} controls playsInline preload="metadata" poster={film.backdropUrl || undefined}>
           {subtitles.map((s, i) => (
             <track key={s.url} ref={trackRefs[i]} kind="subtitles" src={s.url} srcLang={s.language} label={s.label} />
@@ -440,18 +595,56 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
             </select>
           </label>
         )}
-        {subtitles.length > 0 && (
+        {listed.length > 0 && (
           <label>
             Subtitles
-            <select value={subtitle} onChange={(e) => setSubtitle(Number(e.target.value))}>
-              <option value={-1}>Off</option>
-              {subtitles.map((s, i) => (
-                <option key={s.url} value={i}>
+            <select value={subtitle} onChange={(e) => chooseSubtitle(e.target.value)} disabled={Boolean(halted)}>
+              <option value={-1}>{forcedShowing ? 'Off · signs and foreign dialogue shown' : 'Off'}</option>
+              {listed.map((s) => (
+                <option key={s.index} value={s.index}>
                   {s.label}
                 </option>
               ))}
             </select>
           </label>
+        )}
+        {subtitles.length > 0 && (
+          <div className="cue-style" ref={styleRef}>
+            <button
+              ref={styleButtonRef}
+              type="button"
+              className="cue-style-button"
+              title="Subtitle style"
+              aria-expanded={styleOpen}
+              aria-controls={styleId}
+              onClick={() => setStyleOpen(!styleOpen)}
+            >
+              Aa<span className="visually-hidden"> subtitle style</span>
+            </button>
+            {styleOpen && (
+              <div id={styleId} className="cue-style-panel" role="group" aria-label="Subtitle style">
+                <fieldset>
+                  <legend>Size</legend>
+                  {SUBTITLE_SIZES.map((size) => (
+                    <label key={size}>
+                      <input type="radio" name={`${styleId}-size`} checked={cueSize === size} onChange={() => chooseCueSize(size)} />
+                      {SIZE_LABELS[size]}
+                    </label>
+                  ))}
+                </fieldset>
+                <fieldset>
+                  <legend>Background</legend>
+                  {SUBTITLE_BACKGROUNDS.map((background) => (
+                    <label key={background}>
+                      <input type="radio" name={`${styleId}-background`} checked={cueBackground === background} onChange={() => chooseCueBackground(background)} />
+                      {BACKGROUND_LABELS[background]}
+                    </label>
+                  ))}
+                </fieldset>
+                <p>On iPhone in full screen, and on AirPlay, your device's own caption style applies (Settings ▸ Accessibility ▸ Subtitles &amp; Captioning).</p>
+              </div>
+            )}
+          </div>
         )}
         <span className="spacer" />
         {engine === 'native' ? (
@@ -502,7 +695,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
           renditions={film.media.renditions}
           quality={engine === 'hls' && level >= 0 ? levels.find((l) => l.index === level)?.label || 'Auto' : 'Auto'}
           audio={audioTracks.find((t) => t.id === audioTrack)?.label ?? null}
-          subtitles={subtitles[subtitle]?.label ?? null}
+          subtitles={forcedShowing ? `Off (${languageName(subtitles[shownIndex].language)} forced subtitles showing)` : (subtitles[subtitle]?.label ?? null)}
           onClose={closeHelp}
         />
       )}

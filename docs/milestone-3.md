@@ -54,11 +54,17 @@ to restart it. The player's message offers help only when playback itself went w
 (an error, a refusal, a browser that can't play the film), not when the ticket has
 ended or another device has taken over.
 
-### Proposed, to confirm as each slice starts
+### Audio and subtitles (3 November, as slice 2 started)
 
-- **Remembered choices stay in the browser** (audio language, subtitle language or
-  off, subtitle size). Nothing new is stored on the server, and a person's choice
-  doesn't follow them to another device.
+| Decision | Choice |
+|---|---|
+| Remembered choices | **They stay in each browser**: the audio language, the subtitle language or Off, and the subtitles' size and background. Nothing new is stored on the server or sent to it, so a choice made on the iPhone doesn't change the Mac. Preferences that follow a person are milestone 4. |
+
+Our own call, within that: only a choice the viewer makes is remembered, in the bar or
+in the browser's own menu, never one the player makes by itself as a film starts. So a
+film's default subtitles don't become the choice for the next film. The browser keeps
+language codes and the two style settings, never a title, an address or anything else
+that says which film was playing.
 
 ## Slices
 
@@ -98,27 +104,45 @@ opening neither records anything.
 
 ### 2. Audio and subtitles
 
-- **Remembered choices.** The audio language and the subtitle language (or Off) you
-  pick are kept in the browser and used for the next film, when that film has them.
-  A film's own `default` subtitle still applies the first time.
+- **Remembered choices.** What you pick is kept in the browser (`localStorage`, under
+  one key): the audio language, the subtitle language or Off, and the subtitles' size
+  and background. The next film starts in those languages when it has them: the same
+  language first, then the same language from another region (`fr` for `fr-CA`). A
+  film's own `default` subtitles apply when nothing is remembered, or when the
+  remembered language isn't one it has; a remembered Off stays Off. Only the choices
+  you make are saved, never what the player picks by itself as the film starts. A
+  browser that won't store anything (a private window, say) simply remembers nothing.
 - **Forced subtitles.** A track marked `forced` in `film.json` (foreign-language
-  dialogue, signs) is shown when subtitles are Off and its language matches the audio
-  you're hearing. The menu says so ("Off · signs and foreign dialogue shown").
-  Choosing another audio language switches it with you.
-- **Subtitle size and background**: Small, Medium, Large; a shadow or a box. Applied
-  through `::cue`. iPhone fullscreen and AirPlay use the system's own caption style
+  dialogue, signs) is never in the menu. It shows by itself while subtitles are Off
+  and its language matches the audio you're hearing, and follows you when you choose
+  another audio language. Off then reads "Off · signs and foreign dialogue shown".
+  Only one subtitle track ever shows, and a film whose only subtitles are forced has
+  no subtitle menu. The language heard comes from the playlist's audio tracks
+  (`LANGUAGE`, which `scripts/encode.mjs` always writes): with the audio inside the
+  picture's stream and no language known, no forced track shows.
+- **Subtitle size and background**: an **Aa** button beside the subtitle menu opens a
+  small panel with Size (Small, Medium, Large) and Background (Shadow, Box), applied
+  through `::cue`. It's there whenever a film has subtitles that can show, forced ones
+  included. iPhone fullscreen and AirPlay use the system's own caption style
   (Settings ▸ Accessibility ▸ Subtitles & Captioning), and the panel says so rather
   than pretending.
 - **The bar and the player agree.** Choosing subtitles in Safari's or the iPhone's own
-  menu updates the bar, and the other way round (`textTracks` change events), so the
-  remembered choice is the one you actually made.
+  menu updates the bar and is remembered, and a choice made in the bar shows in theirs
+  (`textTracks` change events). A forced track picked there counts as Off. The player
+  ignores the changes it makes itself, so nothing it does on its own is saved. Audio
+  chosen in Safari's own menu is remembered the same way.
 - **Clearer labels**: the audio menu shows the channel layout the encoder recorded
-  ("English · 5.1"), and a film with one audio track and no subtitles shows no menus.
+  ("English · 5.1"), and "Audio description" for a track marked as one. A film with
+  one audio track and no subtitles to choose shows no menus.
+- **Playback help** says when forced subtitles are showing ("Off (French forced
+  subtitles showing)"), by language only.
+- No server change: nothing new is stored on the server or sent to it.
 
 **Done when** on Mac Safari, iPhone Safari (inline and fullscreen) and Chrome: a
 second film starts in the language chosen for the first; Test Pattern, given a forced
-French track for the purpose, shows it with French audio and subtitles Off; and the
-bar and the native menu never disagree.
+French track for the purpose, shows it with French audio and subtitles Off; the bar
+and the native menu never disagree; and the size and background apply inline, while
+iPhone fullscreen uses the system's style.
 
 ### 3. Media Session and Playback help
 

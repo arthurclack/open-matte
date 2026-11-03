@@ -159,6 +159,43 @@ Branding**:
 - A preview is made once and kept by the app, so check with a ticket that has never been
   pasted anywhere.
 
+### Audio and subtitles
+
+Once slice 2 is deployed, give Test Pattern a forced French track: add this to the
+`subtitles` in its `film.json` on the server (a copy of any short WebVTT file will do
+for the file), then press **Scan media folder**.
+
+```json
+{ "language": "fr", "label": "French (forced)", "file": "subtitles/fr.forced.vtt", "forced": true }
+```
+
+It can stay afterwards: it shows only with French audio and subtitles Off. Do these on
+Mac Safari, iPhone Safari (inline, then in fullscreen) and Chrome. Each browser
+remembers its own choices, so make them again in each.
+
+- **The next film starts in your language**: in Test Pattern, choose subtitles in a
+  language another film has, and French audio if that film has French audio too. Then
+  open that film: it should start with them, without touching the menus. Turn
+  subtitles Off in Test Pattern, then open the other film again: it starts with none,
+  even if it has a default track.
+- **Forced subtitles**: in Test Pattern, choose French audio and turn subtitles Off.
+  The forced track should show, with the subtitle menu reading "Off · signs and
+  foreign dialogue shown" and the forced track not listed in it. Switch to English
+  audio: it goes, and the menu reads "Off". Back to French: it returns. On the iPhone,
+  it should show in fullscreen too. In **Playback help**, the Subtitles line says
+  "Off (French forced subtitles showing)" while it shows.
+- **The bar and the browser's own menu agree**: choose subtitles from the browser's
+  own menu (in Safari's controls, the iPhone's fullscreen player, or Chrome's controls
+  if they offer subtitles). The bar should show the same choice, and the next film
+  starts with it. Choose in the bar, and the browser's menu shows the same. Picking
+  the forced French track from the browser's menu leaves the bar at Off. Do the same
+  with audio in Safari's own menu.
+- **Size and background**: with subtitles on, press **Aa** beside the subtitle menu
+  and try each size and background. The subtitles change at once, inline, and the
+  next film keeps them. Escape closes the panel. On the iPhone in fullscreen, the
+  subtitles follow the system's own style instead (Settings ▸ Accessibility ▸
+  Subtitles & Captioning), as the panel says.
+
 ### Lock screen and Playback help
 
 Once slice 3 is deployed, with your ticket for Test Pattern (or, in a browser that
@@ -199,6 +236,10 @@ an error.
 | Branding, iPhone and Mac Safari | – | |
 | WhatsApp preview (for anyone / only for you) | – | |
 | iMessage preview (for anyone / only for you) | – | |
+| Audio and subtitles, Mac Safari (next film, forced, menus agree, size and background) | – | |
+| Audio and subtitles, iPhone Safari inline (the same) | – | |
+| Audio and subtitles, iPhone Safari fullscreen (next film, forced, menus agree, system caption style) | – | |
+| Audio and subtitles, Chrome (next film, forced, menus agree, size and background) | – | |
 | Lock screen and Control Center, iPhone (title, poster, controls, headphones) | – | |
 | Chrome's media controls, Mac | – | |
 | Lock screen with the setting off (cinema's name only) | – | |
