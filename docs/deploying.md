@@ -1,381 +1,645 @@
-# Deploying
+# Running Open Matte
 
-Open Matte runs as one container behind Caddy, which handles HTTPS. You need a
-server with Docker and a domain whose DNS points at it. Passkeys need HTTPS on a
-stable domain, which this setup provides, and one setting you choose once:
-`WEBAUTHN_RP_ID` (see [Passkeys](#passkeys)).
+Everything after [installing.md](installing.md): adding films, changing settings,
+updating, backups and restoring, rolling back, moving to a new server, keeping an eye
+on it, and removing it.
 
-## First install (Ubuntu)
+The paths are the defaults from installing.md. Commands on the server run as your
+user with id 1000, and those starting with `docker compose` run in
+`/srv/open-matte/app/deploy`. The examples use `cinema.example.com` for the site and
+`my-server` for the server's SSH name.
 
-On the server:
+## Adding films
 
-```bash
-sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2
-sudo usermod -aG docker "$USER"            # log out and back in afterwards
-sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw allow 443/udp
-sudo mkdir -p /srv/open-matte/{app,data,media,backups} && sudo chown -R "$USER": /srv/open-matte
-```
-
-From your computer, copy the app over:
-
-```bash
-scripts/deploy.sh my-server          # an SSH host name from ~/.ssh/config
-```
-
-The first run stops because `deploy/.env` doesn't exist yet. On the server:
-
-```bash
-cd /srv/open-matte/app/deploy
-cp .env.example .env
-nano .env                            # set DOMAIN, ADMIN_PASSWORD and WEBAUTHN_RP_ID
-chmod 600 .env
-docker compose up -d --build
-```
-
-Caddy fetches a certificate on first start. Then open `https://your-domain/admin`.
-
-To send other names to the site, such as the bare domain when `DOMAIN` is
-`www.example.com`, list them as `REDIRECT_FROM` in `deploy/.env`, separated by spaces,
-and point their DNS at the server too: an A record, and an AAAA record only if
-`DOMAIN` has one (see [IPv6 and rate limits](#ipv6-and-rate-limits)). Caddy gets their
-certificates and answers every request there with a permanent redirect to the same
-path on `DOMAIN`; nothing else is served on them, so passkeys only ever run on
-`DOMAIN`. After changing it, `docker compose up -d caddy` picks it up. This deployment
-sends `openmatte.dev` to `www.openmatte.dev`.
-
-The data directory must be writable by uid 1000 (the container's `node` user).
-
-## Passkeys
-
-People you add sign in with passkeys, and every passkey belongs to one domain: the
-**relying-party ID**, set as `WEBAUTHN_RP_ID` in `deploy/.env`. It must be your
-`DOMAIN` or a parent of it, so for `DOMAIN=www.example.com` there are two choices:
-
-- `www.example.com`: this exact site only.
-- `example.com`: also covers the bare domain or another subdomain, should the site
-  ever move there. In return, every subdomain of `example.com` must stay under your
-  control, since browsers treat them all as the same site.
-
-This deployment uses `openmatte.dev`, with `DOMAIN=www.openmatte.dev`.
-
-**Choose it once, before you create the first setup link.** Every passkey is tied to
-it for good: browsers only offer a passkey on the domain it was made for (and its
-subdomains), so changing the ID, or moving the site to another domain altogether,
-leaves every existing passkey useless. Each person would then need a recovery link
-from you to create a new one. The cinema name and people's names can change freely.
-
-The app checks the setting when it starts. It must be a lowercase domain name with at
-least one dot, without `https://`, a port or a path, and not an IP address, and the
-site must be on https (behind Caddy, it is). When all is well, the log says:
-
-```text
-Passkeys: RP ID openmatte.dev, origin https://www.openmatte.dev
-```
-
-Otherwise it says `Passkeys unavailable:` and why, the admin's People and Settings
-pages show a banner, setup links can't be created, and passkey requests answer 503
-`passkeys-unavailable`. Everything else, ticket links included, carries on as
-normal. To check after a deploy:
-
-```bash
-cd /srv/open-matte/app/deploy && docker compose logs app | grep Passkeys
-```
-
-In development you don't set it: with no `PUBLIC_URL`, or one on `localhost`,
-passkeys belong to `localhost` and work at `http://localhost` on any port. Use
-`localhost`, never `127.0.0.1`: browsers won't use passkeys on an IP address.
-
-TV browsers and the built-in browsers of apps such as Instagram and Facebook usually
-can't use passkeys, so they can't use tickets for one person. For a TV, issue a
-ticket for anyone with the link. Someone who opens their ticket in an app's browser
-can open it again in Safari or Chrome: the code stays in the address until they sign
-in.
-
-### Testing from home
-
-Passkeys only work when the browser itself visits the site's real name, so tricks
-like `curl --resolve` don't help. That matters if your home network blocks or
-rewrites your own domain, as some gateways and DNS filters do (this deployment's
-home gateway sinkholes openmatte.dev). For each check, either:
-
-- put the device on a phone's hotspot (or use the phone itself on mobile data, with
-  Wi-Fi off);
-- allow the domain on the gateway or filter for the session; or
-- on a computer, point the name at the server in its hosts file. Here that's this
-  line in `/etc/hosts`:
-
-  ```text
-  65.21.54.126 www.openmatte.dev
-  ```
-
-  The certificate stays valid, because the name is still right. On a Mac, run
-  `sudo killall -HUP mDNSResponder` afterwards so it takes effect. Take the line out
-  when you've finished, or you won't notice if the server's address changes.
-
-A TV can't have a hosts file, so it needs the hotspot or the gateway exception.
-
-The same goes for checking a ticket link's preview in iMessage or WhatsApp: the phone
-that sends the link fetches the preview itself, so it needs mobile data or the
-gateway exception.
-
-## Adding a film
+As for the first one ([installing.md](installing.md#the-first-film)): prepare the
+folder on your computer, copy it to the server, and scan. On your computer:
 
 ```bash
 rsync -av --partial-dir=.rsync-partial --progress media/arrival/ my-server:/srv/open-matte/media/arrival/
 ```
 
-Then press **Scan media folder** in the admin. If the scan reports missing
-segments, the copy didn't finish: run the same `rsync` again. `--partial-dir`
-keeps a half-copied file out of sight until it's complete (plain `--partial`
-would leave it under its real name, where a scan could take it for a whole one).
+Then press **Scan media folder** in the admin. If the scan reports missing segments,
+the copy didn't finish: run the same `rsync` again. `--partial-dir` keeps a
+half-copied file out of sight until it's complete (plain `--partial` would leave it
+under its real name, where a scan could take it for a whole one). A new film is always
+a draft until you publish it.
+
+To take a film down, press **Unpublish** on its page. Deleting its folder as well
+frees the space: the next scan marks the film missing, keeping its tickets and
+activity, and it comes back if the folder does. Don't rename a film's folder once
+tickets are out ([import-format.md](import-format.md#rescans-and-your-edits)).
+
+## Changing settings
+
+Edit `deploy/.env` ([the settings](installing.md#settings)), then:
+
+```bash
+docker compose up -d
+```
+
+Compose restarts only the containers whose settings changed. `docker compose restart`
+isn't enough: a container keeps the settings it was created with, and only `up -d`
+reads `deploy/.env` again. Two settings are for good: changing `DOMAIN` breaks the
+links you've sent, and changing `WEBAUTHN_RP_ID` every passkey
+([Choices you make once](installing.md#choices-you-make-once)).
+
+A new `ADMIN_PASSWORD` signs every browser out of the admin, yours included, and only
+the new password signs in.
 
 ## Updating
 
-**Before each update**, so you can go back:
+### Before you update
 
-1. Tag the commit you're about to deploy, so every version that has run has a name.
-   If the code running now was never tagged, tag that first (here, milestone 1 is
-   commit `b28a56d`):
-
-   ```bash
-   git tag milestone-1 b28a56d          # once, for what's running now
-   git tag m2-slice-1                   # what you're about to deploy
-   ```
-
-2. In the admin, press **Settings → Backups → Back up now**.
-3. Copy that backup off the server. **Back up now** writes to the same disk as the
-   database, and the off-server copy (below) only runs once a day.
+1. **Read the [changelog](../CHANGELOG.md)** for every release between the one you
+   run and the one you're updating to. A release with an **Upgrading** note needs
+   more than new code: a backup first, a setting to choose, or a migration you can't
+   go back from without a restore.
+2. **Back up.** In the admin, press **Settings → Backups → Back up now**.
+3. **Copy that backup off the server.** **Back up now** writes to the same disk as the
+   database, and the off-server copy (below) only runs once a day. On your computer:
 
    ```bash
    ssh my-server 'ls -t /srv/open-matte/backups/*.db | head -1'    # the one you just made
-   scp my-server:/srv/open-matte/backups/open-matte-2026-10-26-153012.db .
+   scp my-server:/srv/open-matte/backups/open-matte-2026-11-03-153012.db .
    ```
 
-Then:
+4. **Note the version you run now**, in case you need to go back. **Status** in the
+   admin shows it, and so does the foot of **Settings**. With git,
+   `git -C /srv/open-matte/app describe --tags` gives the release.
+
+### Updating with git
+
+On the server, with the release you're updating to:
 
 ```bash
+cd /srv/open-matte/app
+git fetch --tags
+git checkout v1.1.0
+cd deploy
+docker compose up -d --build
+```
+
+### Updating with scripts/deploy.sh
+
+On your computer, check out the release (or your own branch) and deploy it:
+
+```bash
+git checkout v1.1.0
 scripts/deploy.sh my-server
 ```
 
-This copies the code and rebuilds; the database and films are untouched.
-Database migrations run automatically on start.
+`deploy.sh` copies whatever is checked out, uncommitted changes included, then runs
+`docker compose up -d --build` on the server. The database, films and `deploy/.env`
+are left alone.
 
-To run the tests on exactly the Node and SQLite the site now runs on (the server's
-image, which can differ from your computer's), use a throwaway container from that
-image, with no network and none of the site's data:
+### After an update
+
+The database's migrations run when the new code starts. Once they have, older code
+refuses to open it, and going back needs the backup you took
+([Rolling back](#rolling-back)). Check that it started:
 
 ```bash
-ssh my-server "docker run --rm --network none -e NODE_ENV=test \
-  -v /srv/open-matte/app/test:/app/test:ro -w /app deploy-app node --test 'test/*.test.js'"
+docker compose ps
+docker compose logs app | grep -E 'Passkeys|Error'
 ```
 
-Before the first milestone 2 update (people and passkeys), set `WEBAUTHN_RP_ID`
-(above), so it's in place before anyone creates a setup link, and check that no film
-folder is called `account`: that name is now reserved for the site, like `admin` and
-`api`, and a scan would skip it.
+**Status** in the admin shows the new version and the schema the database is on.
 
-From milestone 2's second update (tickets for one person) on, going back to older
-code always needs a restore of the backup you took before it: see
-[Rolling back](#rolling-back).
+Each build leaves the previous image behind, unnamed. To remove those:
 
-Milestone 3's activity and retention update (slice 4) has a migration, to schema 7, so
-take the backup above first: going back to older code needs it. About a minute after
-the new code starts, its first clean-up deletes progress reports over 30 days old,
-other events over 12 months old, and browser sessions that ended over 30 days ago
-and that no remaining event names (see
-[access.md](access.md#how-long-its-kept)). Backups taken before then still have them.
+```bash
+docker image prune -f
+```
+
+### Your own changes to the Docker setup
+
+Leave `compose.yml` as it is, so updates don't clash with your edits. Put your
+additions in `deploy/compose.override.yml` instead: Docker Compose reads it alongside
+`compose.yml` by itself, and adds what it says. For example, an extra folder for the
+app (see [Keeping a copy off the server](#keeping-a-copy-off-the-server)):
+
+```yaml
+# deploy/compose.override.yml: additions to compose.yml for this server.
+services:
+  app:
+    volumes:
+      - /mnt/backup-copy/open-matte:/backup-copy:ro
+```
+
+Git leaves the file alone. With `deploy.sh`, keep it in `deploy/` on your computer:
+the script makes the server's copy of the code match yours, so a file only on the
+server would be deleted. The changelog says when `compose.yml` or the `Caddyfile`
+change, so you can check your additions still fit.
+
+### Keeping the images up to date
+
+The image is built on Node's official `node:24-slim`, and Caddy runs from `caddy:2`.
+Both get security fixes between Open Matte releases. To pick them up:
+
+```bash
+docker compose pull caddy
+docker compose build --pull app
+docker compose up -d
+docker image prune -f
+```
+
+Ubuntu installs its own security updates by itself. After a reboot, Docker starts both
+containers again, unless you stopped them with `docker compose stop`.
+
+### Running the tests on the server
+
+To run the tests on exactly the Node and SQLite the site runs on, use a throwaway
+container from the site's image (`deploy-app`), with no network and none of the
+site's data:
+
+```bash
+docker run --rm --network none -e NODE_ENV=test \
+  -v /srv/open-matte/app/test:/app/test:ro -w /app deploy-app node --test 'test/*.test.js'
+```
+
+The image has no web app source, so the few tests that read it are reported as
+skipped.
 
 ## Backups
 
 Nearly everything Open Matte knows lives in its database: films' details, tickets,
-screenings and activity, people and their passkeys, settings (including a TMDB key
+screenings and activity, people and their passkeys, and settings (including a TMDB key
 saved in the admin, and the cinema's colours). The exceptions are two folders of
-images in the data directory: posters downloaded from TMDB (`artwork`), and the logo
-and tab icon you uploaded (`branding`). Backups copy both. The films themselves
-aren't backed up here: keep your originals and encodes elsewhere, as you already do.
+images in the data folder: posters downloaded from TMDB (`artwork`), and the logo and
+tab icon you uploaded (`branding`). Backups copy both. The films themselves aren't
+backed up here: keep your originals and encodes elsewhere.
 
-**Automatic backups.** Every day at 04:00 UTC the app saves a consistent copy of
-the database, checks it, and keeps it in `/srv/open-matte/backups` (`BACKUP_PATH`
-in `deploy/.env`), as `open-matte-YYYY-MM-DD-HHMMSS.db`. It keeps the newest of
-each of the last 14 days and the first of each month for a year. Posters
-downloaded from TMDB are copied to `backups/artwork`, and the logo and tab icon to
-`backups/branding`. Backups only add to those two folders, never remove from them,
-so an older backup's logo is still there to restore. If the server was down at
-04:00, a backup runs shortly after it starts. **Settings → Backups** in the admin
-shows the latest and has a **Back up now** button. **Status** in the admin (the
-projection booth) shows when the newest backup file was written, the last error, and
-the off-server copy if you let it see one (below).
+**Every day**, between 04:00 and 04:15 UTC, the app saves a consistent copy of the
+database, checks it with SQLite's integrity check, and keeps it in
+`/srv/open-matte/backups` (`BACKUP_PATH`) as `open-matte-YYYY-MM-DD-HHMMSS.db`, named
+by its UTC time. It keeps the newest backup of each of the last 14 days and the
+first of each month for a year. Posters go to `backups/artwork`, and the logo and tab
+icon to `backups/branding`. Those two folders only grow, so an older backup's logo is
+still there to restore. If the server was down at 04:00, a backup runs shortly after it
+starts.
 
-Change the timing with `BACKUP_HOUR`, `BACKUP_KEEP_DAYS` and `BACKUP_KEEP_MONTHS`;
-turn backups off with `BACKUP_DIR=off`.
+**Settings → Backups** in the admin lists the latest and has **Back up now**. **Status**
+(the projection booth) shows when the newest backup file was written and the last
+error.
+
+`BACKUP_HOUR`, `BACKUP_KEEP_DAYS` and `BACKUP_KEEP_MONTHS` in `deploy/.env` change the
+timing and how many are kept. In this Docker setup backups are always on: they go
+wherever `BACKUP_PATH` says.
 
 **Backups keep what they had.** The app deletes old activity and ended browser
-sessions after a while (see [access.md](access.md#how-long-its-kept)), but a backup
-is the database as it was, so it keeps them until the backup itself is deleted: the
-monthly backups hold up to a year of events the app has since deleted.
+sessions after a while ([access.md](access.md#how-long-its-kept)), but a backup is the
+database as it was, so it keeps them until the backup itself is deleted: the monthly
+backups hold up to a year of events the app has since deleted.
 
-**Keep a copy off the server.** Backups on the VPS protect against mistakes, not
-against losing the VPS. If you have network storage mounted (a Hetzner Storage
-Box, say), copy them there every day with the systemd timer in `deploy/systemd`
-(edit the paths first):
+Backups hold people's names, your notes about them and their activity, which are
+personal data. Keep every copy somewhere private.
+
+**Your settings aren't in the backups.** `deploy/.env`, and
+`deploy/compose.override.yml` if you have one, live only in
+`/srv/open-matte/app/deploy`. Keep a copy of them somewhere private off the server:
+`.env` holds the admin password, and the `WEBAUTHN_RP_ID` every passkey depends on.
+
+### Keeping a copy off the server
+
+Backups on the server protect against mistakes, not against losing the server. Copy
+them somewhere else every day. If the server has network storage mounted (a storage
+box from your hosting provider, or a share on a NAS), the systemd timer in
+`deploy/systemd` does it at 04:30 UTC, after the app's backup. It mirrors the backups
+folder with `rsync`, `artwork` and `branding` included.
+
+As shipped, it assumes the storage is mounted as the media folder, and copies into a
+hidden folder there, `.open-matte-backups` (the leading dot keeps it out of the film
+scan). Install it, then edit the installed copy for your server:
 
 ```bash
 sudo cp /srv/open-matte/app/deploy/systemd/open-matte-backup-copy.* /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now open-matte-backup-copy.timer
-sudo systemctl start open-matte-backup-copy.service     # once now, to check it works
+sudoedit /etc/systemd/system/open-matte-backup-copy.service
 ```
 
-To see the copy from the admin, set `BACKUP_COPY_DIR` in `deploy/.env` to the copy's
-folder as the app's container sees it. The projection booth then shows the newest
-backup there and its time, so you can tell whether the timer is keeping up. The app
-only reads the folder. Like the rest of the booth, it says what it found, a file and
-its time, and doesn't claim a restore from it would work. Here the timer copies to the
-Storage Box, which the container already sees, read-only, as its media folder:
+In the service, set `User=` to your user (the one with id 1000) in place of
+`CHANGE-ME`, `RequiresMountsFor=` to where the storage is mounted, and the last path
+in `ExecStart=` to the folder to copy into. If you changed `BACKUP_HOUR`, move
+`OnCalendar=` in the `.timer` file to match. Then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now open-matte-backup-copy.timer
+sudo systemctl start open-matte-backup-copy.service     # once now, to check it works
+systemctl status open-matte-backup-copy.service         # "status=0/SUCCESS" when it worked
+```
+
+`status=217/USER` means `User=` doesn't name a user on this server.
+
+The copy is a mirror: a backup the app deletes is deleted from the copy at the next
+run. It only runs while the storage is mounted, so it never fills an empty mount
+point.
+
+**Seeing the copy in the admin (optional).** Set `BACKUP_COPY_DIR` in `deploy/.env` to
+the copy's folder as the app's container sees it, and the projection booth shows the
+newest backup there and its time, so you can tell whether the timer is keeping up. The
+app only reads the folder. Like the rest of the booth, it says what it found, a file
+and its time, and doesn't claim a restore from it would work.
+
+With the timer as shipped, the copy is inside the media folder, which the container
+already sees as `/media`:
 
 ```bash
 BACKUP_COPY_DIR=/media/.open-matte-backups
 ```
 
-If your copy is somewhere the container can't see, mount it for the app, read-only,
-in `deploy/compose.yml`, next to the other `volumes`, and point `BACKUP_COPY_DIR` at
-where it appears. Make the change on your computer: `scripts/deploy.sh` copies
-`deploy/compose.yml` over the server's.
-
-```yaml
-      # The off-server copy of the backups, so the projection booth can see it.
-      - /mnt/storage/open-matte-backups:/backup-copy:ro
-```
+A copy anywhere else needs mounting for the app, read-only, in
+[`compose.override.yml`](#your-own-changes-to-the-docker-setup), as in the example
+there. Then:
 
 ```bash
 BACKUP_COPY_DIR=/backup-copy
 ```
 
-Then run `scripts/deploy.sh my-server`, or, if you only changed `.env`,
-`docker compose up -d app` on the server in `/srv/open-matte/app/deploy`. Without
-`BACKUP_COPY_DIR`, the booth says no off-server copy is set up.
+Run `docker compose up -d` after either. Without `BACKUP_COPY_DIR`, the booth says the
+off-server copy isn't checked.
 
-Your hosting provider's own snapshots (Hetzner's server backups, or Storage Box
-snapshots) are a good extra layer. Backups hold people's names and your notes about
-them, which are personal data, so keep every copy somewhere private.
+Your hosting provider's own snapshots of the server or the storage are a good extra
+layer.
 
-**Restoring.** Stop the app, put the backup in place, start it again:
+### Checking a backup
+
+The app checks every backup as it writes it, and keeps none that fails. To check a
+copy yourself, on a computer with the `sqlite3` command:
+
+```bash
+sqlite3 open-matte-2026-11-03-153012.db 'PRAGMA integrity_check; PRAGMA user_version;'
+```
+
+It prints `ok`, then the backup's schema number. Code opens a database at its own
+schema or an older one, never a newer one; the changelog says which release moved to
+which schema.
+
+The surest check is to restore one. You can try that on your computer without touching
+the server, in a copy of the code that you've installed and built as in [Running it
+locally](../README.md#running-it-locally):
+
+```bash
+mkdir -p ~/restore-test/data
+cp open-matte-2026-11-03-153012.db ~/restore-test/data/open-matte.db
+DATA_DIR=~/restore-test/data MEDIA_DIR=~/restore-test/media npm run dev
+```
+
+Open `http://localhost:3000/admin` and sign in with the password in your local `.env`.
+Everything but the films is there to look at: their folders aren't, so the scan says
+the media folder doesn't exist, and nothing plays. Delete `~/restore-test` when you've
+finished, since it holds the same personal data as the backup.
+
+## Restoring
+
+If you might want anything from the database as it is now, press **Back up now**
+first: restoring replaces it. Then, on the server, stop the app, put the backup in
+place and start it again:
 
 ```bash
 cd /srv/open-matte/app/deploy && docker compose stop app
-cp /srv/open-matte/backups/open-matte-2026-10-26-040000.db /srv/open-matte/data/open-matte.db
+cp /srv/open-matte/backups/open-matte-2026-11-03-040012.db /srv/open-matte/data/open-matte.db
 rm -f /srv/open-matte/data/open-matte.db-wal /srv/open-matte/data/open-matte.db-shm
-cp -rn /srv/open-matte/backups/artwork/. /srv/open-matte/data/artwork/
-cp -rn /srv/open-matte/backups/branding/. /srv/open-matte/data/branding/
+cp -r /srv/open-matte/backups/artwork/. /srv/open-matte/data/artwork
+cp -r /srv/open-matte/backups/branding/. /srv/open-matte/data/branding
 docker compose start app
 ```
 
 If no poster was ever downloaded from TMDB, or no logo or icon uploaded, there's no
-folder to copy, and that `cp` says "No such file or directory". Nothing is wrong.
+folder to copy, and that `cp` says "No such file or directory". Nothing is wrong. If
+the backup is no longer on the server, copy yours back first, from your computer:
 
-Viewers stay signed in, because their sessions are in the backup too, unless
-the backup is older than their sign-in.
+```bash
+scp open-matte-2026-11-03-040012.db my-server:/srv/open-matte/backups/
+```
 
-**After restoring an older backup, check People.** The backup knows nothing of what
-happened since it was made. Passkeys you removed since (one by one, or with **Reset
-after loss**) are back and work again; browsers you signed out (with **Sign out
-everywhere**, **Disable** or a reset) are signed in again; someone you disabled is
-enabled again; and a link cancelled or used since then
-works again until it expires. Remove those passkeys again, use **Sign out
-everywhere** or **Disable** where needed, and cancel any waiting link you didn't
-mean. Passkeys created since the backup are gone from the server, so those people
-can't sign in until you send them a new link.
+Viewers stay signed in, because their sessions are in the backup too, unless the
+backup is older than their sign-in. About a minute after the start, the clean-up
+deletes again whatever in the backup is older than you keep records for.
 
-**Don't delete people, passkeys or links by hand** (with `sqlite3`, say). Use the
-admin instead: **Remove** for a passkey, **Reset after loss**, **Disable** for a
-person. They sign out the browsers concerned first and record what happened in
-Activity; deleting a passkey's row by hand leaves every browser it signed in still
-signed in. People can't be deleted at all in this milestone: the app's database
-connection refuses while anything refers to them, and the `sqlite3` command line,
-which doesn't check that unless told to, would leave their passkeys, sessions and
-events pointing at nobody.
+### After restoring an older backup
 
-**Restoring onto a new server.** Follow **First install** up to the point where
-`docker compose up` would run, copy the films back into `media`, and put the
-database (and `artwork` and `branding`) in place as above before the first start.
-With the old server gone, take them from the off-server copy (`.open-matte-backups`
-on the Storage Box, if you set up the timer above). Use the same `DOMAIN`, or every
-ticket link you've sent stops working, and the same `WEBAUTHN_RP_ID`, or nobody's
-passkey works. The admin password isn't in the backup: it lives only in
-`deploy/.env`, so set a new one if the old `.env` is gone. A TMDB key saved in the
-admin is in the backup; one set in `.env` is not.
+**Check People.** The backup knows nothing of what happened since it was made.
+Passkeys you removed since (one by one, or with **Reset after loss**) are back and
+work again; browsers you signed out (with **Sign out everywhere**, **Disable** or a
+reset) are signed in again; someone you disabled is enabled again; and a link
+cancelled or used since then works again until it expires. Remove those passkeys
+again, use **Sign out everywhere** or **Disable** where needed, and cancel any waiting
+link you didn't mean. Passkeys created since the backup are gone from the server, so
+those people can't sign in until you send them a new link. Tickets you issued since
+are gone too, so their links no longer open anything.
+
+**Don't delete people, passkeys or links by hand** (with `sqlite3`, say). Use the admin
+instead: **Remove** for a passkey, **Reset after loss**, **Disable** for a person. They
+sign out the browsers concerned first and record what happened in Activity; deleting a
+passkey's row by hand leaves every browser it signed in still signed in. People can't
+be deleted at all: the app's database connection refuses while anything refers to
+them, and the `sqlite3` command line, which doesn't check that unless told to, would
+leave their passkeys, sessions and events pointing at nobody.
 
 ## Rolling back
 
-From milestone 2 on, the app refuses to open a database written by newer code. Deploy
-older code without restoring, and it stops at start with:
+The app refuses to open a database written by newer code. Start older code on it, and
+the app stops at start, and Docker keeps restarting it, with:
 
 ```text
-This database was written by a newer Open Matte (schema 4; this code knows 3). Deploy the newer code, or restore a backup from before the upgrade.
+This database was written by a newer Open Matte (schema 8; this code knows 7). Deploy the newer code, or restore a backup from before the upgrade.
 ```
 
-So the backup has to be in place before the older code starts:
+A release whose changelog entry has no **Upgrading** note has no migration, so going
+back from it needs only the older code: check it out and rebuild, as below, without
+touching the database. Going back from any other release needs the backup you took
+before the update:
 
-1. Stop the app:
+1. **Stop the app.** On the server:
 
    ```bash
    cd /srv/open-matte/app/deploy && docker compose stop app
    ```
 
-2. Copy the backup taken before the update over `/srv/open-matte/data/open-matte.db`
-   and delete the `-wal` and `-shm` files, as in **Restoring** above, but **don't**
-   run its final `docker compose start app`: that would start the newer code, which
-   would migrate the restored database straight back. If the backup is no longer on
-   the server, `scp` your off-server copy back first.
+2. **Put back the backup you took before the update**, with the commands in
+   [Restoring](#restoring), but **without** its last line, `docker compose start app`:
+   that would start the newer code, which would migrate the restored database
+   straight back.
+3. **Start the older release.** With git, on the server:
 
    ```bash
-   cp /srv/open-matte/backups/open-matte-2026-10-26-153012.db /srv/open-matte/data/open-matte.db
-   rm -f /srv/open-matte/data/open-matte.db-wal /srv/open-matte/data/open-matte.db-shm
-   cp -rn /srv/open-matte/backups/artwork/. /srv/open-matte/data/artwork/
-   cp -rn /srv/open-matte/backups/branding/. /srv/open-matte/data/branding/
+   cd /srv/open-matte/app
+   git checkout v1.0.0
+   cd deploy
+   docker compose up -d --build
    ```
 
-3. On your computer, check out the previous tag and deploy it. `deploy.sh` runs
-   `docker compose up -d --build`, which builds and starts the older code:
+   With `scripts/deploy.sh`, on your computer, with no uncommitted changes (it copies
+   whatever is checked out):
 
    ```bash
-   git checkout milestone-1
+   git checkout v1.0.0
    scripts/deploy.sh my-server
    ```
 
-   `deploy.sh` copies whatever is checked out, so do this with no uncommitted
-   changes, and check your branch out again afterwards.
+   Check your branch out again afterwards.
+4. **Check** that `docker compose logs app` shows no `newer Open Matte` line, and that
+   **Status** shows the older version.
 
-Screenings, events, people and tickets written since that backup are lost.
+Screenings, events, people and tickets written since that backup are lost. When you
+update again, the migrations run again on the restored database.
 
-From milestone 2's second update (tickets for one person) on, always restore. The
-only rollback that ever worked without one was from the first update (people and
-passkeys) back to milestone 1 (`b28a56d`), while no ticket for one person existed.
-Don't try that now: milestone 1 code has no guard and ignores who a ticket is for, so
-started on a database that has tickets for one person, it would run, and let anyone
-with their links use them. Code from the first update onwards has the guard, and
-stops as above.
+## Moving to a new server
+
+Everything that matters moves with the data folder: tickets, screenings, people,
+passkeys, settings, posters and the logo. Keep the same `DOMAIN`, or every link you've
+sent stops working, and the same `WEBAUTHN_RP_ID`, or nobody's passkey works.
+
+### With the old server still running
+
+1. **A day ahead, lower the TTL** of the DNS records (to 300 seconds, say), so the
+   switch reaches everyone quickly.
+2. **Set up the new server** as in installing.md, from
+   [The server](installing.md#the-server) to [Settings](installing.md#settings), and
+   don't start it. Use the same release the old server runs, and copy its
+   `deploy/.env` across, and `deploy/compose.override.yml` if it has one (with
+   `deploy.sh`, that's already in your copy of the code). The `.env` has the same
+   `DOMAIN` and `WEBAUTHN_RP_ID`, and the admin password.
+3. **Copy the films** to the new server's media folder, from your computer as you
+   added them, or from the old server.
+4. **On the old server, stop the app and the copy timer**, so nothing changes from here
+   on. The site is down until the new server answers.
+
+   ```bash
+   cd /srv/open-matte/app/deploy && docker compose stop app
+   sudo systemctl disable --now open-matte-backup-copy.timer
+   ```
+
+5. **Copy the data and backups folders.** On the new server, if it can reach the old
+   one over SSH (as `old-server` here):
+
+   ```bash
+   rsync -a old-server:/srv/open-matte/data/ /srv/open-matte/data/
+   rsync -a old-server:/srv/open-matte/backups/ /srv/open-matte/backups/
+   ```
+
+   Otherwise copy them through your computer with `rsync` in two steps, and delete the
+   copy on your computer afterwards.
+6. **Point the DNS records at the new server**, and wait until
+   `dig +short cinema.example.com` gives its address.
+7. **Start the new server** with `docker compose up -d --build`. Caddy gets new
+   certificates once the names lead to it.
+8. **Check** as in [Checking it works](installing.md#checking-it-works): the
+   `Passkeys:` line, **Status** (the version, the films found, the schema), a ticket
+   link you've already sent, and someone signing in with their passkey.
+9. **Set up the off-server copy** on the new server
+   ([Keeping a copy off the server](#keeping-a-copy-off-the-server)). It mirrors, so it
+   deletes from the copy whatever isn't in the server's backups folder: that's why the
+   old backups came across in step 5. And it's why the old server's timer is off: two
+   servers mirroring into one folder delete each other's backups.
+10. When you're happy, **remove the old server** ([Removing it](#removing-it)), but
+    leave the DNS records, which now point at the new one.
+
+Viewers stay signed in, since their sessions are in the database.
+
+### With the old server gone
+
+Set up the new server as above, up to the point where `docker compose up` would run,
+and copy the films back. Then, before the first start, put the newest backup in place
+from the off-server copy, as in [Restoring](#restoring): the database file as
+`data/open-matte.db`, and the `artwork` and `branding` folders into `data`. Copy the
+rest of the backups into the new backups folder too, before you set up the copy timer
+again. Point the DNS records at the new server and start it.
+
+Your settings aren't in the backup: they live only in `deploy/.env` (and
+`compose.override.yml`), so use your copy of them. Without one, set a new admin
+password, and set `DOMAIN` and `WEBAUTHN_RP_ID` exactly as they were: the database
+doesn't record them, and a different `WEBAUTHN_RP_ID` leaves every passkey useless.
+If you're not sure of it, a passkey in your own password manager or keychain is listed
+under it. A TMDB key saved in the admin is in the backup; one set in `.env` is not.
+Then check People, as after
+[restoring an older backup](#after-restoring-an-older-backup).
+
+## The projection booth and logs
+
+**Status** in the admin, the projection booth, answers two questions without a trip to
+the server. **Needs attention**: setup and recovery links still waiting, or expired
+unused in the last 7 days; tickets never played whose start-by date is close or just
+passed; and the media requests the app refused since it started, counted by reason,
+with the latest ten. **The server**: whether the media folder is readable and how many
+film folders the last scan found; the free disk space for the data and the media; the
+newest backup file, the last backup error, and the off-server copy if
+`BACKUP_COPY_DIR` is set; the last clean-up; and the version, Node, SQLite and schema
+versions, and when the app started. When something needs attention, the top of the
+Films page says so.
+
+Each line says what was checked, such as "Backup file written at 04:03", never that a
+restore would work. Reading it records nothing.
+
+The logs, on the server:
+
+```bash
+docker compose logs -f app                 # follow the app's log; Ctrl-C to stop
+docker compose logs --since 24h app        # the last day
+docker compose logs caddy                  # certificates and Caddy's errors
+```
+
+The app logs its start and its first scan, clean-ups that deleted something, media
+requests and passkeys it refused, and errors. It never logs ticket codes, link tokens,
+cookies or the admin password. Caddy keeps no access log. Its error log can hold a
+ticket link's address if someone opens it while the app is down
+([access.md](access.md#secrets-and-sessions)). Each container keeps at most 50 MB of
+logs (five files of 10 MB), set in `compose.yml`.
+
+## Passkeys
+
+People you add sign in with passkeys, which belong to the domain in `WEBAUTHN_RP_ID`
+for good ([Choices you make once](installing.md#choices-you-make-once)). The app
+checks the setting when it starts. When all is well, the log says:
+
+```text
+Passkeys: RP ID example.com, origin https://cinema.example.com
+```
+
+and **Settings → People and passkeys** in the admin says the same. Otherwise the log
+says `Passkeys unavailable:` and why, the admin's People and Settings pages show a
+banner, setup links can't be created, and passkey requests answer 503
+`passkeys-unavailable`. Everything else, ticket links included, carries on as normal.
+To check after an update:
+
+```bash
+docker compose logs app | grep Passkeys
+```
+
+A passkey works only on the site's own address: `https://` and `DOMAIN`, exactly.
+Names in `REDIRECT_FROM` only redirect there, so a passkey is never used on them.
+
+TV browsers and the built-in browsers of apps such as Instagram and Facebook usually
+can't use passkeys, so they can't use tickets for one person. For a TV, issue a ticket
+for anyone with the link. Someone who opens their ticket in an app's browser can open
+it again in Safari or Chrome: the code stays in the address until they sign in.
+
+In development you don't set it: with no `PUBLIC_URL`, or one on `localhost`, passkeys
+belong to `localhost` and work at `http://localhost` on any port. Use `localhost`,
+never `127.0.0.1`: browsers won't use passkeys on an IP address.
+
+### Testing from home
+
+Some home networks block or rewrite DNS for your own domain: a router's content
+filter, or a DNS filter for the whole network, can send it nowhere. Then the site
+fails at home and works everywhere else. Passkeys only work when the browser itself
+visits the site's real name, so tricks like `curl --resolve` don't help. For each
+check, either:
+
+- put the device on a phone's hotspot, or use the phone itself on mobile data with
+  Wi-Fi off;
+- allow the domain in the filter for the session; or
+- on a computer, point the name at the server in its hosts file, with a line such as:
+
+  ```text
+  203.0.113.10 cinema.example.com
+  ```
+
+  The file is `/etc/hosts` on a Mac or Linux, and
+  `C:\Windows\System32\drivers\etc\hosts` on Windows (edit it as an administrator).
+  The certificate stays valid, because the name is still right. On a Mac, run
+  `sudo killall -HUP mDNSResponder` afterwards so it takes effect; on Windows,
+  `ipconfig /flushdns`. Take the line out when you've finished, or you won't notice if
+  the server's address changes.
+
+A TV can't have a hosts file, so it needs the hotspot or the filter's exception. The
+same goes for checking a ticket link's preview in a chat app: the phone that sends the
+link fetches the preview itself, so it needs mobile data or the exception.
 
 ## IPv6 and rate limits
 
-Opening ticket links and their link previews, setup and recovery links, signing in
-and the admin password are rate-limited per visitor, and an IPv6 visitor counts by
-its /64 (one household or server usually holds a whole one). For that the app has
-to see visitors' real addresses. www.openmatte.dev has no AAAA record, so everyone
-arrives over IPv4 and it does. If you give your domain an AAAA record, give the
-compose network IPv6 first (`enable_ipv6` in `deploy/compose.yml`; Docker's IPv6
-documentation has the details for your version). Otherwise Docker hands Caddy every
-IPv6 visitor as the network gateway's address, and they all share one limit.
+Some requests are rate-limited per visitor, to slow down guessing:
 
-## Logs
+| What | Each visitor may make |
+|---|---|
+| Opening a ticket link | 30 every 10 minutes |
+| Keeping a ticket | 30 every 10 minutes |
+| A ticket link's preview, the page and its poster together | 60 every 10 minutes |
+| Setting up a passkey from a setup or recovery link | 20 requests every 15 minutes |
+| Signing in with a passkey | 30 every 10 minutes |
+| Signing in to the admin | 10 tries every 15 minutes |
 
-```bash
-cd /srv/open-matte/app/deploy && docker compose logs -f app
+The counts live in memory, so `docker compose restart app` clears them, should a
+household that shares one address get stuck.
+
+An IPv4 visitor counts by its address, an IPv6 visitor by its /64 (one household or
+server usually holds a whole one). For that the app has to see visitors' real
+addresses. If your domain has only an A record, everyone arrives over IPv4, and it
+does. Before you give it an AAAA record, give Docker's network IPv6, in
+[`compose.override.yml`](#your-own-changes-to-the-docker-setup):
+
+```yaml
+networks:
+  default:
+    enable_ipv6: true
 ```
 
-Each container keeps at most 50 MB of logs (five files of 10 MB), set in
-`deploy/compose.yml`.
+Depending on your version of Docker, the network may also need an IPv6 subnet of its
+own: Docker's IPv6 documentation has the details. Without IPv6 on the network, Docker
+hands Caddy every IPv6 visitor as the network gateway's address, and they all share
+one limit.
 
-For a quicker look, **Status** in the admin (the projection booth) shows the media
-requests the app refused since it started, counted by reason, with the latest ten;
-whether the media folder is readable; the disk space left for the data and the
-media; the last backup and clean-up; and the version running.
+## Removing it
+
+Before you start, keep anything you'll want: a last backup, copied somewhere outside
+`/srv/open-matte` (with the copy timer as shipped, the off-server copy is inside the
+media folder), and your films' originals (the server only has the encodes). Then, on
+the server:
+
+```bash
+cd /srv/open-matte/app/deploy
+docker compose down --volumes --rmi all
+```
+
+That removes both containers, their network, Caddy's volumes (its certificates and
+settings) and the two images. Docker's build cache can go too, if nothing else on the
+server uses Docker; `docker image ls` shows any image left:
+
+```bash
+docker builder prune --all --force
+```
+
+If you set up the off-server copy, remove its timer:
+
+```bash
+sudo systemctl disable --now open-matte-backup-copy.timer
+sudo rm /etc/systemd/system/open-matte-backup-copy.service /etc/systemd/system/open-matte-backup-copy.timer
+sudo systemctl daemon-reload
+```
+
+Then delete the folders. `data` and `backups` hold personal data: people's names, your
+notes and their activity.
+
+If network storage is mounted under `/srv/open-matte`, such as the media folder,
+unmount it first, and remove its line from `/etc/fstab` (or wherever you set up the
+mount) so it isn't mounted again at the next start. Otherwise the `rm` would delete
+what's on the storage too: the films and the off-server copy.
+
+```bash
+mount | grep /srv/open-matte               # anything mounted in there
+sudo umount /srv/open-matte/media          # and each other one listed
+sudo rm -rf --one-file-system /srv/open-matte
+```
+
+`--one-file-system` makes `rm` skip anything still mounted, and say so, rather than
+delete what's on it.
+
+Close the ports, if nothing else on the server needs them:
+
+```bash
+sudo ufw delete allow 80/tcp
+sudo ufw delete allow 443/tcp
+sudo ufw delete allow 443/udp
+```
+
+What's left behind, outside the server:
+
+| Where | What to do |
+|---|---|
+| The off-server copy of the backups | Delete it: it holds the same personal data. Your hosting provider's snapshots of the server or the storage may hold more. |
+| Backups you copied to your computer | Delete them, for the same reason. |
+| DNS | Delete the A and AAAA records for `DOMAIN` and every name in `REDIRECT_FROM`. A record pointing at an address you no longer have could one day lead to someone else's server. |
+| People's devices | Their passkeys stay in their password manager or keychain, listed under `WEBAUTHN_RP_ID`, until they delete them. They're harmless, since nothing answers them any more. Tell people they can delete them. |
+| Links you've sent | Ticket and setup links stop working. Nothing needs doing. |
+| TMDB | If you made a TMDB key for the cinema, delete it in your TMDB account's settings. |
+| Certificate logs | Every HTTPS certificate is listed in public Certificate Transparency logs, so the names the cinema used stay on record there. |

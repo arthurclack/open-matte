@@ -85,10 +85,12 @@ export function SiteProvider({ children }) {
                 <a href="https://www.themoviedb.org" target="_blank" rel="noreferrer">
                   TMDB
                 </a>
-                {site?.poweredBy && ' · '}
+                {' · '}
               </>
             )}
-            {site?.poweredBy && 'Powered by Open Matte'}
+            {site?.poweredBy && 'Powered by Open Matte · '}
+            {/* The licences of the code this site sends to browsers, which the build writes (vite.config.js). */}
+            <a href="/third-party-licenses.txt">Licences</a>
           </span>
         </footer>
       </div>

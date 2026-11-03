@@ -12,7 +12,7 @@ That probes the source, picks a ladder, and writes `hls/`, `subtitles/` and a
 `film.json` to fill in. The title and year come from the file name, so
 `Paris.Texas.1984.1080p.BluRay.x264-GRP.mkv` gives "Paris Texas" (1984). With
 [film information](metadata.md) turned on, the server fills in the rest from TMDB. Add a `poster.jpg`, write your recommendation, then copy
-the folder to the server (see [deploying](deploying.md)).
+the folder to the server (see [adding films](deploying.md#adding-films)).
 
 ## Options
 

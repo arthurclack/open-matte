@@ -13,7 +13,8 @@ optional: without a key, everything comes from `film.json` and the admin.
    is checked with TMDB before it's saved.
 3. Pick the language for titles and synopses (English (US) by default).
 
-On a server you can set `TMDB_API_KEY` in `deploy/.env` instead; it then takes
+On a server you can set `TMDB_API_KEY` in `deploy/.env`
+([the settings](installing.md#settings)) instead; it then takes
 precedence over the admin setting.
 
 ## What happens

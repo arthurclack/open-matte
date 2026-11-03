@@ -9,7 +9,8 @@ import { folderProblem, oneAtATime, within } from './backup.js';
 // tries a restore.
 
 const DAY = 24 * 60 * 60 * 1000;
-const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+// package.json's version: the booth and the Settings page show it, only to the admin.
+export const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 // Folders the media and data may live on can be network storage that hangs
 // rather than fails. A check gets this long.
 const CHECK_MS = 5000;

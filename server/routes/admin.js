@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import express from 'express';
+import { VERSION } from '../booth.js';
 import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '../branding.js';
 import { config, publicOrigin } from '../config.js';
 import { tx } from '../db.js';
@@ -571,7 +572,13 @@ export function adminRoutes(deps) {
   });
 
   // ------------------------------------------------------------ settings
-  const adminSettings = () => ({ ...branding.publicView(settings.get()), tmdb: metadata.status(), passkeys: { rpId: rp.id, origin: rp.origin, problem: rp.problem } });
+  // With the version for the page's footer: viewers never see it.
+  const adminSettings = () => ({
+    ...branding.publicView(settings.get()),
+    tmdb: metadata.status(),
+    passkeys: { rpId: rp.id, origin: rp.origin, problem: rp.problem },
+    version: VERSION,
+  });
   router.get('/api/admin/settings', (req, res) => res.json(adminSettings()));
   router.patch(
     '/api/admin/settings',

@@ -1,6 +1,11 @@
 {
   "name": "open-matte",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arthurclack/open-matte.git"
+  },
   "description": "A small, self-hosted personal cinema. You should watch this film. Here's the link.",
   "type": "module",
   "private": true,

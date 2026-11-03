@@ -80,7 +80,7 @@ export function browserProblem(err, { creating = false } = {}) {
   if (err?.name === 'NotAllowedError') return 'Cancelled or timed out. Try again.';
   if (err?.name === 'SecurityError') {
     // The relying party ID doesn't match this address: a server setting, not the person.
-    console.error('Passkeys refused this address. Check WEBAUTHN_RP_ID and PUBLIC_URL on the server.', err);
+    console.error('Passkeys refused this address. Check WEBAUTHN_RP_ID and DOMAIN in deploy/.env (PUBLIC_URL outside Docker).', err);
     return "This address can't use passkeys.";
   }
   console.error(err);
