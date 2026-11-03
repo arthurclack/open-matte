@@ -1,5 +1,8 @@
 /* Open Matte: a dark room with one warm light. */
 
+/* Open Matte's own colours. A cinema's background and accent (and the shades worked
+   out from them) are written over these by the server, in a <style id="theme"> after
+   this sheet; the tints that follow them are at the end of the file. */
 :root {
   --bg: #0d0c0f;
   --bg-raised: #17151b;
@@ -11,6 +14,7 @@
   --text-faint: #6f6a66;
   --accent: #e8b04a;
   --accent-ink: #1a1306;
+  --accent-hover: #f2c46d;
   --good: #7fc28b;
   --warn: #e8b04a;
   --bad: #e5776d;
@@ -52,11 +56,14 @@ p { margin: 0 0 1em; }
 .btn:hover:not(:disabled) { border-color: var(--text-dim); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.btn.primary:hover:not(:disabled) { background: #f2c46d; border-color: #f2c46d; }
+.btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn.danger { color: var(--bad); }
 .btn.small { padding: 0.3em 0.75em; font-size: 0.85rem; }
 .btn.big { padding: 0.8em 1.6em; font-size: 1.05rem; }
 .linklike { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
+/* A file input inside a label.btn: the label is the button, and the input stays reachable from the keyboard. */
+.btn:has(> input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn:has(> input:disabled) { opacity: 0.45; cursor: not-allowed; }
 
 .field { display: grid; gap: 0.3em; margin-bottom: 1rem; align-content: start; }
 .field > span { font-size: 0.85rem; color: var(--text-dim); }
@@ -67,6 +74,8 @@ input[type='text'], input[type='password'], input[type='number'], input[type='da
 }
 textarea { min-height: 6em; resize: vertical; line-height: 1.5; }
 input:focus, textarea:focus, select:focus, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input[type='checkbox'], input[type='radio'] { accent-color: var(--accent); }
+input[type='color'] { width: 2.75rem; height: 2.4rem; flex-shrink: 0; padding: 0.2rem; background: var(--bg-sunk); border: 1px solid var(--line-strong); border-radius: 8px; cursor: pointer; }
 .check { display: flex; gap: 0.6em; align-items: center; margin-bottom: 1rem; }
 .check.top { align-items: flex-start; }
 .check.top input { margin-top: 0.3em; flex-shrink: 0; }
@@ -105,8 +114,14 @@ select.filter-select.on { border-color: var(--accent); color: var(--accent); }
 /* ---------- viewer site ---------- */
 
 .site { min-height: 100vh; display: flex; flex-direction: column; }
-.site-header { display: flex; justify-content: space-between; align-items: center; padding: 1.2rem clamp(1rem, 4vw, 3rem); position: relative; z-index: 2; }
-.site-name { font-family: var(--serif); font-size: 1.25rem; text-decoration: none; letter-spacing: 0.01em; }
+.site-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.2rem clamp(1rem, 4vw, 3rem); position: relative; z-index: 2; }
+.site-name { display: flex; align-items: center; gap: 0.6rem; font-family: var(--serif); font-size: 1.25rem; text-decoration: none; letter-spacing: 0.01em; }
+/* The cinema's logo: its own height (from the img's height attribute) up to about a line
+   of the header. On a narrow screen a wide one shrinks, undistorted, before it pushes
+   the menu off the edge. */
+.site-logo { width: auto; max-height: 2rem; max-width: 100%; min-width: 0; object-fit: contain; object-position: left center; }
+/* The name or logo gives way before the buttons beside it do. */
+.site-header > .row { flex-shrink: 0; }
 .site-signin { color: var(--text-dim); font-size: 0.92rem; text-decoration: none; }
 .site-signin:hover { color: var(--text); text-decoration: underline; }
 .site-main { flex: 1; }
@@ -208,6 +223,8 @@ select.filter-select.on { border-color: var(--accent); color: var(--accent); }
 .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
 .card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.2rem 1.3rem; }
 .card + .card { margin-top: 1rem; }
+.card h3 { font-size: 1.05rem; margin: 1.8rem 0 0.7rem; }
+.card h3:first-child { margin-top: 0; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
 
 /* Narrow screens: each row of a .stack table becomes a small card, with the
@@ -246,3 +263,26 @@ td a:hover { text-decoration: underline; }
 .edited { color: var(--accent); font-size: 0.75rem; margin-left: 0.4em; }
 .login { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
 .login form { width: min(360px, 100%); }
+
+/* ---------- tints that follow the cinema's colours ---------- */
+
+/* The literals in the rules above are Open Matte's own look, for browsers without
+   color-mix(). They can't simply come first in the same rule: a declaration that uses
+   var() is only checked once the variables are filled in, so an older browser would
+   take the color-mix() one, fail, and fall back to nothing (no background, a border
+   in the text colour) rather than to the literal. */
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .notice.bad { border-color: color-mix(in srgb, var(--bad) 40%, var(--bg)); background: color-mix(in srgb, var(--bad) 7%, var(--bg)); }
+  .notice.warn { border-color: color-mix(in srgb, var(--warn) 40%, var(--bg)); background: color-mix(in srgb, var(--warn) 7%, var(--bg)); }
+  .notice.good { border-color: color-mix(in srgb, var(--good) 40%, var(--bg)); background: color-mix(in srgb, var(--good) 7%, var(--bg)); }
+  .badge.good { border-color: color-mix(in srgb, var(--good) 40%, var(--bg)); }
+  .badge.warn { border-color: color-mix(in srgb, var(--warn) 40%, var(--bg)); }
+  .badge.bad { border-color: color-mix(in srgb, var(--bad) 40%, var(--bg)); }
+  .preview-banner { background: color-mix(in srgb, var(--warn) 7%, var(--bg)); border-bottom-color: color-mix(in srgb, var(--warn) 40%, var(--bg)); }
+  .poster { background: linear-gradient(160deg, color-mix(in srgb, var(--bg-raised) 94%, #fff), color-mix(in srgb, var(--bg-raised) 50%, var(--bg))); }
+  .film-backdrop::after {
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 20%, transparent), var(--bg) 92%),
+      linear-gradient(to right, color-mix(in srgb, var(--bg) 85%, transparent), transparent 70%);
+  }
+  .ticket-panel { background: color-mix(in srgb, var(--bg-raised) 70%, transparent); }
+}

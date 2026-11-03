@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { softAuthenticator } from './softauth.js';
 
 process.env.ADMIN_PASSWORD ??= 'test-password-123';
@@ -76,7 +77,8 @@ export function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'open-matte-test-'));
 }
 
-export async function startServer({ mediaDir, dataDir = tempDir(), metadataOptions = { envKey: '' }, backupOptions = {}, webauthn, limits }) {
+// No web build unless a test gives one (`webDist`, a folder with an index.html).
+export async function startServer({ mediaDir, dataDir = tempDir(), webDist, metadataOptions = { envKey: '' }, backupOptions = {}, webauthn, limits }) {
   const db = openDb(':memory:');
   const app = createApp({
     db,
@@ -84,7 +86,7 @@ export async function startServer({ mediaDir, dataDir = tempDir(), metadataOptio
     dataDir,
     metadataOptions,
     backupOptions: { backupDir: path.join(dataDir, 'backups'), ...backupOptions },
-    webDist: path.join(mediaDir, 'no-web-build'),
+    webDist: webDist ?? path.join(mediaDir, 'no-web-build'),
     // Passkeys on localhost, as in development, unless a test says otherwise.
     webauthn: webauthn ?? { publicUrl: '', rpId: '', production: false },
     limits,
@@ -93,17 +95,19 @@ export async function startServer({ mediaDir, dataDir = tempDir(), metadataOptio
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
   });
   const base = `http://127.0.0.1:${server.address().port}`;
-  return { app, db, base, close: () => new Promise((r) => server.close(r)) };
+  return { app, db, base, dataDir, close: () => new Promise((r) => server.close(r)) };
 }
 
-// A browser: a cookie jar plus fetch.
+// A browser: a cookie jar plus fetch. A body is sent as JSON, unless a content
+// type is given: then it's sent as it is (an image upload, say).
 export function browser(base) {
   const jar = new Map();
-  async function request(method, url, body) {
-    const headers = {};
+  async function request(method, url, body, { type: bodyType, headers: extra } = {}) {
+    const headers = { ...extra };
     if (jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    if (body !== undefined) headers['content-type'] = 'application/json';
-    const res = await fetch(base + url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), redirect: 'manual' });
+    if (body !== undefined) headers['content-type'] = bodyType ?? 'application/json';
+    const payload = body === undefined || bodyType ? body : JSON.stringify(body);
+    const res = await fetch(base + url, { method, headers, body: payload, redirect: 'manual' });
     for (const c of res.headers.getSetCookie()) {
       const [pair] = c.split(';');
       const i = pair.indexOf('=');
@@ -120,6 +124,9 @@ export function browser(base) {
     get: (url) => request('GET', url),
     post: (url, body = {}) => request('POST', url, body),
     patch: (url, body = {}) => request('PATCH', url, body),
+    // Raw bytes, as the admin's Branding card sends an image.
+    upload: (url, bytes, type = 'image/png', headers) => request('POST', url, bytes, { type, headers }),
+    send: request,
   };
 }
 
@@ -128,6 +135,30 @@ export async function adminBrowser(base) {
   const r = await b.post('/api/admin/login', { password: ADMIN_PASSWORD });
   if (r.status !== 200) throw new Error(`admin login failed: ${r.status}`);
   return b;
+}
+
+// A real PNG of one colour (8-bit RGB), for logo and icon uploads. The server
+// only reads its header, but browsers could draw it.
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+export function pngImage(width, height, [r, g, b] = [232, 176, 74]) {
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(zlib.crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8; // bits per channel
+  header[9] = 2; // RGB
+  // Each row: filter type 0, then the pixels.
+  const row = Buffer.alloc(1 + width * 3);
+  for (let x = 0; x < width; x++) row.set([r, g, b], 1 + x * 3);
+  const pixels = zlib.deflateSync(Buffer.concat(Array.from({ length: height }, () => row)));
+  return Buffer.concat([PNG_SIGNATURE, chunk('IHDR', header), chunk('IDAT', pixels), chunk('IEND', Buffer.alloc(0))]);
 }
 
 // ------------------------------------------------------------ people and passkeys (milestone 2)

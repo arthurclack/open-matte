@@ -47,7 +47,7 @@ export function SiteProvider({ children }) {
         {me?.admin && me?.person && <div className="preview-banner">Admin preview: person rules don't apply in this browser.</div>}
         <header className="site-header">
           <Link to="/" className="site-name">
-            {site?.cinemaName || ' '}
+            <SiteName site={site} />
           </Link>
           <div className="row" style={{ gap: '0.6rem' }}>
             {me?.admin && (
@@ -81,6 +81,20 @@ export function SiteProvider({ children }) {
         </footer>
       </div>
     </SiteContext.Provider>
+  );
+}
+
+// The cinema in the header: its name, or its logo with or without the name beside it.
+// Also the admin's preview of the logo, so the two can't differ.
+export function SiteName({ site }) {
+  const logo = site?.logo;
+  if (!logo) return site?.cinemaName || ' ';
+  return (
+    <>
+      {/* Beside the name the logo is decoration; on its own it is the name. */}
+      <img className="site-logo" src={logo.url} width={logo.width} height={logo.height} alt={site.logoWithName ? '' : site.cinemaName} />
+      {site.logoWithName && <span>{site.cinemaName}</span>}
+    </>
   );
 }
 

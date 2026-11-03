@@ -14,8 +14,11 @@ export function clientKey(ip = '') {
   return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':')}::/64`;
 }
 
-// `scale` multiplies max, for test suites that sign in many times from one address.
-export function rateLimit({ windowMs, max, scale = 1 }) {
+// Counts each call against its client: true while the client is within `max`
+// calls per window, false once it's over. For pages, which answer differently
+// over the limit rather than refusing. `scale` multiplies max, for test suites
+// that sign in many times from one address.
+export function rateCounter({ windowMs, max, scale = 1 }) {
   const limit = max * scale;
   // Insertion order is reset order: an entry moves to the end whenever its window
   // starts again, so when the map is full the first entry ends soonest.
@@ -25,7 +28,7 @@ export function rateLimit({ windowMs, max, scale = 1 }) {
     for (const [k, v] of hits) if (v.reset <= now) hits.delete(k);
   }, windowMs).unref();
 
-  return (req, res, next) => {
+  const count = (req) => {
     const now = Date.now();
     const key = clientKey(req.ip);
     let h = hits.get(key);
@@ -35,10 +38,22 @@ export function rateLimit({ windowMs, max, scale = 1 }) {
       if (hits.size >= MAX_CLIENTS) hits.delete(hits.keys().next().value);
       hits.set(key, (h = { count: 0, reset: now + windowMs }));
     }
-    if (++h.count > limit) {
-      res.set('Retry-After', String(Math.ceil((h.reset - now) / 1000)));
-      return res.status(429).json({ error: 'too-many-requests' });
-    }
-    next();
+    return ++h.count <= limit;
+  };
+  // Seconds until the client's window starts again.
+  count.retryAfter = (req) => {
+    const h = hits.get(clientKey(req.ip));
+    return h ? Math.max(0, Math.ceil((h.reset - Date.now()) / 1000)) : 0;
+  };
+  return count;
+}
+
+// The same, as middleware for API calls: over the limit is a 429.
+export function rateLimit(opts) {
+  const count = rateCounter(opts);
+  return (req, res, next) => {
+    if (count(req)) return next();
+    res.set('Retry-After', String(count.retryAfter(req)));
+    res.status(429).json({ error: 'too-many-requests' });
   };
 }

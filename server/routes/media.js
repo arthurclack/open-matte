@@ -21,7 +21,7 @@ function logDenied(req, status, reason) {
   console.warn(`media ${status}: ${req.path} - ${reason} - ${client}${req.headers.range ? ` - range ${req.headers.range}` : ''}`);
 }
 
-const TYPES = {
+export const TYPES = {
   '.m3u8': 'application/vnd.apple.mpegurl',
   '.m4s': 'video/iso.segment',
   '.mp4': 'video/mp4',
@@ -38,6 +38,28 @@ const TYPES = {
   '.webp': 'image/webp',
   '.avif': 'image/avif',
 };
+
+// A file in a film's folder, by its path there: { root, file } to pass to
+// sendFile, or { status, reason } when it can't be served (no reason: nothing
+// worth logging). Where the file really is must be inside the folder too, so a
+// symlink can't serve something from elsewhere on the server.
+export async function folderFile(mediaDir, film, rel) {
+  const root = path.join(mediaDir, film.slug);
+  const file = path.resolve(root, rel);
+  if (!file.startsWith(root + path.sep)) return { status: 404 };
+  let real;
+  let realRoot;
+  try {
+    [real, realRoot] = await Promise.all([fsp.realpath(file), fsp.realpath(root)]);
+  } catch (err) {
+    // Anything but a missing file (permissions, network storage briefly
+    // unavailable) is the server's problem, and players retry those.
+    const missing = ['ENOENT', 'ENOTDIR', 'ENAMETOOLONG'].includes(err.code);
+    return missing ? { status: 404, reason: 'file missing from the film folder' } : { status: 500, reason: err.message };
+  }
+  if (!real.startsWith(realRoot + path.sep)) return { status: 404, reason: 'symlink to a file outside the film folder' };
+  return { root: realRoot, file: path.relative(realRoot, real) };
+}
 
 // /media/<slug>/<path>. Every request is checked against the viewer's session:
 // artwork needs whatever lets you see the film page (a ticket, or being signed
@@ -63,32 +85,17 @@ export function mediaRoutes({ db, sessions, access, mediaDir, metadata }) {
       return res.status(403).end();
     }
 
-    const root = path.join(mediaDir, film.slug);
-    const file = path.resolve(root, rel);
-    if (!file.startsWith(root + path.sep)) return res.status(404).end();
-    // Where the file really is must be inside the film folder too, so a
-    // symlink can't serve something from elsewhere on the server.
-    let real;
-    let realRoot;
-    try {
-      [real, realRoot] = await Promise.all([fsp.realpath(file), fsp.realpath(root)]);
-    } catch (err) {
-      // Anything but a missing file (permissions, network storage briefly
-      // unavailable) is the server's problem, and players retry those.
-      const missing = ['ENOENT', 'ENOTDIR', 'ENAMETOOLONG'].includes(err.code);
-      logDenied(req, missing ? 404 : 500, missing ? 'file missing from the film folder' : err.message);
-      return res.status(missing ? 404 : 500).end();
-    }
-    if (!real.startsWith(realRoot + path.sep)) {
-      logDenied(req, 404, 'symlink to a file outside the film folder');
-      return res.status(404).end();
+    const found = await folderFile(mediaDir, film, rel);
+    if (found.status) {
+      if (found.reason) logDenied(req, found.status, found.reason);
+      return res.status(found.status).end();
     }
 
     res.set('Content-Type', TYPES[ext]);
     // Playlists may change when a film is re-imported; segment files don't.
     // Either way, only the viewer's own browser may cache them.
     res.set('Cache-Control', ext === '.m3u8' || ext === '.vtt' ? 'private, no-cache' : 'private, max-age=86400');
-    res.sendFile(path.relative(realRoot, real), { root: realRoot, dotfiles: 'deny' }, (err) => {
+    res.sendFile(found.file, { root: found.root, dotfiles: 'deny' }, (err) => {
       // Done, or the viewer went away mid-download (seeking, closing the tab).
       if (!err || err.code === 'ECONNABORTED' || res.headersSent) return;
       // send's own refusals (a range past the end, a hidden file) keep their

@@ -7,7 +7,9 @@ follows: `server/access.js` implements the ticket rules, `server/people.js` and
 Milestone 2, planned in [milestone-2.md](milestone-2.md), adds people and passkeys,
 tickets that only one person can use, signed in, keeping a ticket in an account,
 films shown to members and an account page. Checks on real devices are listed in
-[device-checks.md](device-checks.md).
+[device-checks.md](device-checks.md). Milestone 3 ([milestone-3.md](milestone-3.md))
+changes none of these rules; it adds [link previews](#link-previews) that show a
+ticket's film.
 
 ## The records
 
@@ -56,6 +58,7 @@ preview visit or a chat app's link scanner doesn't start the countdown.
 | Who can use it | Any browser that opened the link | Any browser signed in as that person; they don't need to open the link |
 | Opening the link | Adds it to this browser | Signed in as the person: opens the film. Not signed in: a sign-in page, with nothing created or recorded. Signed in as someone else: told it's for someone else |
 | Forwarding the link | Works for whoever gets it | Does nothing |
+| Its link's preview in a chat app | The film's title and poster (see [Link previews](#link-previews)) | Only the cinema's name and logo, never the film |
 | Under Your tickets | In that browser only | On every device the person signs in on |
 | TVs and in-app browsers | Work | Need a browser that can use passkeys |
 | Revoke / restore | Stops on the next request; after a restore, browsers must open the link again | Stops on the next request; after a restore it works for the person at once |
@@ -91,7 +94,8 @@ The rules behind both tables:
 
 `/t/<code>` is a page that sends the code to `/api/tickets/open` from JavaScript.
 Link previews in chat apps fetch the URL but don't run scripts, so they create no
-session and no "opened" event. Unknown and revoked tickets, and tickets for an
+session and no "opened" event (what they're shown is under
+[Link previews](#link-previews)). Unknown and revoked tickets, and tickets for an
 unpublished film, are refused first, whichever kind they are.
 
 For a ticket for anyone with the link, the page receives a session cookie and
@@ -120,6 +124,42 @@ The person doesn't need the link at all once they're signed in: the ticket is un
 Your tickets on every device they sign in on. For such a ticket, **Opened** on the
 admin's ticket page is the first time they opened its link or its film page, signed
 in.
+
+### Link previews
+
+Chat apps that show a preview of a link (WhatsApp, iMessage and the like) read tags
+that the server writes into the page as it sends it. For a `/t/<code>` address:
+
+- **A ticket for anyone with the link** previews its film: the title and year, the
+  poster, and "A ticket from" followed by your cinema's name. That holds while the
+  ticket isn't revoked and its film is published, exactly when opening the link would
+  show someone the film. A ticket that's used up or expired still previews its film,
+  since opening it still shows the film page.
+- **A ticket for one person**, including one that was kept or given, previews as the
+  cinema: its name, and its logo if you've uploaded one. A browser that isn't signed
+  in as that person learns neither the film nor who it's for, and a preview fetcher
+  is such a browser.
+- **A revoked ticket, a ticket for an unpublished film, or an unknown code** previews
+  as the cinema too, as every other page on the site does.
+
+The poster comes from `/t/<code>/poster`, which needs no session. It follows the same
+rule, and works only while that holds: once the ticket is revoked, kept or given, or
+its film unpublished, it answers 404 and says nothing more. It serves the poster the
+film page shows, TMDB's if one was downloaded, otherwise the film folder's.
+
+Fetching the page or the poster creates and records nothing: no session or cookie,
+no "opened" event, and the ticket isn't marked as opened. Only the page's script,
+in a browser that runs it, opens the ticket. The page and the poster share a rate
+limit per visitor. Over it, the page is still served, but previews as the cinema,
+and the poster answers 404.
+
+A preview that shows the film tells whoever fetched it which film you sent. Apps that
+fetch previews on their own servers learn it there; iMessage and WhatsApp fetch them
+on the phone instead. That was a deliberate choice for milestone 3 (see
+[milestone-3.md](milestone-3.md#branding-3-november-as-slice-1-started)). To send a
+link whose preview doesn't name the film, issue a ticket for one person. A preview is
+made when the link is sent and stays in the conversation, so revoking the ticket
+stops its poster address but doesn't take back a preview already shown.
 
 ## Keeping a ticket
 
@@ -247,6 +287,13 @@ Media responses are marked `private`, so only the viewer's own browser caches th
 Revoking a ticket, signing a browser out, disabling a person or removing a passkey
 stops future requests, playlists and segments included; none of them can take back
 what is already in the player's buffer (typically under a minute of video).
+
+Outside `/media/`, two kinds of image need no session. A ticket's preview poster,
+`/t/<code>/poster`, follows the rule under [Link previews](#link-previews). The
+cinema's own logo and tab icon (`/branding/<file>`) and Open Matte's icon drawn in
+its colours (`/favicon.svg`) are public, unlike a film's artwork: the sign-in page
+and every link preview show them to anyone. An uploaded logo or icon is only ever a
+PNG, JPEG or WebP image, checked by its bytes, never an SVG, which can carry script.
 
 A browser signed in to the admin plays in preview mode and never uses a screening.
 Who a ticket is for doesn't matter there either, so check tickets for one person in
@@ -444,10 +491,12 @@ included.
 - A passkey response must come from this site's own address, exactly (`PUBLIC_URL`;
   in development, `http://localhost` on any port), and one made inside another
   site's frame is refused.
-- Opening ticket links, setup and recovery links, signing in and the admin password
-  are rate-limited per visitor. An IPv6 visitor counts by its /64.
-- The API accepts changes only as JSON, and refuses them when the browser says they
-  come from another site or from another subdomain of this one
+- Opening ticket links and their link previews, setup and recovery links, signing
+  in and the admin password are rate-limited per visitor. An IPv6 visitor counts by
+  its /64.
+- The API accepts changes only as JSON (apart from the logo and tab icon you upload
+  in the admin, which are sent as the image itself), and refuses them when the
+  browser says they come from another site or from another subdomain of this one
   (`Sec-Fetch-Site: cross-site` or `same-site`). Browsers treat every subdomain of a
   domain as the same site, and passkeys here can belong to the parent domain, so a
   page on another subdomain mustn't be able to act for anyone.
@@ -473,7 +522,7 @@ Viewing:
 When the browser is signed in, Activity shows the person against these, read from
 the session: nothing more is stored. Events from before they signed in stay
 anonymous. Reading the page of a film shown to members, without a ticket, records
-nothing.
+nothing, and nor does a link preview fetching a ticket's page or poster.
 
 People and passkeys:
 

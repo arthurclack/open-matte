@@ -5,10 +5,10 @@ const OPENED_DEDUPE_MS = 30 * 60 * 1000;
 
 // What a viewer's browser talks to. The ticket secret is only ever sent once,
 // to /api/tickets/open; after that the browser uses its session cookie.
-export function viewerRoutes({ db, sessions, access, settings, metadata, limit }) {
+export function viewerRoutes({ db, sessions, access, settings, metadata, branding, limit }) {
   // What the viewer site shows in its header and footer. TMDb asks for credit
   // wherever its data and images appear.
-  const site = () => ({ ...settings.get(), tmdbCredit: metadata.status().configured });
+  const site = () => ({ ...branding.publicView(settings.get()), tmdbCredit: metadata.status().configured });
 
   const router = express.Router();
 

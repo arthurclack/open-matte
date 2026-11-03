@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api, formatBytes, formatDateTime, plural } from '../api.js';
+import Branding from './Branding.jsx';
 import { ErrorNote, useAction, useLoad } from './ui.jsx';
+
+// The main form holds only its own fields. The other cards (Branding, Film information)
+// save theirs separately: saving one of them leaves unsaved edits here alone, and saving
+// here can't send back an old copy of their values.
+const mainForm = (s) => ({ cinemaName: s.cinemaName, welcome: s.welcome, resumeWindowHours: String(s.resumeWindowHours), poweredBy: s.poweredBy });
 
 export default function Settings() {
   const { data: settings, setData, error } = useLoad(() => api.get('/api/admin/settings'), []);
@@ -9,7 +15,7 @@ export default function Settings() {
   const action = useAction();
 
   useEffect(() => {
-    if (settings) setForm({ ...settings, resumeWindowHours: String(settings.resumeWindowHours) });
+    if (settings) setForm((f) => f ?? mainForm(settings));
   }, [settings]);
 
   if (error) return <ErrorNote error={error} />;
@@ -20,6 +26,7 @@ export default function Settings() {
     const r = await action.run(() => api.patch('/api/admin/settings', { ...form, resumeWindowHours: Number(form.resumeWindowHours) }));
     if (r) {
       setData(r);
+      setForm(mainForm(r));
       setNotice('Saved.');
     }
   }
@@ -61,6 +68,9 @@ export default function Settings() {
           Save settings
         </button>
       </form>
+
+      <h2>Branding</h2>
+      <Branding settings={settings} onSaved={setData} />
 
       <h2>Film information</h2>
       <TmdbSettings settings={settings} onSaved={setData} />

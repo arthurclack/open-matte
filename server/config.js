@@ -38,6 +38,10 @@ export const config = {
   tmdbImageBase: (env.TMDB_IMAGE_BASE || 'https://image.tmdb.org/t/p').replace(/\/$/, ''),
 };
 
+// The origin for links the server writes out (tickets, setup links, link
+// previews): PUBLIC_URL, or else the address this request came to.
+export const publicOrigin = (req) => config.publicUrl || `${req.protocol}://${req.get('host')}`;
+
 export function assertConfig() {
   if (!config.adminPassword || config.adminPassword.length < 12) {
     throw new Error('ADMIN_PASSWORD must be set and at least 12 characters long');

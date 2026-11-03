@@ -26,21 +26,27 @@ it is.
 | Public release | **A v1.0.0 tag and a GitHub release.** Milestones 2 and 3 are merged into `main`, with a changelog, and installation, update and backup docs written for someone who isn't you. People build the image themselves, as you do now. No published image. |
 | Player extras | **Media Session** and a **Playback help** panel join this milestone. Installing to the home screen stays an idea. |
 
+### Branding (3 November, as slice 1 started)
+
+| Decision | Choice |
+|---|---|
+| Logo | **PNG, JPEG or WebP, at most 1 MB**, recognised by its bytes. No SVG: an SVG is a document that can carry script, and it would be served from the site's own origin. |
+| Tab icon | **A separate, optional square icon.** Without one, the tab shows Open Matte's icon drawn in the cinema's colours. A wide logo makes a poor 16-pixel icon. |
+| Colours | **An accent and a background**, the background still dark. The other surfaces (raised, sunk, lines) are worked out from the background. A colour is refused if text, status colours or the accent would be hard to read on it: the accent needs 4.5:1, because it's used for small text. No light theme. |
+| Link previews | **A ticket link shows its film's poster and title.** Every other link shows the cinema's name and logo. The preview is fetched by the sender's phone or the messaging app's servers, so they learn which film was sent. |
+
+Our own call, within that: a ticket **only one person can use** previews as the cinema,
+not the film. A browser that isn't signed in as that person learns neither the film nor
+the name ([access.md](access.md#two-kinds-of-ticket)), and a preview fetcher is such a
+browser.
+
 ### Proposed, to confirm as each slice starts
 
-- **The logo is PNG, JPEG or WebP, at most 1 MB.** No SVG: an SVG is a document that
-  can carry script, and it would be served from the site's own origin.
-- **One accent colour**, refused if it's too close to the dark background to read
-  (contrast below 3:1), with the text on accent buttons chosen automatically, dark or
-  light. No light theme.
 - **Remembered choices stay in the browser** (audio language, subtitle language or
   off, subtitle size). Nothing new is stored on the server, and a person's choice
   doesn't follow them to another device.
 - **Media Session shows the film's title by default**, with a setting to show only
   the cinema's name instead.
-- **Link previews show the cinema, never the film.** A ticket link pasted into
-  WhatsApp or iMessage shows the cinema's name and logo. The preview is fetched by
-  the messaging app's servers, so naming the film would tell them what was sent.
 
 ## Slices
 
@@ -49,22 +55,29 @@ are deployed; 6 comes last.
 
 ### 1. Branding
 
-- Settings gets **Branding**: an accent colour and a logo, next to the cinema name
-  that's there already.
-- The logo is uploaded in the admin, checked by its first bytes (not its name or the
-  browser's say-so), and stored in `DATA_DIR/branding` under a name made from its
-  hash, so it can be cached for good and a new one replaces it cleanly. Backups copy
-  it, as they copy artwork. It appears in the header, on the sign-in and setup pages,
-  and as the browser tab's icon (a default icon when there's none).
-- The colour and name are written into `index.html` as the server sends it, so the
+- Settings gets **Branding**: an accent and a background colour, a logo and a tab icon,
+  next to the cinema name that's there already. The admin page previews the colours as
+  you pick them, and says why one is refused.
+- The logo and icon are uploaded in the admin, checked by their first bytes and their
+  size in pixels (not their name or the browser's say-so), and stored in
+  `DATA_DIR/branding` under a name made from their hash, so they can be cached for good
+  and a new one replaces the old cleanly. Backups copy them, as they copy artwork. The
+  logo appears in the header of every viewer page, sign-in and setup included, with or
+  without the name beside it.
+- The colours and name are written into `index.html` as the server sends it, so the
   page never flashes Open Matte's amber before switching. The same step adds the
-  link-preview tags (`og:title`, `og:image`), the same for every address.
+  link-preview tags (`og:title`, `og:image`).
+- A ticket link for anyone previews its film: the title, and the poster from a narrow
+  address (`/t/<code>/poster`) that works without a session under the same rule as the
+  preview, and only then. Reading either writes nothing: no session, no "opened", no
+  event. Both are rate limited; over the limit the page is still served, as the cinema.
 - Served with `X-Content-Type-Options: nosniff`, and only the three image types.
 - No migration: everything lives in the settings table.
 
-**Done when** a fresh cinema with a name, a colour and a logo shows them on every
-viewer page from the first paint, and a ticket link's preview in a messaging app
-shows the cinema and nothing about the film.
+**Done when** a fresh cinema with a name, colours, a logo and an icon shows them on every
+viewer page from the first paint; a ticket link's preview in a messaging app shows the
+film's poster and title, and a ticket for one person's shows only the cinema; and
+opening neither records anything.
 
 ### 2. Audio and subtitles
 
@@ -176,6 +189,7 @@ but the docs, and v1.0.0 is on GitHub.
 
 - A published container image, and a release workflow to build it.
 - Installing to the home screen (a service worker, an offline message).
-- The player's own controls overlay, a light theme, more than one accent colour.
+- The player's own controls overlay, a light theme, colours beyond the accent and the
+  background.
 - Remembering choices on the server, per person.
 - Everything under Later and Ideas in [roadmap.md](roadmap.md).

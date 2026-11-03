@@ -34,8 +34,11 @@ Milestone 2, people and passkeys, is built (planned in
 - **An account page**: a signed-in person sees their passkeys and the browsers they're signed in on, and can sign out everywhere themselves ([docs/access.md](docs/access.md#signing-in-and-out))
 - **Films shown to members**: a switch per film. Signed-in people see its page, poster and your recommendation, and are told to ask for a ticket; playing it still needs one ([docs/access.md](docs/access.md#films-shown-to-members))
 
-Milestone 3 brings branding, polish and release documentation. See
-[docs/roadmap.md](docs/roadmap.md).
+Milestone 3, polish and public release, is under way (planned in
+[docs/milestone-3.md](docs/milestone-3.md), progress in
+[docs/roadmap.md](docs/roadmap.md)):
+
+- **Branding**: an accent and a background colour, a logo and a tab icon, set in the admin and shown on every viewer page from the first paint. A ticket link for anyone previews its film's poster and title in chat apps; every other link previews as the cinema ([docs/access.md](docs/access.md#link-previews))
 
 ## Running it locally
 
@@ -49,7 +52,9 @@ npm run dev                 # server on http://localhost:3000
 ```
 
 To work on the web app with hot reload, run `npm run dev:web` alongside and use
-http://localhost:5173.
+http://localhost:5173. Vite serves the page itself there, so it has Open Matte's own
+colours and tab icon rather than the cinema's, and no link-preview tags. The server
+on :3000 adds those.
 
 Use `localhost`, not `127.0.0.1`: passkeys belong to a domain, and browsers won't use
 them on an IP address. Locally they need no setting; on a server, see

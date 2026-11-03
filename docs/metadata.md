@@ -61,8 +61,10 @@ the folder's own.
 The server sends TMDB the titles and years it searches for, along with your key.
 Posters and backdrops are downloaded to the server (`DATA_DIR/artwork`) and
 served with the same access rules as the film folder's artwork, so viewers'
-browsers never contact TMDB and nothing about your viewers is sent there. Only
-the admin's own browser loads TMDB thumbnails while you're choosing a match.
+browsers never contact TMDB and nothing about your viewers is sent there. A ticket
+link's preview in a chat app shows the same poster, fetched from your server, not
+from TMDB ([access.md](access.md#link-previews)). Only the admin's own browser loads
+TMDB thumbnails while you're choosing a match.
 
 ## Credit
 

@@ -1,12 +1,14 @@
 import crypto from 'node:crypto';
 import express from 'express';
-import { config } from '../config.js';
+import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '../branding.js';
+import { config, publicOrigin } from '../config.js';
 import { tx } from '../db.js';
 import { artworkUrl, filmArtwork, filmMedia } from '../films.js';
 import { MetadataError, TMDB_FIELDS } from '../metadata.js';
 import { META_FIELDS, scanMedia } from '../scan.js';
 import { peopleRoutes } from './people.js';
 import { ADMIN_COOKIE, clearCookie, ticketCode } from '../sessions.js';
+import { COLOR, check, palette } from '../theme.js';
 import { guessTitleYear, looksLikeReleaseName } from '../titles.js';
 
 const bad = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -51,7 +53,7 @@ const metadataRoute = (fn) => async (req, res) => {
 };
 
 export function adminRoutes(deps) {
-  const { db, sessions, access, settings, mediaDir, metadata, backups, rp, limit } = deps;
+  const { db, sessions, access, settings, mediaDir, metadata, backups, rp, limit, branding } = deps;
   const router = express.Router();
   const loginLimit = limit({ windowMs: 15 * 60 * 1000, max: 10 });
 
@@ -79,8 +81,6 @@ export function adminRoutes(deps) {
 
   // People and passkeys.
   router.use(peopleRoutes(deps));
-
-  const origin = (req) => config.publicUrl || `${req.protocol}://${req.get('host')}`;
 
   // ------------------------------------------------------------ films
   const filmRow = db.prepare('SELECT * FROM films WHERE id = ?');
@@ -300,7 +300,7 @@ export function adminRoutes(deps) {
     return {
       id: t.id,
       code: t.code,
-      link: `${origin(req)}/t/${t.code}`,
+      link: `${publicOrigin(req)}/t/${t.code}`,
       film: film?.film ?? null,
       // Set: only this person can use it, signed in. Null: anyone with the link.
       person: t.person_id != null ? ctx.people.get(t.person_id) ?? null : null,
@@ -502,7 +502,7 @@ export function adminRoutes(deps) {
   });
 
   // ------------------------------------------------------------ settings
-  const adminSettings = () => ({ ...settings.get(), tmdb: metadata.status(), passkeys: { rpId: rp.id, origin: rp.origin, problem: rp.problem } });
+  const adminSettings = () => ({ ...branding.publicView(settings.get()), tmdb: metadata.status(), passkeys: { rpId: rp.id, origin: rp.origin, problem: rp.problem } });
   router.get('/api/admin/settings', (req, res) => res.json(adminSettings()));
   router.patch(
     '/api/admin/settings',
@@ -525,6 +525,30 @@ export function adminRoutes(deps) {
       res.json(adminSettings());
     }),
   );
+
+  // ------------------------------------------------------------ branding
+  // The logo and the tab icon arrive as the image itself (app.js lets these two
+  // through its JSON check). The declared type only gets them that far: the
+  // bytes decide what they are.
+  const upload = express.raw({ type: IMAGE_TYPES, limit: MAX_IMAGE_BYTES });
+  for (const kind of ['logo', 'icon']) {
+    router.post(`/api/admin/branding/${kind}`, upload, (req, res) => {
+      branding.save(kind, Buffer.isBuffer(req.body) ? req.body : null);
+      res.json(adminSettings());
+    });
+    router.post(`/api/admin/branding/${kind}/remove`, (req, res) => {
+      branding.remove(kind);
+      res.json(adminSettings());
+    });
+  }
+
+  // What's wrong with a pair of colours, and the page's colours with them, for
+  // the admin to preview as you pick. Saves nothing.
+  router.post('/api/admin/branding/check', (req, res) => {
+    const colors = { accentColor: req.body?.accentColor, backgroundColor: req.body?.backgroundColor };
+    if (!Object.values(colors).every((c) => typeof c === 'string' && COLOR.test(c))) throw bad('Colours are written as #rrggbb, for example #e8b04a.');
+    res.json({ problems: check(colors), theme: palette(colors) });
+  });
 
   // ------------------------------------------------------------ backups
   router.get('/api/admin/backups', (req, res) => res.json(backups.status()));

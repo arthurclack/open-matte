@@ -1,5 +1,5 @@
 import express from 'express';
-import { config } from '../config.js';
+import { publicOrigin } from '../config.js';
 
 const bad = (message, status = 400) => Object.assign(new Error(message), { status });
 
@@ -15,7 +15,6 @@ const note = (v) => (v === null || v === undefined || String(v).trim() === '' ? 
 // adminRoutes, after its sign-in check.
 export function peopleRoutes({ db, people }) {
   const router = express.Router();
-  const origin = (req) => config.publicUrl || `${req.protocol}://${req.get('host')}`;
 
   const q = {
     all: db.prepare('SELECT * FROM people ORDER BY name COLLATE NOCASE'),
@@ -92,7 +91,7 @@ export function peopleRoutes({ db, people }) {
   // The only response that ever contains the link.
   router.post('/api/admin/people/:id/links', (req, res) => {
     const b = req.body || {};
-    const r = people.createLink(req.params.id, { hours: b.hours, reset: b.reset === true, confirmedContact: b.confirmedContact === true, ticketId: b.ticketId ?? null }, origin(req));
+    const r = people.createLink(req.params.id, { hours: b.hours, reset: b.reset === true, confirmedContact: b.confirmedContact === true, ticketId: b.ticketId ?? null }, publicOrigin(req));
     res.status(201).json(r);
   });
 

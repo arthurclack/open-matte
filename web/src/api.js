@@ -7,23 +7,28 @@ export class ApiError extends Error {
   }
 }
 
-async function request(method, url, body, { keepalive = false } = {}) {
-  const res = await fetch(url, {
-    method,
-    credentials: 'same-origin',
-    keepalive,
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+async function send(url, init) {
+  const res = await fetch(url, { credentials: 'same-origin', ...init });
   const data = (res.headers.get('content-type') || '').includes('json') ? await res.json() : null;
   if (!res.ok) throw new ApiError(res.status, data?.error);
   return data;
 }
 
+const request = (method, url, body, { keepalive = false } = {}) =>
+  send(url, {
+    method,
+    keepalive,
+    headers: body === undefined ? {} : { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
 export const api = {
   get: (url) => request('GET', url),
   post: (url, body = {}, opts) => request('POST', url, body, opts),
   patch: (url, body = {}) => request('PATCH', url, body),
+  // A file as the whole body, labelled with its own type. The server goes by the bytes:
+  // the type only gets the request past the rule that /api takes JSON.
+  upload: (url, file) => send(url, { method: 'POST', headers: { 'content-type': file.type }, body: file }),
 };
 
 // ---- formatting

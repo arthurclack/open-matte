@@ -7,6 +7,7 @@ import { tempDir } from './helpers.js';
 
 const { openDb } = await import('../server/db.js');
 const { createApp } = await import('../server/app.js');
+const { config } = await import('../server/config.js');
 
 let server;
 let base;
@@ -24,12 +25,20 @@ before(async () => {
 });
 after(() => new Promise((r) => server.close(r)));
 
-test('page paths get the app', async () => {
-  for (const p of ['/', '/arrival', '/t/abc123', '/admin', '/admin/tickets/4']) {
+test("page paths get the app, titled with the cinema's name", async () => {
+  // This app has no data folder of its own: serving pages mustn't make one in ./data.
+  const branding = path.join(config.dataDir, 'branding');
+  const existed = fs.existsSync(branding);
+  for (const p of ['/', '/index.html', '/arrival', '/t/abc123', '/admin', '/admin/tickets/4']) {
     const res = await fetch(base + p);
     assert.equal(res.status, 200, p);
-    assert.match(await res.text(), /<title>app<\/title>/, p);
+    const html = await res.text();
+    assert.match(html, /<title>Open Matte<\/title>/, p);
+    assert.doesNotMatch(html, /<title>app<\/title>/, p);
+    // The stub has no </head>: the cinema's tags follow the title.
+    assert.match(html, /<title>Open Matte<\/title>\s*<meta name="theme-color" content="#0d0c0f"/, p);
   }
+  assert.equal(fs.existsSync(branding), existed);
 });
 
 test('assets are served and cached for good', async () => {

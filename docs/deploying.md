@@ -114,6 +114,10 @@ home gateway sinkholes openmatte.dev). For each check, either:
 
 A TV can't have a hosts file, so it needs the hotspot or the gateway exception.
 
+The same goes for checking a ticket link's preview in iMessage or WhatsApp: the phone
+that sends the link fetches the preview itself, so it needs mobile data or the
+gateway exception.
+
 ## Adding a film
 
 ```bash
@@ -176,16 +180,20 @@ code always needs a restore of the backup you took before it: see
 
 ## Backups
 
-Everything Open Matte knows lives in its database: films' details, tickets,
+Nearly everything Open Matte knows lives in its database: films' details, tickets,
 screenings and activity, people and their passkeys, settings (including a TMDB key
-saved in the admin). The films themselves aren't backed up here: keep your
-originals and encodes elsewhere, as you already do.
+saved in the admin, and the cinema's colours). The exceptions are two folders of
+images in the data directory: posters downloaded from TMDB (`artwork`), and the logo
+and tab icon you uploaded (`branding`). Backups copy both. The films themselves
+aren't backed up here: keep your originals and encodes elsewhere, as you already do.
 
 **Automatic backups.** Every day at 04:00 UTC the app saves a consistent copy of
 the database, checks it, and keeps it in `/srv/open-matte/backups` (`BACKUP_PATH`
 in `deploy/.env`), as `open-matte-YYYY-MM-DD-HHMMSS.db`. It keeps the newest of
 each of the last 14 days and the first of each month for a year. Posters
-downloaded from TMDB are copied to `backups/artwork`. If the server was down at
+downloaded from TMDB are copied to `backups/artwork`, and the logo and tab icon to
+`backups/branding`. Backups only add to those two folders, never remove from them,
+so an older backup's logo is still there to restore. If the server was down at
 04:00, a backup runs shortly after it starts. **Settings → Backups** in the admin
 shows the latest and has a **Back up now** button.
 
@@ -214,8 +222,12 @@ cd /srv/open-matte/app/deploy && docker compose stop app
 cp /srv/open-matte/backups/open-matte-2026-10-26-040000.db /srv/open-matte/data/open-matte.db
 rm -f /srv/open-matte/data/open-matte.db-wal /srv/open-matte/data/open-matte.db-shm
 cp -rn /srv/open-matte/backups/artwork/. /srv/open-matte/data/artwork/
+cp -rn /srv/open-matte/backups/branding/. /srv/open-matte/data/branding/
 docker compose start app
 ```
+
+If no poster was ever downloaded from TMDB, or no logo or icon uploaded, there's no
+folder to copy, and that `cp` says "No such file or directory". Nothing is wrong.
 
 Viewers stay signed in, because their sessions are in the backup too, unless
 the backup is older than their sign-in.
@@ -241,13 +253,13 @@ events pointing at nobody.
 
 **Restoring onto a new server.** Follow **First install** up to the point where
 `docker compose up` would run, copy the films back into `media`, and put the
-database (and `artwork`) in place as above before the first start. With the old
-server gone, take them from the off-server copy (`.open-matte-backups` on the
-Storage Box, if you set up the timer above). Use the same `DOMAIN`, or every ticket
-link you've sent stops working, and the same `WEBAUTHN_RP_ID`, or nobody's passkey
-works. The admin password isn't in the backup: it lives only in `deploy/.env`, so
-set a new one if the old `.env` is gone. A TMDB key saved in the admin is in the
-backup; one set in `.env` is not.
+database (and `artwork` and `branding`) in place as above before the first start.
+With the old server gone, take them from the off-server copy (`.open-matte-backups`
+on the Storage Box, if you set up the timer above). Use the same `DOMAIN`, or every
+ticket link you've sent stops working, and the same `WEBAUTHN_RP_ID`, or nobody's
+passkey works. The admin password isn't in the backup: it lives only in
+`deploy/.env`, so set a new one if the old `.env` is gone. A TMDB key saved in the
+admin is in the backup; one set in `.env` is not.
 
 ## Rolling back
 
@@ -276,6 +288,7 @@ So the backup has to be in place before the older code starts:
    cp /srv/open-matte/backups/open-matte-2026-10-26-153012.db /srv/open-matte/data/open-matte.db
    rm -f /srv/open-matte/data/open-matte.db-wal /srv/open-matte/data/open-matte.db-shm
    cp -rn /srv/open-matte/backups/artwork/. /srv/open-matte/data/artwork/
+   cp -rn /srv/open-matte/backups/branding/. /srv/open-matte/data/branding/
    ```
 
 3. On your computer, check out the previous tag and deploy it. `deploy.sh` runs
@@ -301,14 +314,14 @@ stops as above.
 
 ## IPv6 and rate limits
 
-Opening ticket links, setup and recovery links, signing in and the admin password
-are rate-limited per visitor, and an IPv6 visitor counts by its /64 (one household or
-server usually holds a whole one). For that the app has to see visitors' real
-addresses. www.openmatte.dev has no AAAA record, so everyone arrives over IPv4 and it
-does. If you give your domain an AAAA record, give the compose network IPv6 first
-(`enable_ipv6` in `deploy/compose.yml`; Docker's IPv6 documentation has the details
-for your version). Otherwise Docker hands Caddy every IPv6 visitor as the network
-gateway's address, and they all share one limit.
+Opening ticket links and their link previews, setup and recovery links, signing in
+and the admin password are rate-limited per visitor, and an IPv6 visitor counts by
+its /64 (one household or server usually holds a whole one). For that the app has
+to see visitors' real addresses. www.openmatte.dev has no AAAA record, so everyone
+arrives over IPv4 and it does. If you give your domain an AAAA record, give the
+compose network IPv6 first (`enable_ipv6` in `deploy/compose.yml`; Docker's IPv6
+documentation has the details for your version). Otherwise Docker hands Caddy every
+IPv6 visitor as the network gateway's address, and they all share one limit.
 
 ## Logs
 

@@ -58,8 +58,8 @@ Planned in [milestone-2.md](milestone-2.md) and built in six slices, all deploye
 Planned in [milestone-3.md](milestone-3.md) (3 November), in six slices, ending in
 v1.0.0.
 
-- [ ] Branding: an accent colour and a logo, from the first paint, and link previews
-  that show the cinema, never the film
+- [ ] Branding: accent and background colours, a logo and a tab icon, from the first
+  paint; ticket links that preview their film's poster
 - [ ] Audio and subtitles: remembered choices, forced subtitles, subtitle size and
   background, the bar and the native menus in agreement
 - [ ] Media Session on the lock screen, and a Playback help panel with a copyable

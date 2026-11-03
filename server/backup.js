@@ -8,8 +8,9 @@ import { config } from './config.js';
 //
 // Each backup is a consistent copy of the database (SQLite's VACUUM INTO, safe
 // while the server runs), checked with PRAGMA integrity_check, and saved as
-// BACKUP_DIR/open-matte-YYYY-MM-DD-HHMMSS.db (UTC). TMDb artwork is mirrored to
-// BACKUP_DIR/artwork. Kept: the newest backup of each of the last 14 days, and
+// BACKUP_DIR/open-matte-YYYY-MM-DD-HHMMSS.db (UTC). TMDb artwork and the
+// cinema's logo and icon are mirrored to BACKUP_DIR/artwork and
+// BACKUP_DIR/branding. Kept: the newest backup of each of the last 14 days, and
 // the oldest of each of the last 12 months.
 
 const NAME = /^open-matte-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})\.db$/;
@@ -58,7 +59,9 @@ export function createBackups({
 }) {
   let running = null;
   let lastError = null;
-  const artworkDir = path.join(dataDir, 'artwork');
+  // Folders of files named after their content, so copying only new ones is
+  // enough. Files whose names start with a dot are still being written.
+  const mirrored = ['artwork', 'branding'];
 
   function list() {
     if (!backupDir) return [];
@@ -107,9 +110,15 @@ export function createBackups({
       } finally {
         await fsp.rm(tmp, { force: true });
       }
-      // Artwork files are named after their content, so copying only new ones is enough.
-      if (fs.existsSync(artworkDir)) {
-        await fsp.cp(artworkDir, path.join(backupDir, 'artwork'), { recursive: true, force: false, errorOnExist: false });
+      for (const folder of mirrored) {
+        const from = path.join(dataDir, folder);
+        if (!fs.existsSync(from)) continue;
+        await fsp.cp(from, path.join(backupDir, folder), {
+          recursive: true,
+          force: false,
+          errorOnExist: false,
+          filter: (src) => !path.basename(src).startsWith('.'),
+        });
       }
       for (const old of backupsToDelete(list().map((b) => b.name), { keepDays, keepMonths })) {
         await fsp.rm(path.join(backupDir, old), { force: true });
