@@ -136,12 +136,19 @@ function PersonMenu({ me, onSignOut }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const ref = useRef(null);
+  const buttonRef = useRef(null);
 
   useEffect(() => {
     if (!open) return undefined;
     // Escape, a click elsewhere, or tabbing out of the menu closes it.
     const close = (e) => {
-      if (e.type === 'keydown' ? e.key === 'Escape' : !ref.current?.contains(e.target)) setOpen(false);
+      if (e.type !== 'keydown') {
+        if (!ref.current?.contains(e.target)) setOpen(false);
+      } else if (e.key === 'Escape') {
+        // From one of its items, focus goes back to the button rather than the page.
+        if (ref.current?.contains(document.activeElement)) buttonRef.current?.focus();
+        setOpen(false);
+      }
     };
     document.addEventListener('pointerdown', close);
     document.addEventListener('keydown', close);
@@ -167,7 +174,7 @@ function PersonMenu({ me, onSignOut }) {
 
   return (
     <div className="menu" ref={ref}>
-      <button className="btn small" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} disabled={busy}>
+      <button ref={buttonRef} className="btn small" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} disabled={busy}>
         {me.person.name} ▾
       </button>
       {open && (

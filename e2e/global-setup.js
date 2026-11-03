@@ -1,5 +1,5 @@
-// Once per `npm run e2e`: the film, a fresh data folder, the web build, the
-// server, and through the admin API a published film and a cinema name. The
+// Once per `npm run e2e`: the films, a fresh data folder, the web build, the
+// server, and through the admin API published films and a cinema name. The
 // journeys find all of it in process.env (E2E_*), which Playwright passes on to
 // its workers. The admin password is made here for this run only: it is never
 // written to a file or printed.
@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CACHE, FILM, ensureFilm, hasFfmpeg } from './film.js';
+import { CACHE, FILMS, ensureFilms, hasFfmpeg } from './film.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CINEMA_NAME = 'Harbour Lights Picturehouse';
@@ -96,17 +96,17 @@ async function adminCall(base, cookie, method, url, body) {
 export default async function globalSetup() {
   if (!hasFfmpeg()) {
     // Every journey skips with this reason (fixtures.js).
-    process.env.E2E_SKIP = 'ffmpeg and ffprobe are needed to make the test film: install ffmpeg (brew install ffmpeg) and run again.';
+    process.env.E2E_SKIP = 'ffmpeg and ffprobe are needed to make the test films: install ffmpeg (brew install ffmpeg) and run again.';
     console.warn(`e2e: ${process.env.E2E_SKIP}`);
     return undefined;
   }
 
-  const film = ensureFilm();
+  const media = ensureFilms();
   ensureBuild();
   const run = runFolder();
   const password = crypto.randomBytes(24).toString('base64url');
   const log = path.join(run, 'server.log');
-  const { child, port } = await startServer({ dataDir: path.join(run, 'data'), mediaDir: film.mediaDir, password, log });
+  const { child, port } = await startServer({ dataDir: path.join(run, 'data'), mediaDir: media.mediaDir, password, log });
   const base = `http://localhost:${port}`;
 
   const teardown = () =>
@@ -129,21 +129,24 @@ export default async function globalSetup() {
       .join('; ');
 
     const scan = await adminCall(base, cookie, 'POST', '/api/admin/scan', {});
-    const scanned = scan.films.find((f) => f.slug === FILM.slug);
-    if (!scanned || scanned.status === 'error') throw new Error(`the test film didn't scan cleanly: ${JSON.stringify(scanned ?? scan)}`);
-    const listed = (await adminCall(base, cookie, 'GET', '/api/admin/films')).find((f) => f.slug === FILM.slug);
-    await adminCall(base, cookie, 'PATCH', `/api/admin/films/${listed.id}`, { published: true });
+    const listed = await adminCall(base, cookie, 'GET', '/api/admin/films');
+    const films = {};
+    for (const [key, { slug }] of Object.entries(FILMS)) {
+      const scanned = scan.films.find((f) => f.slug === slug);
+      if (!scanned || scanned.status === 'error') throw new Error(`the test film ${slug} didn't scan cleanly: ${JSON.stringify(scanned ?? scan)}`);
+      const { id, title } = listed.find((f) => f.slug === slug);
+      await adminCall(base, cookie, 'PATCH', `/api/admin/films/${id}`, { published: true });
+      films[key] = { id, slug, title };
+    }
     await adminCall(base, cookie, 'PATCH', '/api/admin/settings', { cinemaName: CINEMA_NAME });
 
     Object.assign(process.env, {
       E2E_BASE_URL: base,
       E2E_ADMIN_PASSWORD: password,
       E2E_ADMIN_COOKIE: cookie,
-      E2E_FILM_ID: String(listed.id),
-      E2E_FILM_SLUG: FILM.slug,
-      E2E_FILM_TITLE: listed.title,
+      E2E_FILMS: JSON.stringify(films),
       E2E_CINEMA_NAME: CINEMA_NAME,
-      E2E_CODECS: film.codecs.join(','),
+      E2E_CODECS: media.codecs.join(','),
       E2E_SERVER_LOG: log,
     });
   } catch (err) {

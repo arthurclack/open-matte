@@ -254,17 +254,36 @@ regressions; they don't replace the iPhone, Mac Safari, TV and non-HDR checks.
 
 **The Playwright part, built (3 November).** `npm run e2e` runs `e2e/*.spec.js` in four
 projects: Playwright's `chromium`, `firefox` and `webkit`, and `chrome` (the installed
-Google Chrome). Once per run, `e2e/global-setup.js` makes an eight-second test film with
-ffmpeg through `scripts/encode.mjs` (H.264 and AAC, English and French audio and
-subtitles; cached in `e2e/.cache` by the encoder's hash), builds `dist/` if it's older
-than `web/`, starts the app on a free port with a fresh data folder, no backups, no TMDB
-and an admin password made for the run, and publishes the film through the admin API.
-Each journey makes its own tickets and people, and any uncaught error in a page fails it.
+Google Chrome; its journeys skip if it isn't there). Once per run, `e2e/global-setup.js`
+makes two eight-second test films with ffmpeg through `scripts/encode.mjs` (H.264 and
+AAC: one with English and French audio and subtitles and a forced French track, the
+other with English and Canadian French, English subtitles marked default; cached in
+`e2e/.cache` by the encoder's hash), builds `dist/` if it's older than `web/`, starts
+the app on a free port with a fresh data folder, no backups, no TMDB and an admin
+password made for the run, and publishes both films through the admin API. Each journey
+makes its own tickets and people, and any uncaught error in a page fails it. A run takes
+about 25 seconds on this Mac. The run's admin password goes into the sign-in form
+without passing through a Playwright call, and the journeys never point a locator or an
+`expect()` at the field while it holds it, so it stays out of the terminal, traces,
+`test-results/` and the report even when a sign-in fails (`signInAsAdmin` in
+`e2e/fixtures.js` says how Playwright would otherwise copy it out). What a run leaves
+(`e2e/.cache`, `test-results/`, `playwright-report/`) is ignored by git, left out by
+`scripts/deploy.sh` and kept out of the Docker build; Firefox's stand-in home folder goes
+in the system's temp folder, where macOS's "deny delete" on its Library can't get in the
+way of removing the checkout.
 
 - **Ticket → play**: the code leaves the address, the film plays past 2 s, a progress
-  report is accepted, French audio and subtitles from the bar take effect, the lock
-  screen's metadata names the film, and the copied Playback help summary holds no
-  address, ticket code, film title or cinema name.
+  report is accepted, French audio ("French · Stereo") and subtitles from the bar take
+  effect, the lock screen's metadata names the film, and the copied Playback help
+  summary holds no address, ticket code, film title or cinema name.
+- **Audio and subtitles**: the forced French track shows by itself with French audio and
+  subtitles Off, never in the menu, which reads "Off · signs and foreign dialogue shown"
+  (and Playback help "Off (French forced subtitles showing)"), and goes with English
+  audio; a second film starts in the languages chosen in the first (French finds
+  Canadian French) at the size and background chosen there, and a remembered Off beats
+  its default English; a track turned on outside the bar, as the browser's own menu
+  does, moves the bar and is remembered, the forced one as Off. Only language codes and
+  the two style settings are stored, and never the player's own picks.
 - **Revoke → refused**: revoked mid-film, the player stops with its message at the next
   report, a media request from that browser gets 403, and Media Session is cleared.
 - **Passkeys and keeping**: a setup link and a virtual authenticator make a passkey;
@@ -273,17 +292,31 @@ Each journey makes its own tickets and people, and any uncaught error in a page 
 - **Keyboard only**: Tab to Play, Enter, focus on the video, Space pauses; the name menu
   opens with Enter and closes with Escape; the admin's sign-in and Settings.
 - **Admin smoke**: sign in through the form, issue a ticket from the film's page, find it
-  under Tickets, the projection booth, Activity filtered by the film, and no errors in
-  the console.
+  under Tickets, the projection booth (a media request it saw refused, the media folder's
+  two films), Activity filtered by film and to viewing (the other film's events, and a
+  ticket for this one given to someone, left out), and no errors in the console.
 
-All three of Playwright's engines play the test film on this Mac (WebKit with its own
+All three of Playwright's engines play the test films on this Mac (WebKit with its own
 HLS player, the others through hls.js), so playback runs everywhere; what skips is
 passkeys and keeping in Firefox and WebKit (virtual authenticators are Chromium-only)
-and Space in WebKit, whose video leaves the key to the page. One check is marked as a
-known failure until it's fixed: Escape from inside the name menu leaves focus on the
-page instead of the menu's button. The device rows in
-[Results: milestone 3](device-checks.md#results-milestone-3) are still yours: these
-journeys don't stand in for any of them.
+and Space in WebKit, whose video leaves the key to the page. The keyboard journey also
+found that Escape from inside the name menu left focus on the page instead of the
+menu's button; fixed in `web/src/site.jsx`.
+
+The audio and subtitles journey found three races in Safari's own player (WebKit),
+fixed in `web/src/Player.jsx`: a second film sometimes started in English with French
+remembered, or with its remembered subtitles turned off and Off saved as if chosen.
+Safari can list the audio tracks one at a time, so the remembered language was used up
+on half a list: the player now waits for the whole list, or until the film can play. As
+the film finishes loading, Safari can turn its default audio back on beside the
+remembered one: the player puts its choice back. And Safari re-runs its own subtitle
+choice as it adds tracks from the stream, which can land just after playback starts:
+the browser's changes now count as the viewer's once the viewer has touched the video or
+the film has played half a second, not as soon as it plays. Whether real Safari does the
+same is for the Mac Safari and iPhone rows.
+
+The device rows in [Results: milestone 3](device-checks.md#results-milestone-3) are still
+yours: these journeys don't stand in for any of them.
 
 What fails gets fixed in this slice, or written up as its own work if it's bigger
 (an encoding change, say).

@@ -6,12 +6,12 @@
 import {
   NO_SNAPSHOTS,
   admin,
-  enterAdminPassword,
   expect,
   film,
   focusedTag,
   media,
   playbackSupport,
+  signInAsAdmin,
   signedInPerson,
   tabTo,
   test,
@@ -86,9 +86,6 @@ test('the name menu opens with Enter and closes with Escape, focus staying on it
 });
 
 test('Escape from inside the name menu puts focus back on its button', async ({ page, context }, testInfo) => {
-  // Known: the menu closes, but focus falls to the page (web/src/site.jsx,
-  // PersonMenu). Remove this line once it's fixed: the test then has to pass.
-  test.fail(true, 'focus falls to <body> when Escape closes the menu from one of its items');
   const button = await signedInFrontPage(page, context, testInfo);
   await tabTo(page, button);
   await page.keyboard.press('Enter');
@@ -100,12 +97,15 @@ test('Escape from inside the name menu puts focus back on its button', async ({ 
 
 test('the admin sign-in and Settings work from the keyboard', async ({ page }, testInfo) => {
   await page.goto('/admin');
-  const password = page.getByLabel('Admin password');
   // The password field has focus from the start, and Enter signs in.
-  await expect(password).toBeFocused();
-  await enterAdminPassword(page, password);
-  await expect(password).toBeFocused();
-  await page.keyboard.press('Enter');
+  await expect(page.getByLabel('Admin password')).toBeFocused();
+  await signInAsAdmin(page, async () => {
+    // Still there once the password is in. Asked of the page, not of a locator on the
+    // field, which would copy the password into the call log (see signInAsAdmin).
+    const stillFocused = await page.evaluate(() => document.activeElement?.matches('input[type=password]') ?? false);
+    expect(stillFocused, 'the password field keeps focus once the password is in').toBe(true);
+    await page.keyboard.press('Enter');
+  });
   await expect(page.getByRole('heading', { level: 1, name: 'Films' })).toBeVisible();
 
   await tabTo(page, page.getByRole('link', { name: 'Settings' }));
