@@ -74,7 +74,12 @@ export function clearCookie(req, res, name) {
   setCookie(req, res, name, '', 0);
 }
 
-export function createSessionStore(db) {
+// adminPassword: tests pass their own; the app uses ADMIN_PASSWORD.
+export function createSessionStore(db, { adminPassword = config.adminPassword } = {}) {
+  // An admin session is found by its token keyed with the admin password, so a new
+  // ADMIN_PASSWORD (which takes a restart) signs every admin browser out. Without
+  // the cookie, what the database holds says nothing about the password.
+  const idHashFor = (kind, token) => (kind === 'admin' ? crypto.createHmac('sha256', adminPassword).update(token).digest('hex') : sha256(token));
   const q = {
     insert: db.prepare(`INSERT INTO sessions (id_hash, kind, device, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`),
     insertSignedIn: db.prepare(`
@@ -104,7 +109,7 @@ export function createSessionStore(db) {
     const token = randomToken();
     const now = Date.now();
     const ttl = kind === 'admin' ? config.adminSessionHours * HOUR : config.viewerSessionDays * DAY;
-    const idHash = sha256(token);
+    const idHash = idHashFor(kind, token);
     q.insert.run(idHash, kind, deviceLabel(req.get('user-agent')), now, now, now + ttl);
     setCookie(req, res, kind === 'admin' ? ADMIN_COOKIE : VIEWER_COOKIE, token, ttl);
     return q.get.get(idHash, kind);
@@ -114,7 +119,7 @@ export function createSessionStore(db) {
     const cookies = req.cookies || (req.cookies = parseCookies(req.headers.cookie));
     const token = cookies[kind === 'admin' ? ADMIN_COOKIE : VIEWER_COOKIE];
     if (!token) return null;
-    const row = q.get.get(sha256(token), kind);
+    const row = q.get.get(idHashFor(kind, token), kind);
     const now = Date.now();
     // Disabling a person also revokes their sessions; checking here as well means
     // "from the next request" holds even if that write were ever missed.

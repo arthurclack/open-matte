@@ -1,46 +1,81 @@
 # Open Matte
 
-A small, self-hosted, personal cinema. You publish a handful of films you want to
-recommend, and friends watch them in the browser from a link:
+A small, self-hosted cinema for recommending films to friends. You publish a handful
+of films you think people should see, write a few lines on why, and send a friend a
+ticket: a link that opens the film in their browser.
 
 > You should watch this film. Here's the link.
 
-It isn't a media server. You prepare streaming-ready versions on your own
-computer, copy them to a server, write a few lines on why someone should watch
-the film, and send a ticket. The server serves the prepared files and never
-transcodes, so playback doesn't depend on your home upload speed.
+## What it is, and what it isn't
 
-## What's here
+Open Matte is a small personal cinema you run on your own server, for people you
+know. You choose every film, and nobody can sign up on their own.
 
-Milestone 1, ticketed playback, is complete:
+It isn't a media server. There's no library of everything you own, and the server
+never transcodes. You prepare streaming-ready versions of each film on your own
+computer with the encoder, copy them to the server, and it sends those files as they
+are. So playback doesn't depend on your home upload speed, and a small server copes.
 
-- **Film pages** with poster, details and your recommendation
-- **Adaptive HLS playback** (hls.js, or Safari's own player) with audio and subtitle choices and quality on Auto
-- **Tickets**: per-film "admit one" links with optional screening limits, a start-by date and a validity period counted from first playback
-- **Screenings** that can be paused and resumed for 48 hours, one device at a time
-- **Protected media**: every playlist, segment and subtitle request is checked against the viewer's session and screening
-- **Admin**: scan the media folder, publish, issue and revoke tickets, see opened/played/finished activity
-- **Import contract**: one folder per film, described by a `film.json` ([docs/import-format.md](docs/import-format.md))
-- **Film information from TMDB**, optional: details, posters and backdrops filled in on import or chosen by hand, as Jellyfin does ([docs/metadata.md](docs/metadata.md))
-- **Reference encoder** for HEVC + H.264 ladders with alternate audio ([docs/encoding.md](docs/encoding.md))
+It isn't DRM either. The aim is "private enough for friends": every media request is
+checked against a ticket, but someone who can play a film could record it.
 
-Milestone 2, people and passkeys, is built (planned in
-[docs/milestone-2.md](docs/milestone-2.md)); checks on real devices are under way
-([docs/device-checks.md](docs/device-checks.md)):
+Only share films you have the right to share.
 
-- **People and passkeys**: you add people and send each a single-use setup link; they create a passkey and can then sign in and out with no password. Recovery links, disabling people and removing passkeys are in the admin ([docs/access.md](docs/access.md))
-- **Tickets for one person**: alongside tickets for anyone with the link, a ticket only one person can use, signed in with their passkey. It's listed on every device they sign in on, and forwarding the link does nothing ([docs/access.md](docs/access.md#two-kinds-of-ticket))
-- **Keeping a ticket**: a ticket for anyone can be marked "Let them keep it". The first signed-in person to keep it makes it theirs, on every device they sign in on; other browsers holding the link lose it and are told why, and its limits and expiry don't change. You can give it to someone else or back to anyone with the link ([docs/access.md](docs/access.md#keeping-a-ticket))
-- **An account page**: a signed-in person sees their passkeys and the browsers they're signed in on, and can sign out everywhere themselves ([docs/access.md](docs/access.md#signing-in-and-out))
-- **Films shown to members**: a switch per film. Signed-in people see its page, poster and your recommendation, and are told to ask for a ticket; playing it still needs one ([docs/access.md](docs/access.md#films-shown-to-members))
+## What you need
 
-Milestone 3, polish and public release, is under way (planned in
-[docs/milestone-3.md](docs/milestone-3.md), progress in
-[docs/roadmap.md](docs/roadmap.md)):
+| | |
+|---|---|
+| A server | Linux with Docker and Docker Compose, and ports 80 and 443 open. Disk for your films: a two-hour 4K HDR film with every rendition is about 50 GB, one without a 4K source 8 to 15 GB. |
+| A domain | A name whose DNS points at the server. Caddy, which runs alongside the app, gets the HTTPS certificate. Passkeys are tied to the domain for good, so pick one you'll keep. |
+| Prepared films | Encoded on your computer with `scripts/encode.mjs`, which needs Node and `ffmpeg`, into one folder per film ([docs/encoding.md](docs/encoding.md), [docs/import-format.md](docs/import-format.md)). |
+| Optionally | A TMDB API key, to fill in film details and artwork ([docs/metadata.md](docs/metadata.md)), and somewhere off the server to copy backups to. |
 
-- **Branding**: an accent and a background colour, a logo and a tab icon, set in the admin and shown on every viewer page from the first paint: the server writes them into the page as it sends it, and the logo's image is requested along with the page. A ticket link for anyone previews its film's poster and title in chat apps; every other link previews as the cinema ([docs/access.md](docs/access.md#link-previews))
-- **Lock screen and Playback help**: while a film plays, the lock screen, Control Center and Chrome's media controls show its title and poster (or, by a setting, only the cinema's name) and work the player as its own controls do. A **Playback help** link under the player shows what the browser is playing and can decode, and copies a summary with no addresses, names or titles in it, for a friend to send you when something won't play ([docs/access.md](docs/access.md#on-the-lock-screen))
-- **Activity, retention and the projection booth**: Activity filters by film, person, ticket and kind, and **Show older** goes back as far as the records do; film and person pages count what was opened, played and finished. Progress reports, other events and signed-out browsers are deleted after times you set (by default 30 days, 12 months and 30 days), while tickets and screenings never are, so nothing a viewer can do changes. **Status** in the admin, the projection booth, shows what needs attention and whether the server is well ([docs/access.md](docs/access.md#how-long-its-kept))
+What your friends need:
+
+- **A browser.** A ticket for anyone with the link works in any current browser,
+  phones, TVs and apps' built-in browsers included, with no account.
+- **A passkey, only if you give them an account.** You'd do that to send tickets only
+  they can use, or to show them films before they have a ticket. They create the
+  passkey from a link you send, and there's no password. TV browsers and apps'
+  built-in browsers usually can't use passkeys.
+
+## What it does
+
+- **Film pages** with the poster, details and your recommendation, and details and
+  artwork from TMDB if you want them.
+- **Tickets**: an "admit one" link per film, with an optional screening limit,
+  start-by date and number of days after first play. Revoking one stops it on the next
+  request.
+- **Screenings**: pressing Play starts one. It can be paused and resumed for 48 hours,
+  on one device at a time.
+- **Protected media**: every playlist, segment and subtitle request is checked against
+  the browser's ticket and the screening it holds.
+- **Playback**: adaptive HLS, through hls.js or Safari's own player, in HEVC and H.264,
+  with HDR10. Audio and subtitle choices are remembered in each browser, and the lock
+  screen shows the film. A **Playback help** link gives a friend a summary to send you
+  when something won't play.
+- **People and passkeys**: tickets only one person can use, signed in; letting someone
+  keep a link ticket in their account; films shown to members; recovery when someone
+  loses a device.
+- **Branding**: your cinema's name, colours, logo and tab icon. A ticket link shows its
+  film's poster and title in chat apps.
+- **The admin**: scan the media folder, publish, issue tickets, add people, see
+  Activity, choose how long records are kept, and check on the server under
+  **Status**.
+- **Backups** every day, keeping the last 14 days and one a month for a year, with a
+  timer to copy them off the server.
+
+[docs/access.md](docs/access.md) has the rules: who can play what, and what is
+recorded about viewers and for how long.
+
+## Where to start
+
+[docs/installing.md](docs/installing.md) takes you from a fresh server to a working
+cinema and a played ticket. Before you update, read [CHANGELOG.md](CHANGELOG.md): each
+release says whether it needs a backup first, and whether you can go back without a
+restore.
+
+To report a security problem, see [SECURITY.md](SECURITY.md).
 
 ## Running it locally
 
@@ -61,41 +96,56 @@ showing the cinema's name and logo.
 
 Use `localhost`, not `127.0.0.1`: passkeys belong to a domain, and browsers won't use
 them on an IP address. Locally they need no setting; on a server, see
-[docs/deploying.md](docs/deploying.md#passkeys).
+[docs/installing.md](docs/installing.md).
 
 Put a film folder in `media/` (or make a test one with the encoder), open
-http://localhost:3000/admin, scan, publish, and issue a ticket. Open the ticket
-link in a private window to see it as a guest would.
+http://localhost:3000/admin, scan, publish, and issue a ticket. Open the ticket link
+in a private window to see it as a guest would.
 
 ```bash
-npm test                    # access rules, scanner and the full ticket journey
+npm test                    # access rules, passkeys, scanner, retention and the full ticket journey
 ```
 
-## Deploying
-
-One container behind Caddy, which handles HTTPS. Choose `WEBAUTHN_RP_ID` before
-inviting anyone. See [docs/deploying.md](docs/deploying.md).
-
-## How access works
-
-Tickets are bearer links, or work only for one person, signed in; pressing Play
-starts a screening; media needs a screening this browser holds. People you add can
-sign in with a passkey, created from a single-use link you send them. The details,
-including what is recorded about viewers, are in [docs/access.md](docs/access.md).
+The tests start servers of their own, with temporary folders and in-memory
+databases, so they don't need `npm run dev` and never touch `data/` or `media/`.
 
 ## Layout
 
 ```text
-server/         Express app: access rules, scanner, routes, SQLite
+server/         Express app: access rules, passkeys, scanner, routes, SQLite
 web/            React app: viewer pages, player, admin
-scripts/        encode.mjs (reference encoder), deploy.sh
-deploy/         Docker Compose + Caddy
-docs/           import format, access rules, encoding, deploying, roadmap
+scripts/        encode.mjs (reference encoder), deploy.sh (copy to a server over SSH)
+deploy/         Docker Compose, Caddy and the backup-copy timer
+docs/           installing, access rules, import format, encoding, film information,
+                and the project's plans and roadmap
 test/           node:test suites
 ```
 
-Only share films you have the right to share.
-
 ## Licence
 
-GNU General Public License v3.0. See [LICENSE](LICENSE).
+Open Matte is released under the GNU General Public License v3.0. See
+[LICENSE](LICENSE).
+
+The web app the site sends to browsers is Open Matte's own code too, and the GPL gives
+everyone who receives it the right to its source. The licences file below starts by
+saying where that is, from `repository` in `package.json`. If you run a changed copy,
+publish your changes and point `repository` at them.
+
+### Third-party licences
+
+The web app the site sends to browsers includes other people's open-source code:
+hls.js (Apache License 2.0), and React, React Router and SimpleWebAuthn's browser
+library (MIT), among others. The build collects the licence of every package that
+ends up in it into one file, served with the app at `/third-party-licenses.txt` and
+linked from the site's footer. hls.js carries a few small packages inside its own
+code (parts of the Common Media Library, eventemitter3 and url-toolkit), so
+`vite.config.js` lists those, and the file has their licences too.
+
+To read it locally, run `npm run build`. The file is then
+`dist/third-party-licenses.txt`, and while `npm run dev` is running it's at
+http://localhost:3000/third-party-licenses.txt. The hot-reload server on :5173 doesn't
+make it.
+
+The server's own dependencies, Express and SimpleWebAuthn's server library among
+them, are never sent to browsers. Their licences are installed with them, in
+`node_modules`.

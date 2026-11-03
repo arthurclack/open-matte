@@ -4,13 +4,9 @@ The goal is "private enough for friends", not DRM. These are the rules the code
 follows: `server/access.js` implements the ticket rules, `server/people.js` and
 `server/webauthn.js` people and passkeys, and the tests in `test/` check them.
 
-Milestone 2, planned in [milestone-2.md](milestone-2.md), adds people and passkeys,
-tickets that only one person can use, signed in, keeping a ticket in an account,
-films shown to members and an account page. Checks on real devices are listed in
-[device-checks.md](device-checks.md). Milestone 3 ([milestone-3.md](milestone-3.md))
-changes none of these rules; it adds [link previews](#link-previews) that show a
-ticket's film, shows the film playing [on the lock screen](#on-the-lock-screen), and
-deletes old activity after a time you choose ([How long it's kept](#how-long-its-kept)).
+This page covers the two kinds of ticket, screenings, people and passkeys, and what
+is recorded about viewers and for how long. The checks made on real phones,
+computers and TVs are listed in [device-checks.md](device-checks.md).
 
 ## The records
 
@@ -27,9 +23,9 @@ deletes old activity after a time you choose ([How long it's kept](#how-long-its
 
 Every ticket is one of two kinds, chosen when you issue it:
 
-- **For anyone with the link**: a **bearer invitation**, as in milestone 1. Whoever
-  has the link can use it, in any browser. The name you give it is a label for you,
-  not an identity check, and signing in doesn't change that.
+- **For anyone with the link**: a **bearer invitation**. Whoever has the link can use
+  it, in any browser. The name you give it is a label for you, not an identity check,
+  and signing in doesn't change that.
 - **Only for one person, signed in**: it works only in a browser signed in as that
   person with their passkey. The link is just a way to reach it, and forwarding it
   does nothing.
@@ -162,11 +158,11 @@ and the poster answers 404.
 
 A preview that shows the film tells whoever fetched it which film you sent. Apps that
 fetch previews on their own servers learn it there; iMessage and WhatsApp fetch them
-on the phone instead. That was a deliberate choice for milestone 3 (see
-[milestone-3.md](milestone-3.md#branding-3-november-as-slice-1-started)). To send a
-link whose preview doesn't name the film, issue a ticket for one person. A preview is
-made when the link is sent and stays in the conversation, so revoking the ticket
-stops its poster address but doesn't take back a preview already shown.
+on the phone instead. That's deliberate: a ticket link's preview is meant to show
+its film. To send a link whose preview doesn't name the film, issue a ticket for one
+person. A preview is made when the link is sent and stays in the conversation, so
+revoking the ticket stops its poster address but doesn't take back a preview already
+shown.
 
 ## Keeping a ticket
 
@@ -335,8 +331,7 @@ person's passkey.
   saved. Nothing ever signs in by name.
 - **Note**: for you only, and never sent to a viewer, so "Sam (rude about Nolan)"
   can't end up in Sam's keychain.
-- People are **disabled, not deleted**. There's no way to delete someone in this
-  milestone.
+- People are **disabled, not deleted**. There's no way to delete someone yet.
 
 A **passkey** is a sign-in key that the person's phone, computer or password manager
 creates for this site. The device keeps the private half and unlocks it with Face
@@ -345,18 +340,18 @@ there's no password to steal or reuse, and the server never sees a face or a
 fingerprint. A passkey is either **Synced** (saved to their Apple ID, Google account
 or password manager, so it's on every device signed in to that) or **This device
 only**. Passkeys belong to the domain set as `WEBAUTHN_RP_ID` (see
-[deploying.md](deploying.md#passkeys)): if the site ever moves to another domain,
-everyone needs a new one.
+[installing.md](installing.md#choices-you-make-once)): if the site ever moves to
+another domain, everyone needs a new one.
 
 "Signed in as Sam" really means "someone who can unlock Sam's passkeys". A family
 sharing an Apple ID or a password manager shares those too.
 
-People can't add or remove passkeys themselves in this milestone; only a link from
-you creates one. On a new computer they can sign in with the passkey on their phone
-(the browser offers to use a phone, with a QR code), and a synced passkey turns up
-on their other devices by itself. If neither works, send them an **Add a sign-in
-method** link (below). Letting a signed-in browser add a passkey would turn a stolen
-cookie into a permanent way in.
+People can't add or remove passkeys themselves yet; only a link from you creates
+one. On a new computer they can sign in with the passkey on their phone (the browser
+offers to use a phone, with a QR code), and a synced passkey turns up on their other
+devices by itself. If neither works, send them an **Add a sign-in method** link
+(below). Letting a signed-in browser add a passkey would turn a stolen cookie into a
+permanent way in.
 
 Passkeys need a real browser: the built-in browsers of some apps (Instagram,
 Facebook and the like) don't handle them, so the person may need to open the link in
@@ -498,9 +493,10 @@ included.
 - Poster addresses for [link previews](#link-previews) are made with a key of 256
   random bits, created once and kept in the database. The key is never sent anywhere.
 - Session cookies are 256 random bits, HttpOnly, SameSite=Lax, and Secure over
-  HTTPS. The database keeps only their SHA-256 hash. Admin sign-out, session
-  expiry, ticket revocation, signing a person out and signing out every viewer (in
-  Settings) take effect on the server, from the next request.
+  HTTPS. The database keeps only their SHA-256 hash, keyed with the admin password
+  for the admin's, so a new `ADMIN_PASSWORD` signs every admin browser out. Admin
+  sign-out, session expiry, ticket revocation, signing a person out and signing out
+  every viewer (in Settings) take effect on the server, from the next request.
 - Setup and recovery link tokens are 256 random bits. The database keeps only their
   SHA-256 hash, so a link can't be shown again, and a leaked database or backup
   holds no usable link.

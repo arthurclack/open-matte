@@ -100,6 +100,11 @@ export default function Settings() {
           Sign out every viewer
         </button>
       </div>
+
+      {/* Which Open Matte this is, and the licences of the code the site sends to browsers (the build writes them). */}
+      <p className="faint" style={{ maxWidth: 720, margin: '2.5rem 0 0', fontSize: '0.85rem' }}>
+        Open Matte {settings.version} · <a href="/third-party-licenses.txt">Licences</a>
+      </p>
     </>
   );
 }
@@ -236,7 +241,7 @@ function Passkeys({ passkeys }) {
         ) : (
           !passkeys.problem && <>In development they work on localhost at any port, but not on 127.0.0.1. </>
         )}
-        Set by WEBAUTHN_RP_ID and PUBLIC_URL on the server: see docs/deploying.md.
+        Set by WEBAUTHN_RP_ID and DOMAIN in deploy/.env: see docs/installing.md.
       </p>
     </div>
   );

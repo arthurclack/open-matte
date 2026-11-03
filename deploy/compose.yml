@@ -1,6 +1,9 @@
 # Open Matte behind Caddy. Run from this directory:
 #   docker compose up -d --build
-# Settings come from .env next to this file (see .env.example).
+# Settings come from .env next to this file (see .env.example and
+# docs/installing.md). Put your own additions in compose.override.yml next to
+# it, which Compose reads as well, rather than editing this file
+# (docs/deploying.md, Your own changes to the Docker setup).
 
 # Docker keeps container logs forever unless told otherwise.
 x-logging: &logging
@@ -21,15 +24,22 @@ services:
       WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-}
       TMDB_API_KEY: ${TMDB_API_KEY:-}
       BACKUP_DIR: /backups
+      # Optional: when the daily backup runs and how many are kept. Empty: 4 (UTC), 14 days, 12 months.
+      BACKUP_HOUR: ${BACKUP_HOUR:-}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-}
+      BACKUP_KEEP_MONTHS: ${BACKUP_KEEP_MONTHS:-}
       # Optional: the off-server copy's folder as this container sees it, for the
       # admin's projection booth. Only read. Unset: no copy is shown.
       BACKUP_COPY_DIR: ${BACKUP_COPY_DIR:-}
     volumes:
+      # The database, posters from TMDB and the cinema's logo. Create the folder
+      # first, owned by uid 1000 (the app's user in this container).
       - ${DATA_PATH:-/srv/open-matte/data}:/data
       # Daily database backups. Create the folder first, owned by uid 1000.
       - ${BACKUP_PATH:-/srv/open-matte/backups}:/backups
       # Read-only: the app never writes to your films.
       - ${MEDIA_PATH:-/srv/open-matte/media}:/media:ro
+    # Not published: only Caddy talks to the app, over Docker's own network.
     expose:
       - "3000"
 
@@ -39,6 +49,7 @@ services:
     logging: *logging
     depends_on:
       - app
+    # The only ports published. Docker opens them whatever the server's firewall says.
     ports:
       - "80:80"
       - "443:443"
@@ -48,6 +59,7 @@ services:
       REDIRECT_FROM: ${REDIRECT_FROM:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Caddy's certificates and its account with the certificate authority.
       - caddy_data:/data
       - caddy_config:/config
 
