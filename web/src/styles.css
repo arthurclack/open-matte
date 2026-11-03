@@ -202,6 +202,31 @@ select.filter-select.on { border-color: var(--accent); color: var(--accent); }
 .player-bar .spacer { flex: 1; }
 .player-message { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.82); text-align: center; padding: 1.5rem; }
 .player-message > div { max-width: 30em; }
+/* Subtitle size and background, from the bar's Aa, as classes on the picture's wrapper.
+   Small is the browser's own size. iPhone full screen and AirPlay draw subtitles
+   themselves, in the device's caption style, and ignore these. */
+.cues-small video::cue { font-size: 100%; }
+.cues-medium video::cue { font-size: 125%; }
+.cues-large video::cue { font-size: 160%; }
+.cues-shadow video::cue { background-color: transparent; text-shadow: 0 0 3px #000, 0 0 6px #000, 1px 1px 2px #000, -1px -1px 2px #000; }
+.cues-box video::cue { background-color: rgba(0, 0, 0, 0.75); text-shadow: none; }
+/* Aa: a small button beside the subtitle menu, and the panel it opens under the bar. */
+.cue-style { position: relative; }
+.cue-style-button { background: var(--bg-sunk); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0.25em 0.55em; font-family: var(--serif); font-weight: 600; line-height: inherit; color: var(--text); cursor: pointer; }
+.cue-style-button:hover { border-color: var(--text-dim); }
+.cue-style-button[aria-expanded='true'] { border-color: var(--accent); color: var(--accent); }
+.cue-style-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cue-style-panel { position: absolute; left: 0; top: calc(100% + 0.5rem); width: 19rem; z-index: 10; background: var(--bg-raised); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0.8rem 0.9rem; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); color: var(--text); }
+.cue-style-panel fieldset { border: 0; margin: 0 0 0.8rem; padding: 0; }
+.cue-style-panel legend { padding: 0; margin-bottom: 0.3rem; color: var(--text-faint); font-size: 0.8rem; }
+.player-bar .cue-style-panel label { margin-right: 1.1rem; cursor: pointer; }
+.cue-style-panel p { margin: 0; color: var(--text-dim); font-size: 0.8rem; }
+/* On a phone the bar wraps, so the panel spans the bar rather than hanging off the button. */
+@media (max-width: 520px) {
+  .player-bar { position: relative; }
+  .cue-style { position: static; }
+  .cue-style-panel { left: 1rem; right: 1rem; width: auto; }
+}
 /* Playback help: a quiet link at the end of the bar, and the panel it opens under it. */
 .player-bar .linklike { color: var(--text-dim); }
 .player-bar .linklike:hover { color: var(--text); }

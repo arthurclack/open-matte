@@ -17,7 +17,8 @@
 //                  or { width, height } from Safari's player
 //   quality        the chosen quality: 'Auto' or the pick's label
 //   audio          the audio track's label
-//   subtitles      the subtitle track's label, or null for Off
+//   subtitles      the subtitle track's label, or null for Off; while a forced track
+//                  shows, "Off (French forced subtitles showing)", by language only
 //   screen         { hdr, pixelRatio, width, height }: the video's size as shown
 //   buffer         { ahead (seconds), readyState }
 //   droppedFrames  { dropped, total }
