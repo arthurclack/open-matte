@@ -6,3 +6,6 @@ media
 *.db
 *.db-*
 .claude/
+test-results/
+playwright-report/
+e2e/.cache/

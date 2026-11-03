@@ -128,6 +128,8 @@ Chromecast either play or are written up as their own work.
 Playback checks, folded into milestone 3's compatibility testing with milestone 1's
 open ones. They use the same setup and the plain Test Pattern link for anyone.
 
+Already covered by `npm run e2e` in Playwright's Chromium, Firefox and WebKit ([slice 5](milestone-3.md#5-playback-compatibility-testing)): a link for anyone plays with audio and subtitles switched from the bar (hls.js in Chromium and Firefox, the built-in player in WebKit), a second film starts in the languages, size and background chosen in the first and a remembered Off beats its default, a forced French track shows with French audio and subtitles Off, a track turned on outside the bar moves it, the Playback help summary has no address, code, title or name in each, and Tab, Enter and the name menu work by keyboard, with Space pausing in Chromium and Firefox only: every device row below is still to do.
+
 - **A TV's own browser**: open the plain link for anyone (type it, or send it in a
   message the TV can open). It should play. The link only for you shows a sign-in page
   the TV probably can't complete: that's expected, and why TVs get tickets for anyone.

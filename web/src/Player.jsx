@@ -31,8 +31,11 @@ const HELP_FOR = new Set(['error', 'forbidden', 'unsupported']);
 const MEDIA_ERRORS = { 1: 'MEDIA_ERR_ABORTED', 2: 'MEDIA_ERR_NETWORK', 3: 'MEDIA_ERR_DECODE', 4: 'MEDIA_ERR_SRC_NOT_SUPPORTED' };
 // Playback help keeps the last few problems, in this page only.
 const ERRORS_KEPT = 10;
-// readyState once the tracks are known.
+// readyState once the tracks are known, and once it can play.
 const HAVE_METADATA = 1;
+const HAVE_FUTURE_DATA = 3;
+// How long the film plays before the browser's track changes count as the viewer's.
+const SETTLE_SECONDS = 0.5;
 
 const SIZE_LABELS = { small: 'Small', medium: 'Medium', large: 'Large' };
 const BACKGROUND_LABELS = { shadow: 'Shadow', box: 'Box' };
@@ -119,10 +122,11 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
   // them, so the player's own changes are never taken for the viewer's.
   const shownTrack = useRef(-1);
   const enabledAudio = useRef(null);
-  // Whether playback has started or the viewer has touched the video. Before that, a
-  // track the browser shows or enables by itself is its own pick as the film loads, not
-  // the viewer's (Chrome shows the first subtitles it has once the player has shown any;
-  // Safari follows the system's caption settings): the player's start choice stands.
+  // Whether the film has played for a moment or the viewer has touched the video. Before
+  // that, a track the browser shows or enables by itself is its own pick as the film
+  // loads, not the viewer's (Chrome shows the first subtitles it has once the player has
+  // shown any; Safari follows the system's caption settings): the player's start choice
+  // stands.
   const settled = useRef(false);
   // Which player runs the stream: Safari's own ('native') or hls.js ('hls').
   const [engine, setEngine] = useState(null);
@@ -229,16 +233,31 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
       video.src = screening.masterUrl;
       // The remembered audio language is applied once, when the tracks are known.
       let audioStarted = false;
+      // Whether the player switched tracks for the remembered language.
+      let switched = false;
       const syncAudio = () => {
         const list = video.audioTracks ? Array.from(video.audioTracks) : [];
-        // Safari lists the film's audio only around loadedmetadata: wait for both,
-        // or French remembered would be used up on an empty list and never applied.
-        if (!audioStarted && list.length && video.readyState >= HAVE_METADATA) {
+        // Safari lists the film's audio only around loadedmetadata, and can add the
+        // tracks one at a time: wait for metadata and the whole list (or until it can
+        // play, if it lists fewer than the film has), or French remembered would be used
+        // up on an empty or partial list and never applied.
+        const whole = list.length >= film.media.audio.length || video.readyState >= HAVE_FUTURE_DATA;
+        if (!audioStarted && list.length && whole && video.readyState >= HAVE_METADATA) {
           audioStarted = true;
           // Safari has already enabled the track it would play: among equal matches, that one.
           const id = initialAudio(list.map((t, i) => ({ id: i, language: t.language, default: t.enabled })), loadPrefs().audioLanguage);
-          if (id != null && !list[id].enabled) list.forEach((t, i) => (t.enabled = i === id));
+          if (id != null && !list[id].enabled) {
+            list.forEach((t, i) => (t.enabled = i === id));
+            switched = true;
+          }
           enabledAudio.current = list.findIndex((t) => t.enabled);
+        }
+        // As the film finishes loading, Safari can turn its own default back on beside
+        // the track switched on for the remembered language (both then read as enabled).
+        // That's Safari's doing, not the viewer's: until the film has played a moment,
+        // the choice stands, as it does for subtitles.
+        if (switched && !settled.current && enabledAudio.current >= 0 && list.some((t, i) => t.enabled !== (i === enabledAudio.current))) {
+          list.forEach((t, i) => (t.enabled = i === enabledAudio.current));
         }
         setAudioTracks(list.map((t, i) => audioEntry(i, t.label, t.language)));
         const active = list.findIndex((t) => t.enabled);
@@ -269,6 +288,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
       };
       video.addEventListener('loadedmetadata', onMeta, { once: true });
       video.addEventListener('error', onError);
+      video.addEventListener('canplay', syncAudio);
       video.audioTracks?.addEventListener?.('addtrack', syncAudio);
       video.audioTracks?.addEventListener?.('change', syncAudio);
       video.play().catch(() => {});
@@ -276,6 +296,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
         // Also before metadata arrives: after a handover it would rewrite hls.js's audio list.
         video.removeEventListener('loadedmetadata', onMeta);
         video.removeEventListener('error', onError);
+        video.removeEventListener('canplay', syncAudio);
         video.audioTracks?.removeEventListener?.('addtrack', syncAudio);
         video.audioTracks?.removeEventListener?.('change', syncAudio);
         video.removeAttribute('src');
@@ -360,15 +381,32 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine]);
 
-  // From here on, a track the browser shows or enables is taken for the viewer's pick.
+  // From here on, a track the browser shows or enables is taken for the viewer's pick:
+  // once the viewer touches the video, or the film has played on for a moment. Not as
+  // soon as it plays: Safari can still turn the subtitles off, or its own default audio
+  // back on, just after that, as it adds tracks of its own from the stream (with the
+  // film already buffered, say).
   useEffect(() => {
     const video = videoRef.current;
+    let playingFrom = null;
     const settle = () => {
       settled.current = true;
     };
-    const events = ['playing', 'pointerdown', 'keydown'];
+    const onPlaying = () => {
+      playingFrom ??= video.currentTime;
+    };
+    const onTime = () => {
+      if (playingFrom != null && video.currentTime - playingFrom >= SETTLE_SECONDS) settle();
+    };
+    const events = ['pointerdown', 'keydown'];
     events.forEach((e) => video.addEventListener(e, settle));
-    return () => events.forEach((e) => video.removeEventListener(e, settle));
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('timeupdate', onTime);
+    return () => {
+      events.forEach((e) => video.removeEventListener(e, settle));
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('timeupdate', onTime);
+    };
   }, []);
 
   useEffect(() => {

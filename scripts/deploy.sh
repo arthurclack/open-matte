@@ -12,11 +12,13 @@ DIR="${2:-/srv/open-matte}"
 cd "$(dirname "$0")/.."
 
 # Excluded paths are left alone on the server, so deploy/.env survives --delete.
-# .agents and skills-lock.json are coding-agent skills installed on this computer.
+# .agents and skills-lock.json are coding-agent skills installed on this computer;
+# e2e/.cache, test-results and playwright-report are what npm run e2e leaves behind.
 rsync -az --delete \
   --exclude node_modules --exclude dist --exclude data --exclude media \
   --exclude .env --exclude deploy/.env --exclude .git --exclude .claude \
   --exclude .agents --exclude skills-lock.json \
+  --exclude e2e/.cache --exclude test-results --exclude playwright-report \
   ./ "$HOST:$DIR/app/"
 
 ssh "$HOST" "cd '$DIR/app/deploy' && docker compose up -d --build && docker compose ps"

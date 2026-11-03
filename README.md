@@ -104,10 +104,16 @@ in a private window to see it as a guest would.
 
 ```bash
 npm test                    # access rules, passkeys, scanner, retention and the full ticket journey
+npm run e2e                 # the main journeys in real browsers (Playwright)
 ```
 
 The tests start servers of their own, with temporary folders and in-memory
 databases, so they don't need `npm run dev` and never touch `data/` or `media/`.
+
+`npm run e2e` needs ffmpeg (it makes two eight-second test films) and, for its `chrome`
+project, Google Chrome (without it those journeys skip); the first time, `npx playwright
+install chromium firefox webkit`. It starts its own server with its own data and a
+password made for the run, and never touches `data/` or `media/`.
 
 ## Layout
 

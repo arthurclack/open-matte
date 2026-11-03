@@ -4,6 +4,10 @@ data
 media
 deploy
 test
+e2e
+test-results
+playwright-report
+playwright.config.js
 scripts
 docs
 .env
