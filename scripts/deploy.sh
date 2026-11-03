@@ -12,9 +12,11 @@ DIR="${2:-/srv/open-matte}"
 cd "$(dirname "$0")/.."
 
 # Excluded paths are left alone on the server, so deploy/.env survives --delete.
+# .agents and skills-lock.json are coding-agent skills installed on this computer.
 rsync -az --delete \
   --exclude node_modules --exclude dist --exclude data --exclude media \
   --exclude .env --exclude deploy/.env --exclude .git --exclude .claude \
+  --exclude .agents --exclude skills-lock.json \
   ./ "$HOST:$DIR/app/"
 
 ssh "$HOST" "cd '$DIR/app/deploy' && docker compose up -d --build && docker compose ps"
