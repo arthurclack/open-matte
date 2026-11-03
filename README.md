@@ -69,7 +69,12 @@ link in a private window to see it as a guest would.
 
 ```bash
 npm test                    # access rules, scanner and the full ticket journey
+npm run e2e                 # the main journeys in real browsers (Playwright)
 ```
+
+`npm run e2e` needs ffmpeg (it makes an eight-second test film) and, for the `chrome`
+project, Google Chrome; the first time, `npx playwright install chromium firefox webkit`.
+It starts its own server with its own data, and never touches `data/` or `media/`.
 
 ## Deploying
 

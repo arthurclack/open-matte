@@ -228,6 +228,39 @@ authenticator), and the important pages by keyboard alone. Playwright's own brow
 lack H.264 and HEVC, so playback runs in installed Chrome where they do. These catch
 regressions; they don't replace the iPhone, Mac Safari, TV and non-HDR checks.
 
+**The Playwright part, built (3 November).** `npm run e2e` runs `e2e/*.spec.js` in four
+projects: Playwright's `chromium`, `firefox` and `webkit`, and `chrome` (the installed
+Google Chrome). Once per run, `e2e/global-setup.js` makes an eight-second test film with
+ffmpeg through `scripts/encode.mjs` (H.264 and AAC, English and French audio and
+subtitles; cached in `e2e/.cache` by the encoder's hash), builds `dist/` if it's older
+than `web/`, starts the app on a free port with a fresh data folder, no backups, no TMDB
+and an admin password made for the run, and publishes the film through the admin API.
+Each journey makes its own tickets and people, and any uncaught error in a page fails it.
+
+- **Ticket → play**: the code leaves the address, the film plays past 2 s, a progress
+  report is accepted, French audio and subtitles from the bar take effect, the lock
+  screen's metadata names the film, and the copied Playback help summary holds no
+  address, ticket code, film title or cinema name.
+- **Revoke → refused**: revoked mid-film, the player stops with its message at the next
+  report, a media request from that browser gets 403, and Media Session is cleared.
+- **Passkeys and keeping**: a setup link and a virtual authenticator make a passkey;
+  signing out and back in with it; a second browser plays a keepable ticket, this one
+  keeps it, the second is told so, and the account page lists this browser.
+- **Keyboard only**: Tab to Play, Enter, focus on the video, Space pauses; the name menu
+  opens with Enter and closes with Escape; the admin's sign-in and Settings.
+- **Admin smoke**: sign in through the form, issue a ticket from the film's page, find it
+  under Tickets, the projection booth, Activity filtered by the film, and no errors in
+  the console.
+
+All three of Playwright's engines play the test film on this Mac (WebKit with its own
+HLS player, the others through hls.js), so playback runs everywhere; what skips is
+passkeys and keeping in Firefox and WebKit (virtual authenticators are Chromium-only)
+and Space in WebKit, whose video leaves the key to the page. One check is marked as a
+known failure until it's fixed: Escape from inside the name menu leaves focus on the
+page instead of the menu's button. The device rows in
+[Results: milestone 3](device-checks.md#results-milestone-3) are still yours: these
+journeys don't stand in for any of them.
+
 What fails gets fixed in this slice, or written up as its own work if it's bigger
 (an encoding change, say).
 
