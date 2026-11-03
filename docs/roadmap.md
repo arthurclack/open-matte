@@ -73,6 +73,39 @@ v1.0.0.
 - [ ] Installation, update, backup and restore documentation, rehearsed on a clean
   server; a changelog; v1.0.0 tagged and released on GitHub
 
+## Milestone 4: curation
+
+Agreed as the next milestone on 3 November, not yet planned in detail. Milestone 1
+delivers the film, milestone 2 remembers the person, milestone 4 makes the recommendation
+personal. Whether it comes before or after the v1.0.0 release is still open.
+
+- Programmes: a named, ordered set of films with your introduction, a cover, a note for
+  each film, optional suggested dates, draft and published. Shown to every member, or to
+  the people you choose. Double bills and short seasons are programmes
+- A warmer front page for members: continue watching, picked for you, your programmes,
+  your other films, and what you've watched behind a link
+- Picked for you: your message to one person about one film or programme, kept apart
+  from your general note about the film, so editing one never changes the other
+- Before and after notes: a spoiler-free note before, and a note for after (your reading,
+  a favourite moment, a question) opened when the viewer chooses to. Never unlocked by
+  how much has played, and opening it isn't the same as marking the film watched
+- A private response after watching ("Loved it", "Still thinking about it", "Not for
+  me", "Let's talk") with an optional message, shared only with you, and saying so
+- A viewing journal that belongs to the member: watched films, an optional date,
+  private notes, a "watch again" list, marked and unmarked by hand
+
+What stays true throughout:
+
+- Presentation never grants playback. Someone can see a programme yet have no ticket
+  for some of its films; the admin says so ("Alex can't play two of these films") and
+  you choose whether to issue tickets.
+- Resume position, "watched" and permission to play are three different things. A film
+  in someone's journal never gives them access back.
+- Each has its own check: seeing a programme, reading a note, playing a film. Being able
+  to watch a film never shows someone else's recommendation, response or journal.
+- Out of it: public reviews, ratings, followers, likes, activity feeds, synchronised
+  watch parties, recommendation algorithms, timed commentary.
+
 ## Later
 
 - Upload tools and automated encoding: upload an original in the admin (resumable),
@@ -80,30 +113,21 @@ v1.0.0.
   preview, then publish. Its own milestone; it needs a film's identity separated from
   its folder name, and a benchmark on the server first
 - AV1 renditions
-- Collections
 - Serving media straight from Caddy with forward auth, if Node becomes the bottleneck
 
 ## Ideas
 
 Things to consider once people and passkeys exist. None of them grants playback on its
 own: a programme, a note or a collection is presentation, and watching still needs a
-ticket.
+ticket. Programmes, after-notes, responses and the journal are now milestone 4.
 
-- A personal programme for each friend: "Start with this one, then these two", with a
-  note for each film
-- A sealed note for after the film, opened when the viewer says they've finished (not
-  tied to the 92% "finished" event), with an optional question back
-- Double bills and short seasons, curated by hand
 - A "surprise me" ticket that hides the title until the viewer reveals it, while the
   running time, content notes, limits and expiry stay visible
-- A private response after watching ("Loved that", "Still thinking about it", "Not for
-  me", "Let's talk") with an optional sentence; no stars or reviews
 - Tickets as small invitation cards: a message, the film shown or hidden, a suggested
   evening, a printable version
 - Pairing a TV by approving a short code on a signed-in phone, without using a screening
 - Screening nights: a shared page, a start time and an introduction, with everyone
   watching on their own ticket (not synchronised)
-- A private viewing journal for members, which never implies they can still play a film
 - A short test clip to check picture, sound and subtitles before the first Play, which
   never uses a screening
 
