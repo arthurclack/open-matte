@@ -1,6 +1,9 @@
 import Hls from 'hls.js';
-import { createRef, useEffect, useMemo, useRef, useState } from 'react';
+import { createRef, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { api } from './api.js';
+import { useMediaSession } from './mediaSession.js';
+import PlaybackHelp from './PlaybackHelp.jsx';
+import { codecName, scrub } from './playbackHelp.js';
 
 const HEARTBEAT_MS = 30 * 1000;
 
@@ -18,14 +21,21 @@ const HALT_MESSAGES = {
   error: 'Something went wrong during playback.',
 };
 
+// Halts about playback itself, rather than the ticket or the screening: their
+// message offers Playback help.
+const HELP_FOR = new Set(['error', 'forbidden', 'unsupported']);
+
+// MediaError codes, by name, for Playback help.
+const MEDIA_ERRORS = { 1: 'MEDIA_ERR_ABORTED', 2: 'MEDIA_ERR_NETWORK', 3: 'MEDIA_ERR_DECODE', 4: 'MEDIA_ERR_SRC_NOT_SUPPORTED' };
+// Playback help keeps the last few problems, in this page only.
+const ERRORS_KEPT = 10;
+
 // Safari plays HLS itself, and handles HDR and AirPlay best that way.
 // Everything else goes through hls.js on Media Source Extensions.
 function prefersNativeHls(video) {
   const apple = /Apple/.test(navigator.vendor || '');
   return Boolean(video.canPlayType('application/vnd.apple.mpegurl')) && (apple || !Hls.isSupported());
 }
-
-const codecName = (c = '') => (/^(hvc1|hev1)/.test(c) ? 'HEVC' : /^avc/.test(c) ? 'H.264' : /^av01/.test(c) ? 'AV1' : c.split('.')[0]);
 
 function levelLabel(level) {
   if (!level) return null;
@@ -87,6 +97,8 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
   const [subtitle, setSubtitle] = useState(() => subtitles.findIndex((s) => s.default));
   // Which player runs the stream: Safari's own ('native') or hls.js ('hls').
   const [engine, setEngine] = useState(null);
+  // Why it moved from Safari's player to hls.js, if it did: 'error' or 'quality'.
+  const [handedOver, setHandedOver] = useState(null);
   // Quality: -1 is Auto.
   const [levels, setLevels] = useState([]); // { index, label }, best first
   const [level, setLevel] = useState(-1);
@@ -94,15 +106,44 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
   const [halted, setHalted] = useState(null);
   // Where the next player should pick up: position, chosen rendition, audio track.
   const handoff = useRef({ position: startPosition(screening.position, film.media.durationSeconds), rendition: null, audioName: null });
+  // Where playback really is. Once a halt has unloaded the film the video reads 0,
+  // and the last progress reports and a retry still need the real position.
+  const lastPosition = useRef(handoff.current.position);
+  const position = () => (videoRef.current?.readyState ? videoRef.current.currentTime : lastPosition.current);
   const nativeChoices = useMemo(() => (engine === 'native' ? decodableRenditions(film.media.renditions) : []), [engine, film.media.renditions]);
+  // Playback help: the panel, and the last few problems (newest last) for it. They
+  // stay in this page: nothing sends them, and nothing that can hold an address is kept.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const helpId = useId();
+  const helpRef = useRef(null);
+  const helpButtonRef = useRef(null);
+  const errors = useRef([]);
+
+  function logError(source, detail, { fatal = true, status = null } = {}) {
+    errors.current = [...errors.current, { at: Date.now(), source, detail, fatal, status }].slice(-ERRORS_KEPT);
+  }
 
   function halt(code) {
     const video = videoRef.current;
+    if (video?.readyState) lastPosition.current = video.currentTime;
     video?.pause();
-    hlsRef.current?.stopLoad();
+    // Unload the film, so neither the lock screen's play button nor the browser's
+    // own controls can carry on from what was buffered, with no screening and no
+    // progress reports. "Watch here instead" starts a new player.
+    if (hlsRef.current) {
+      hlsRef.current.stopLoad();
+      hlsRef.current.detachMedia();
+    } else if (video) {
+      video.removeAttribute('src');
+      video.load();
+    }
+    logError('player', code);
     setHalted(code in HALT_MESSAGES ? code : 'error');
     if (code !== 'playing-elsewhere' && code !== 'unsupported') onHalt?.();
   }
+
+  // The lock screen and media keys, cleared once playback halts.
+  useMediaSession(videoRef, film, !halted);
 
   // Pressing Play removes the button that had focus. Hand it to the video, so the
   // keyboard works straight away (Space to pause, arrows to seek) rather than
@@ -116,7 +157,26 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     const video = videoRef.current;
     if (prefersNativeHls(video)) setEngine('native');
     else if (Hls.isSupported()) setEngine('hls');
-    else setHalted('unsupported');
+    else {
+      logError('player', 'unsupported');
+      setHalted('unsupported');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---- note what the <video> itself reports, whichever player feeds it. Only the
+  // kind of error, and its message with any address taken out.
+  useEffect(() => {
+    const video = videoRef.current;
+    const onError = () => {
+      const e = video.error;
+      if (!e) return;
+      const name = MEDIA_ERRORS[e.code] || `MediaError ${e.code}`;
+      logError('video', e.message ? `${name}: ${scrub(e.message)}` : name);
+    };
+    video.addEventListener('error', onError);
+    return () => video.removeEventListener('error', onError);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---- load the stream (again, when Safari hands over to hls.js)
@@ -145,6 +205,9 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
           rendition: null,
           audioName: null,
         };
+        // Playback carries on, so it isn't fatal; the video's own error says why.
+        logError('player', "switched to hls.js after Safari's player stopped", { fatal: false });
+        setHandedOver('error');
         setEngine('hls');
       };
       video.addEventListener('loadedmetadata', onMeta, { once: true });
@@ -206,6 +269,9 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     });
     hls.on(Hls.Events.ERROR, (_, d) => {
       const code = d.response?.code ?? d.networkDetails?.status;
+      // Only the kind of error and the status: d.url, d.frag, d.response,
+      // d.networkDetails, d.context and d.error can all hold the stream's address.
+      logError('hls.js', `${d.type}: ${d.details}`, { fatal: Boolean(d.fatal), status: code ?? null });
       if (code === 403) return halt('forbidden');
       if (!d.fatal) return;
       if (d.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries++ < 3) {
@@ -228,6 +294,15 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine]);
 
+  useEffect(() => {
+    const video = videoRef.current;
+    const onTime = () => {
+      if (video.readyState) lastPosition.current = video.currentTime;
+    };
+    video.addEventListener('timeupdate', onTime);
+    return () => video.removeEventListener('timeupdate', onTime);
+  }, []);
+
   // ---- report progress (not in admin preview, which has no screening)
   useEffect(() => {
     if (!screening.screeningId) return undefined;
@@ -236,7 +311,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     const send = (playing, opts) => {
       if (stopped) return;
       api
-        .post(`/api/screenings/${screening.screeningId}/heartbeat`, { position: video.currentTime, playing }, opts)
+        .post(`/api/screenings/${screening.screeningId}/heartbeat`, { position: position(), playing }, opts)
         .catch((err) => {
           if (err.status === 404 || err.status === 409) {
             stopped = true;
@@ -274,11 +349,13 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
   // In Safari: picking a quality moves playback to hls.js at the same moment.
   // hls.js turns AirPlay off, so Auto stays on Safari's own player until then.
   function switchToChosen(key) {
+    // Only an error can be retried this way: a screening that stopped (taken over,
+    // ended, refused) stays stopped.
+    if (halted && halted !== 'error') return;
     const rendition = nativeChoices.find((r) => r.key === key);
     if (!rendition) return;
-    const video = videoRef.current;
     handoff.current = {
-      position: video.currentTime,
+      position: position(),
       rendition,
       audioName: audioTracks.find((t) => t.id === audioTrack)?.label || null,
     };
@@ -287,23 +364,41 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     setCurrent(null);
     // Doubles as a retry if Safari's player had stopped with an error.
     setHalted(null);
+    setHandedOver('quality');
     setEngine('hls');
   }
 
   // A chosen rendition switches straight away; Auto hands control back to hls.js.
   function chooseLevel(value) {
+    if (halted) return;
     const n = Number(value);
     if (hlsRef.current) hlsRef.current.currentLevel = n;
     setLevel(n);
   }
 
   function chooseAudio(id) {
+    if (halted) return;
     const n = Number(id);
     if (hlsRef.current) hlsRef.current.audioTrack = n;
     else if (videoRef.current?.audioTracks) {
       Array.from(videoRef.current.audioTracks).forEach((t, i) => (t.enabled = i === n));
     }
     setAudioTrack(n);
+  }
+
+  // From the halt message: open the panel and bring it into view.
+  function showHelp() {
+    setHelpOpen(true);
+    requestAnimationFrame(() => {
+      helpRef.current?.focus({ preventScroll: true });
+      helpRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }
+
+  // Escape inside the panel: focus goes back to the link that opened it.
+  function closeHelp() {
+    setHelpOpen(false);
+    helpButtonRef.current?.focus();
   }
 
   return (
@@ -323,6 +418,11 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
                   Watch here instead
                 </button>
               )}
+              {HELP_FOR.has(halted) && (
+                <button className="linklike" onClick={showHelp}>
+                  Playback help
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -331,7 +431,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
         {audioTracks.length > 1 && (
           <label>
             Audio
-            <select value={audioTrack ?? ''} onChange={(e) => chooseAudio(e.target.value)}>
+            <select value={audioTrack ?? ''} onChange={(e) => chooseAudio(e.target.value)} disabled={Boolean(halted)}>
               {audioTracks.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
@@ -358,7 +458,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
           nativeChoices.length > 1 ? (
             <label title="Picking a quality switches to Open Matte's own player. AirPlay comes back when you reload the page.">
               Quality
-              <select value="-1" onChange={(e) => switchToChosen(e.target.value)}>
+              <select value="-1" onChange={(e) => switchToChosen(e.target.value)} disabled={Boolean(halted) && halted !== 'error'}>
                 <option value="-1">Auto</option>
                 {nativeChoices.map((r) => (
                   <option key={r.key} value={r.key}>
@@ -373,7 +473,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
         ) : levels.length > 1 ? (
           <label title="Auto adjusts to your connection and screen">
             Quality
-            <select value={level} onChange={(e) => chooseLevel(e.target.value)}>
+            <select value={level} onChange={(e) => chooseLevel(e.target.value)} disabled={Boolean(halted)}>
               <option value={-1}>Auto{level === -1 && current ? ` (${current})` : ''}</option>
               {levels.map((l) => (
                 <option key={l.index} value={l.index}>
@@ -386,7 +486,26 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
           current && <span>Quality: {current}</span>
         )}
         {screening.preview && <span className="badge">Preview</span>}
+        <button ref={helpButtonRef} className="linklike" aria-expanded={helpOpen} aria-controls={helpId} onClick={() => setHelpOpen(!helpOpen)}>
+          Playback help
+        </button>
       </div>
+      {helpOpen && (
+        <PlaybackHelp
+          id={helpId}
+          panelRef={helpRef}
+          videoRef={videoRef}
+          hlsRef={hlsRef}
+          errors={errors}
+          engine={engine}
+          handedOver={handedOver}
+          renditions={film.media.renditions}
+          quality={engine === 'hls' && level >= 0 ? levels.find((l) => l.index === level)?.label || 'Auto' : 'Auto'}
+          audio={audioTracks.find((t) => t.id === audioTrack)?.label ?? null}
+          subtitles={subtitles[subtitle]?.label ?? null}
+          onClose={closeHelp}
+        />
+      )}
     </>
   );
 }

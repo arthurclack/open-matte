@@ -39,6 +39,7 @@ Milestone 3, polish and public release, is under way (planned in
 [docs/roadmap.md](docs/roadmap.md)):
 
 - **Branding**: an accent and a background colour, a logo and a tab icon, set in the admin and shown on every viewer page from the first paint: the server writes them into the page as it sends it, and the logo's image is requested along with the page. A ticket link for anyone previews its film's poster and title in chat apps; every other link previews as the cinema ([docs/access.md](docs/access.md#link-previews))
+- **Lock screen and Playback help**: while a film plays, the lock screen, Control Center and Chrome's media controls show its title and poster (or, by a setting, only the cinema's name) and work the player as its own controls do. A **Playback help** link under the player shows what the browser is playing and can decode, and copies a summary with no addresses, names or titles in it, for a friend to send you when something won't play ([docs/access.md](docs/access.md#on-the-lock-screen))
 
 ## Running it locally
 

@@ -16,6 +16,9 @@ export const DEFAULT_SETTINGS = {
   backgroundColor: DEFAULT_BACKGROUND,
   // Show the cinema's name next to the logo.
   logoWithName: true,
+  // Lock screens and media controls show the film's title and poster while it
+  // plays. Off: only the cinema's name, for when the title is part of the surprise.
+  mediaSessionTitle: true,
   // { file, width, height } of an image in DATA_DIR/branding, or null. Only the
   // upload routes write these (setFile); viewers get a URL instead (branding.js).
   logo: null,
@@ -31,6 +34,7 @@ const RULES = {
   accentColor: (v) => typeof v === 'string' && COLOR.test(v),
   backgroundColor: (v) => typeof v === 'string' && COLOR.test(v),
   logoWithName: (v) => typeof v === 'boolean',
+  mediaSessionTitle: (v) => typeof v === 'boolean',
 };
 
 // previewKey signs the addresses of ticket links' preview posters (page.js).

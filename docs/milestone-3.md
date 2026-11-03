@@ -40,13 +40,25 @@ not the film. A browser that isn't signed in as that person learns neither the f
 the name ([access.md](access.md#two-kinds-of-ticket)), and a preview fetcher is such a
 browser.
 
+### Media Session and Playback help (3 November, as slice 3 started)
+
+| Decision | Choice |
+|---|---|
+| Lock screen | **The film's title and poster by default**, on the lock screen, in Control Center and in Chrome's media controls. A setting in the admin switches every viewer to the cinema's name only, with no poster, for when the title is part of the surprise. |
+| Playback help | **For everyone, behind a small link** under the player. When playback stops with an error, the player's message offers it too. |
+
+Our own call, within that: the lock screen's controls work the same `<video>` as the
+page, and are cleared when the player halts or closes, so a screening that has stopped
+(taken over on another device, say) never leaves a Play button behind that would try
+to restart it. The player's message offers help only when playback itself went wrong
+(an error, a refusal, a browser that can't play the film), not when the ticket has
+ended or another device has taken over.
+
 ### Proposed, to confirm as each slice starts
 
 - **Remembered choices stay in the browser** (audio language, subtitle language or
   off, subtitle size). Nothing new is stored on the server, and a person's choice
   doesn't follow them to another device.
-- **Media Session shows the film's title by default**, with a setting to show only
-  the cinema's name instead.
 
 ## Slices
 
@@ -110,17 +122,20 @@ bar and the native menu never disagree.
 
 ### 3. Media Session and Playback help
 
-- **Media Session**: the title (or only the cinema's name, by the setting above),
-  poster and position on the lock screen, in Control Center and in Chrome's media
+- **Media Session**: the title and poster (or only the cinema's name, by the setting
+  above) and position on the lock screen, in Control Center and in Chrome's media
   notification; play, pause and ±10 s from hardware keys and headphones, routed through
   the same `<video>` so heartbeats and the one-device rule see them. Cleared when the
   player closes or halts.
-- **Playback help**: a small "Playback help" link under the player opens a panel with
-  which player is running (Safari's own or hls.js), the current rendition, codec and
-  dynamic range, whether this screen is HDR, buffer ahead, dropped frames, what this
-  browser says it can decode, and the last ten errors with their time. **Copy
-  summary** copies all of that as text, leaving out every address (they contain
-  screening IDs), cookies, ticket labels, names and the film's title.
+- The setting is **Show the film's title and poster on lock screens and media
+  controls**, in Settings, on by default.
+- **Playback help**: a small "Playback help" link under the player (and in the player's
+  message when playback stops with an error) opens a panel with which player is
+  running (Safari's own or hls.js), the current rendition, codec and dynamic range,
+  whether this screen is HDR, buffer ahead, dropped frames, what this browser says it
+  can decode, and the last ten errors with their time. **Copy summary** copies all of
+  that as text, leaving out every address (they contain screening IDs), cookies,
+  ticket labels, people's names, the film's title and the cinema's name.
 - Reading the panel records nothing and sends nothing; it's all from the browser.
 
 **Done when** the lock screen on iPhone and Chrome's media hub show the film and
@@ -142,13 +157,29 @@ title in it.
   screening when the event has gone.
 - **Backups keep what they had.** Monthly backups hold up to a year of old events
   until they expire themselves; access.md and the backup docs say so.
+- **Old browser sessions go too.** Today nothing deletes a session once it has expired
+  or been signed out, so the table only grows. They're deleted a while after they end,
+  with the tickets those browsers held; screenings and their counts don't change.
+- **A test pins the rule** that deleting anything here never gives a ticket a screening
+  back, nor reopens a "start by" deadline.
 - access.md's **What is recorded** gains how long each thing is kept.
+- **The projection booth**: an admin page, and a short summary at the top of the admin,
+  answering what needs attention and whether the server is well. Setup links nobody has
+  used; tickets close to their start-by date that haven't been played; media requests
+  the server refused recently (Playback help sends nothing, so the server's own refusals
+  are all it knows); whether the media folder is there and readable; disk space for
+  the data and the media; the last backup and the off-server copy's age; when old
+  events and sessions were last cleared; the version running. Each line says exactly
+  what it checked: "Backup file written at 04:03", never "recovery verified", since
+  nothing tests a restore automatically. It shows facts to act on, not a log of who
+  watched what.
 - Probably migration 7, for an index on events by film and person. Any migration
   means going back to milestone 2's code needs a restore, as before.
 
 **Done when** deleting with the defaults on a copy of the production database removes
-only events, every test still passes, and the ticket and person pages read the same
-before and after.
+only events and ended sessions, every test still passes, the ticket and person pages
+read the same before and after, and the projection booth answers each of its questions
+on the live server.
 
 ### 5. Playback compatibility testing
 
@@ -159,10 +190,19 @@ in Mac Safari, and Android playback on mobile data. Each runs with slices 2 and 
 deployed, so it also tests remembered choices, Media Session and the help panel, and
 a failure comes with a copied summary.
 
+Alongside the devices, **browser tests with Playwright** (a development tool only, never
+shipped to viewers): the main journeys run in Chromium, Firefox and WebKit on every
+change. Opening a ticket and playing it, revoking it and seeing the next media request
+refused, keeping a ticket, signing in and setting up a passkey (with Chromium's virtual
+authenticator), and the important pages by keyboard alone. Playwright's own browsers may
+lack H.264 and HEVC, so playback runs in installed Chrome where they do. These catch
+regressions; they don't replace the iPhone, Mac Safari, TV and non-HDR checks.
+
 What fails gets fixed in this slice, or written up as its own work if it's bigger
 (an encoding change, say).
 
-**Done when** every row in "Results: milestone 3" has a result.
+**Done when** every row in "Results: milestone 3" has a result, and the Playwright
+journeys pass in all three browsers.
 
 ### 6. Release documentation and v1.0.0
 
@@ -179,6 +219,11 @@ What fails gets fixed in this slice, or written up as its own work if it's bigge
 - **Removing it**, and what's left behind.
 - `CHANGELOG.md`, `SECURITY.md` (how to report a problem privately), the version in
   `package.json` shown in the admin, and `.env.example` reviewed.
+- **Licence notices for the code the site sends to browsers.** The built app includes
+  hls.js (Apache 2.0), React, React Router and SimpleWebAuthn's browser part (MIT), and
+  today carries none of their licence texts, which both licences require. The build
+  collects the licence of every package that ends up in the bundle into one file served
+  with the app, linked from the footer and the README. No new dependency.
 - Your own setup (the VPS, Cloudflare, the home DNS block) stays out of the public
   docs, except as examples.
 - **A rehearsal**: a fresh install on a clean machine from the docs alone, with

@@ -9,7 +9,7 @@ tickets that only one person can use, signed in, keeping a ticket in an account,
 films shown to members and an account page. Checks on real devices are listed in
 [device-checks.md](device-checks.md). Milestone 3 ([milestone-3.md](milestone-3.md))
 changes none of these rules; it adds [link previews](#link-previews) that show a
-ticket's film.
+ticket's film, and shows the film playing [on the lock screen](#on-the-lock-screen).
 
 ## The records
 
@@ -272,6 +272,21 @@ wins; among those, one with an open screening this browser could resume now, rat
 than one another browser is busy playing; then the person's own ticket; then the
 oldest. The film page, Play and Your tickets all go by the same choice.
 
+### On the lock screen
+
+While a film plays, the phone's lock screen and Control Center, and Chrome's media
+controls, show its title and poster, with the cinema's name. So anyone who can see the
+screen can see which film it is. For when the title is part of the surprise, untick
+**Show the film's title and poster on lock screens and media controls** in Settings:
+every viewer then sees only the cinema's name, with no poster. It's on by default.
+
+Play, pause and skipping back or forward there, or on headphones, work the player
+itself. So the screening, its progress reports and the one-device rule see them
+exactly as they see the page's own controls. When the player stops (the screening
+moved to another device, the ticket ended, it was refused, an error) or closes, it
+takes the film and its buttons off the lock screen, so they can't start a screening
+that has stopped.
+
 ## Media requests
 
 Every request under `/media/<film>/` is checked:
@@ -533,6 +548,12 @@ When the browser is signed in, Activity shows the person against these, read fro
 the session: nothing more is stored. Events from before they signed in stay
 anonymous. Reading the page of a film shown to members, without a ticket, records
 nothing, and nor does a link preview fetching a ticket's page or poster.
+
+**Playback help**, the link under the player, reads the browser and the player only.
+Opening it and copying its summary record nothing and send nothing. The summary
+leaves out every address (they hold screening ids), cookies, ticket labels and codes,
+people's names, the film's title and the cinema's name, so a viewer can send it to
+you without giving any of those away.
 
 People and passkeys:
 

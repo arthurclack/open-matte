@@ -159,6 +159,34 @@ Branding**:
 - A preview is made once and kept by the app, so check with a ticket that has never been
   pasted anywhere.
 
+### Lock screen and Playback help
+
+Once slice 3 is deployed, with your ticket for Test Pattern (or, in a browser that
+isn't signed in, the plain link for anyone):
+
+- **iPhone lock screen**: play Test Pattern, then lock the phone. The lock screen and
+  Control Center should show Test Pattern's title and poster, with the cinema's name.
+  Play, pause and the 10-second skips back and forward work from there, and from
+  headphones.
+- **Chrome on the Mac**: Chrome's media controls (the button in its toolbar) show the
+  same, and play, pause and skip work from there.
+- **With the setting off**: untick **Show the film's title and poster on lock screens
+  and media controls** in the admin's Settings. Reload the film's page on the iPhone
+  and play: the lock screen shows only the cinema's name, with no poster. Tick it again
+  afterwards.
+- **After a takeover**: on the iPhone, pause Test Pattern from the lock screen. Play it
+  on the Mac, signed in as you, which takes the screening over at once. Then press play
+  on the iPhone's lock screen: the iPhone should stop and say the screening is playing
+  on another device, and its lock screen should no longer offer play.
+- **Playback help**: press **Playback help** under the player, then **Copy summary**,
+  and paste it into a note. It should have no address in it (nothing like `https://`,
+  `blob:` or `/media/`), no name, and neither the film's title nor the cinema's name.
+  Do this in every browser the milestone 3 checks use.
+
+When playback fails in any milestone 3 check, copy the summary the same way and keep it
+with the result. The player's message offers Playback help too when playback stops with
+an error.
+
 ### Results: milestone 3
 
 | Where | Plays (audio, subtitles, quality) | Notes |
@@ -171,3 +199,8 @@ Branding**:
 | Branding, iPhone and Mac Safari | – | |
 | WhatsApp preview (for anyone / only for you) | – | |
 | iMessage preview (for anyone / only for you) | – | |
+| Lock screen and Control Center, iPhone (title, poster, controls, headphones) | – | |
+| Chrome's media controls, Mac | – | |
+| Lock screen with the setting off (cinema's name only) | – | |
+| Lock screen after a takeover (no play) | – | |
+| Playback help summary, each browser (no address, name or title) | – | |

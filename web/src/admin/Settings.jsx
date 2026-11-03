@@ -6,7 +6,7 @@ import { ErrorNote, useAction, useLoad } from './ui.jsx';
 // The main form holds only its own fields. The other cards (Branding, Film information)
 // save theirs separately: saving one of them leaves unsaved edits here alone, and saving
 // here can't send back an old copy of their values.
-const mainForm = (s) => ({ cinemaName: s.cinemaName, welcome: s.welcome, resumeWindowHours: String(s.resumeWindowHours), poweredBy: s.poweredBy });
+const mainForm = (s) => ({ cinemaName: s.cinemaName, welcome: s.welcome, resumeWindowHours: String(s.resumeWindowHours), poweredBy: s.poweredBy, mediaSessionTitle: s.mediaSessionTitle });
 
 export default function Settings() {
   const { data: settings, setData, error } = useLoad(() => api.get('/api/admin/settings'), []);
@@ -63,6 +63,15 @@ export default function Settings() {
         <label className="check">
           <input type="checkbox" checked={form.poweredBy} onChange={(e) => setForm({ ...form, poweredBy: e.target.checked })} />
           Show “Powered by Open Matte” in the footer
+        </label>
+        <label className="check top">
+          <input type="checkbox" checked={form.mediaSessionTitle} onChange={(e) => setForm({ ...form, mediaSessionTitle: e.target.checked })} />
+          <span>
+            Show the film's title and poster on lock screens and media controls
+            <small className="faint" style={{ display: 'block', fontSize: '0.85rem' }}>
+              Off: they show the cinema's name only.
+            </small>
+          </span>
         </label>
         <button className="btn primary" disabled={action.busy}>
           Save settings
