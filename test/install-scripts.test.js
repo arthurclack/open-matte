@@ -23,3 +23,14 @@ test('install scripts are turned off on this computer and in the image', { skip:
   assert.equal(installs.length, 2, 'the build and the runtime stage');
   for (const line of installs) assert.match(line, /--ignore-scripts/, line);
 });
+
+// The running image only ever runs node: no package manager is left in it to
+// fetch and run code (the base image brings yarn and corepack as well as npm).
+test('the running image has no package manager', { skip: !here('Dockerfile') && 'no Dockerfile here (the server image has none)' }, () => {
+  // The runtime stage, with each instruction's continued lines joined up.
+  const runtime = read('Dockerfile').split(/^FROM /m).at(-1).replace(/\\\n/g, ' ');
+  const removed = (runtime.match(/rm -rf ([^\n]*)/) ?? [, ''])[1].split(/\s+/).filter(Boolean);
+  for (const p of ['/usr/local/lib/node_modules/npm', '/usr/local/bin/npm', '/usr/local/bin/npx', '/usr/local/lib/node_modules/corepack', '/usr/local/bin/corepack', '/opt/yarn-v*', '/usr/local/bin/yarn', '/usr/local/bin/yarnpkg']) {
+    assert.ok(removed.includes(p), `the runtime stage removes ${p}`);
+  }
+});

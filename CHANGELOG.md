@@ -371,6 +371,7 @@ For installers:
 - `scripts/deploy.sh` never sends a database file (`*.db`) from your copy of the code,
   such as a backup you downloaded, and the image build leaves them out too.
 - `npm install` runs no package's install scripts (`.npmrc`, and the same in the
-  Dockerfile), and the running image has no `npm` or `npx`. Dependabot proposes
+  Dockerfile), and the running image has no package manager: no `npm`, `npx`,
+  `yarn` or `corepack`. Dependabot proposes
   dependency updates once a week; its security alerts need turning on in the
   repository's settings.

@@ -21,9 +21,13 @@ ENV NODE_ENV=production \
     WEB_DIST=/app/dist
 WORKDIR /app
 COPY package.json package-lock.json ./
-# The image only ever runs node, so npm goes once it has installed the packages.
+# The image only ever runs node, so the package managers go once npm has
+# installed the packages: npm itself, and the yarn and corepack that come with
+# the base image.
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force \
- && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+           /usr/local/lib/node_modules/corepack /usr/local/bin/corepack \
+           /opt/yarn-v* /usr/local/bin/yarn /usr/local/bin/yarnpkg
 COPY server ./server
 COPY --from=build /app/dist ./dist
 RUN mkdir -p /data /media && chown node:node /data
