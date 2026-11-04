@@ -10,7 +10,7 @@ import { TYPES, fileErrorStatus, folderFile, sendBare } from './media.js';
 // on the sign-in page and in link previews), the tab icon in the cinema's
 // colours, and the poster of a ticket link's preview. None of them reads or
 // writes a session.
-export function publicRoutes({ settings, branding, metadata, mediaDir, previews, share }) {
+export function publicRoutes({ settings, branding, metadata, mediaDir, previews, share, refusalLog }) {
   const router = express.Router();
 
   // sendFile's errors as a bare status, mapped as /media maps them (media.js):
@@ -63,13 +63,15 @@ export function publicRoutes({ settings, branding, metadata, mediaDir, previews,
     // like any media request (media.js, createShare): one of the artwork's places,
     // never a player's, and no more of them for one visitor's address than one
     // browser may hold, since there's no session to count by. Not finding it is
-    // a 404.
+    // a 404. A failure goes to the log as a refused media request's does (media.js,
+    // createRefusalLog), and like a stranger's: whoever has the address can ask
+    // again and again while the share is busy.
     await share.send(res, () => folderFile(mediaDir, film, path.posix.normalize(own)).then((f) => (f.status ? { status: 404 } : f)), {
       client: `address ${clientKey(req.ip)}`,
       clientName: 'address',
       artwork: true,
       headers,
-      failed: ({ status, reason }) => status >= 500 && console.error(`poster ${status}: ${reason}`),
+      failed: ({ status, reason }) => status >= 500 && refusalLog.add(`poster ${status} ${reason}`, `poster ${status}: ${reason}`, { stranger: true }),
     });
   });
 

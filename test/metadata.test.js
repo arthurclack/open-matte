@@ -359,9 +359,18 @@ describe('who wins', () => {
 describe('downloaded artwork is protected like the folder’s', () => {
   test('only ticket holders and the admin can load it', async () => {
     const f = await film('hedwig');
-    await admin.patch(`/api/admin/films/${f.id}`, { published: true });
     const stranger = browser(srv.base);
-    assert.equal((await stranger.get(f.posterUrl)).status, 403);
+    // Before it's published, and after: to anyone else it's as if there were no
+    // such film, since its file name comes from TMDb, which anyone can ask.
+    const none = await stranger.get(f.posterUrl.replace('/hedwig/', '/no-such-film/'));
+    assert.equal(none.status, 404);
+    for (const published of [false, true]) {
+      await admin.patch(`/api/admin/films/${f.id}`, { published });
+      const refused = await stranger.get(f.posterUrl);
+      assert.equal(refused.status, 404, `published: ${published}`);
+      assert.equal(refused.data, none.data);
+      assert.deepEqual([...refused.headers].filter(([k]) => k !== 'date'), [...none.headers].filter(([k]) => k !== 'date'));
+    }
 
     const ticket = (await admin.post('/api/admin/tickets', { filmId: f.id })).data[0];
     const guest = browser(srv.base);
@@ -423,5 +432,68 @@ describe('the lookup queue', () => {
     const made = searches().slice(before);
     assert.deepEqual([...new Set(made)], ['Zzz One', 'Zzz Two'], 'the second film was still looked up');
     assert.equal(made.length, 4, 'two searches per film (with and without the year), not eight');
+  });
+});
+
+describe('TMDB’s logo and notice are shown while anything from TMDB can be', () => {
+  // A cinema of its own, so taking its key away leaves the films above alone.
+  let own;
+  let owner;
+  let id;
+  // What a viewer's browser is told, both ways it asks.
+  async function credit() {
+    const viewer = browser(own.base);
+    const site = (await viewer.get('/api/site')).data.tmdbCredit;
+    assert.equal((await viewer.get('/api/me')).data.site.tmdbCredit, site, '/api/me says the same');
+    return site;
+  }
+
+  before(async () => {
+    const dir = tempDir();
+    makeFilm(dir, 'arrival');
+    own = await startServer({ mediaDir: dir, metadataOptions: { apiBase: `${tmdb.base}/3`, imageBase: `${tmdb.base}/t/p`, envKey: '' } });
+    owner = await adminBrowser(own.base);
+    await owner.post('/api/admin/scan');
+    id = (await owner.get('/api/admin/films')).data[0].id;
+  });
+  after(() => own.close());
+
+  test('not without a key, while no film has been matched', async () => {
+    assert.equal((await owner.get(`/api/admin/films/${id}`)).data.tmdbStatus, null);
+    assert.equal(await credit(), false);
+  });
+
+  test('with a key', async () => {
+    assert.equal((await owner.patch('/api/admin/settings', { tmdbApiKey: GOOD_KEY })).status, 200);
+    assert.equal(await credit(), true);
+  });
+
+  test('still once the key is removed, since what was fetched stays', async () => {
+    await own.app.locals.metadata.idle();
+    const f = (await owner.get(`/api/admin/films/${id}`)).data;
+    assert.equal(f.tmdbStatus.state, 'matched');
+    assert.equal(f.artworkSource.backdrop, 'tmdb');
+    assert.equal((await owner.patch('/api/admin/settings', { tmdbApiKey: '' })).data.tmdb.configured, false);
+    assert.equal(await credit(), true);
+  });
+
+  test('not once nothing from TMDB is left', async () => {
+    const r = await owner.post(`/api/admin/films/${id}/artwork/reset`, { kind: 'backdrop' });
+    assert.equal(r.data.artworkSource.backdrop, null, 'the folder has none of its own');
+    assert.equal(await credit(), true, 'the match alone: the details it filled in may be on show');
+    // Nothing in the admin undoes a match, so this does, as if there had never been one.
+    own.db.prepare('UPDATE films SET tmdb_id = NULL, tmdb_status = NULL, meta_sources = NULL WHERE id = ?').run(id);
+    assert.equal(await credit(), false);
+  });
+
+  test('a poster downloaded from TMDB counts on its own, and a damaged column breaks nothing', async () => {
+    const set = (column, value) => own.db.prepare(`UPDATE films SET ${column} = ? WHERE id = ?`).run(value, id);
+    set('artwork', JSON.stringify({ poster: { file: 'poster-0123456789ab.jpg', tmdbPath: '/arrival.jpg' } }));
+    assert.equal(await credit(), true);
+    set('artwork', 'not JSON');
+    set('tmdb_status', 'not JSON either');
+    assert.equal(await credit(), false);
+    set('artwork', null);
+    set('tmdb_status', null);
   });
 });

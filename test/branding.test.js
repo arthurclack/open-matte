@@ -29,32 +29,32 @@ const FAVICON =
 // A custom pair that passes every check, and what the spec derives from each, worked
 // out by hand (channel by channel, rounded; none of them lands on a half).
 const ACCENT = '#4fb3d9';
-const BACKGROUND = '#101820';
+const BACKGROUND = '#0a131c';
 const BG_THEME = {
   // The five surfaces.
-  '--bg': '#101820',
-  '--bg-raised': '#1a2129',
-  '--bg-sunk': '#0b1116',
-  '--line': '#2d343b',
-  '--line-strong': '#3c4349',
+  '--bg': '#0a131c',
+  '--bg-raised': '#141c25',
+  '--bg-sunk': '#070d14',
+  '--line': '#272f37',
+  '--line-strong': '#373f46',
   // The background and the raised surface as r, g, b, for the shades over a backdrop.
-  '--bg-rgb': '16, 24, 32',
-  '--bg-raised-rgb': '26, 33, 41',
+  '--bg-rgb': '10, 19, 28',
+  '--bg-raised-rgb': '20, 28, 37',
   // Notices' and badges' lines and tints (40% and 7% of each status colour), and the
   // poster placeholder's gradient (9.5% and 2% white).
-  '--good-line': '#3c5c4b',
-  '--good-tint': '#182427',
-  '--warn-line': '#665531',
-  '--warn-tint': '#1f2323',
-  '--bad-line': '#653e3f',
-  '--bad-tint': '#1f1f25',
-  '--poster-from': '#272e35',
-  '--poster-to': '#151d24',
+  '--good-line': '#395948',
+  '--good-tint': '#121f24',
+  '--warn-line': '#63522e',
+  '--warn-tint': '#1a1e1f',
+  '--bad-line': '#623b3c',
+  '--bad-tint': '#191a22',
+  '--poster-from': '#212932',
+  '--poster-to': '#0f1821',
 };
 const ACCENT_THEME = { '--accent': '#4fb3d9', '--accent-ink': '#091418', '--accent-hover': '#72c2e1' };
 const THEME = { ...BG_THEME, ...ACCENT_THEME };
 // The drawn icon's rounded square on BACKGROUND: mixed with 2% white.
-const FAVICON_SQUARE = '#151d24';
+const FAVICON_SQUARE = '#0f1821';
 
 const NUMBER = String.raw`\d+(?:\.\d+)?`;
 const TOO_LIGHT = new RegExp(String.raw`^That background is too light: .+ would be hard to read on it \(${NUMBER}:1; it needs ${NUMBER}:1\)\. Choose a darker colour\.$`);
@@ -93,7 +93,7 @@ const STATUS = { good: '#7fc28b', warn: '#e8b04a', bad: '#e5776d' };
 const FOREGROUNDS = [
   ['text', '#ece8e1', 7],
   ['dim text', '#a59f97', 4.5],
-  ['faint text', '#6f6a66', 3],
+  ['faint text', '#8a847a', 4.5],
   ['good', '#7fc28b', 4.5],
   ['warn', '#e8b04a', 4.5],
   ['bad', '#e5776d', 4.5],
@@ -111,7 +111,7 @@ describe('colours', () => {
     assert.ok(Math.abs(contrast('#000000', '#ffffff') - 21) < 1e-9);
     assert.ok(Math.abs(contrast('#ffffff', '#000000') - 21) < 1e-9);
     assert.ok(Math.abs(contrast('#777777', '#777777') - 1) < 1e-9);
-    for (const [a, b] of [[DEFAULTS.accentColor, DEFAULTS.backgroundColor], ['#ece8e1', '#17151b'], ['#6f6a66', '#0d0c0f'], [ACCENT, BACKGROUND]]) {
+    for (const [a, b] of [[DEFAULTS.accentColor, DEFAULTS.backgroundColor], ['#ece8e1', '#17151b'], ['#8a847a', '#0d0c0f'], [ACCENT, BACKGROUND]]) {
       assert.ok(Math.abs(contrast(a, b) - ratio(a, b)) < 0.01, `${a} on ${b}: ${contrast(a, b)}, not ${ratio(a, b)}`);
       assert.ok(Math.abs(contrast(b, a) - ratio(a, b)) < 0.01, `${b} on ${a}`);
     }
@@ -158,9 +158,9 @@ describe('colours', () => {
   });
 
   test('a background too light for the text or the status colours is refused, saying why', () => {
-    // #3a3a3a: the dim text and "bad" fail. #202020: the faint text passes on it, but
+    // #3a3a3a: the dim text and "bad" fail. #1a1a1a: the faint text passes on it, but
     // not on the raised surface derived from it.
-    for (const backgroundColor of ['#3a3a3a', '#202020']) {
+    for (const backgroundColor of ['#3a3a3a', '#1a1a1a']) {
       const problems = check({ accentColor: DEFAULTS.accentColor, backgroundColor });
       assert.ok(problems.length, backgroundColor);
       for (const p of problems) assert.match(p, TOO_LIGHT, backgroundColor);
@@ -180,8 +180,8 @@ describe('colours', () => {
       assert.ok(!problems.some((p) => TOO_LIGHT.test(p)), `${accentColor}: the background is fine`);
     }
     // Readable on Open Matte's background, not on a lighter one's raised surface.
-    assert.deepEqual(check({ accentColor: '#848484', backgroundColor: DEFAULTS.backgroundColor }), []);
-    assert.ok(check({ accentColor: '#848484', backgroundColor: BACKGROUND }).some((p) => TOO_CLOSE.test(p)));
+    assert.deepEqual(check({ accentColor: '#818181', backgroundColor: DEFAULTS.backgroundColor }), []);
+    assert.ok(check({ accentColor: '#818181', backgroundColor: BACKGROUND }).some((p) => TOO_CLOSE.test(p)));
   });
 
   test('every accent readable at 4.5:1 passes and gets ink readable on it; every other one is refused', () => {
@@ -695,7 +695,7 @@ describe('colours, logo and icon in Settings', () => {
   });
 
   test('colours are saved in lower case, and reach every viewer through /api/site and /api/me', async () => {
-    const r = await admin.patch('/api/admin/settings', { accentColor: '#4FB3D9', backgroundColor: '#101820' });
+    const r = await admin.patch('/api/admin/settings', { accentColor: '#4FB3D9', backgroundColor: '#0a131c' });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     const expected = { accentColor: ACCENT, backgroundColor: BACKGROUND };
     assert.deepEqual(colours(r.data), expected);
@@ -726,7 +726,7 @@ describe('colours, logo and icon in Settings', () => {
       [{ backgroundColor: '#808080' }, TOO_LIGHT],
       [{ backgroundColor: '#3a3a3a' }, TOO_LIGHT],
       // Fine on itself; too light once raised.
-      [{ backgroundColor: '#202020' }, TOO_LIGHT],
+      [{ backgroundColor: '#1a1a1a' }, TOO_LIGHT],
       [{ accentColor: '#3a3040' }, TOO_CLOSE],
       // Fine on the background; too close to the raised surface.
       [{ accentColor: '#7a7a7a' }, TOO_CLOSE],
@@ -741,9 +741,9 @@ describe('colours, logo and icon in Settings', () => {
   });
 
   test('the colours are checked as they would be saved: together, with whichever one is not being changed', async () => {
-    // #848484 is readable on Open Matte's background, not on BACKGROUND's raised surface.
+    // #818181 is readable on Open Matte's background, not on BACKGROUND's raised surface.
     await save({ backgroundColor: BACKGROUND });
-    const r = await admin.patch('/api/admin/settings', { accentColor: '#848484' });
+    const r = await admin.patch('/api/admin/settings', { accentColor: '#818181' });
     assert.equal(r.status, 400);
     assert.match(r.data.error, TOO_CLOSE);
     assert.deepEqual(colours(await adminSettings()), { accentColor: DEFAULTS.accentColor, backgroundColor: BACKGROUND });

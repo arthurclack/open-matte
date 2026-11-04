@@ -202,9 +202,9 @@ tests than on your computer.
 Nearly everything Open Matte knows lives in its database: films' details, tickets,
 screenings and activity, people and their passkeys, and settings (including a TMDB key
 saved in the admin, and the cinema's colours). The exceptions are two folders of
-images in the data folder: posters downloaded from TMDB (`artwork`), and the logo and
-tab icon you uploaded (`branding`). Backups copy both. The films themselves aren't
-backed up here: keep your originals and encodes elsewhere.
+images in the data folder: posters and backdrops downloaded from TMDB (`artwork`), and
+the logo and tab icon you uploaded (`branding`). Backups copy both. The films
+themselves aren't backed up here: keep your originals and encodes elsewhere.
 
 **Every day**, between 04:00 and 04:15 UTC, the app saves a consistent copy of the
 database, checks it with SQLite's integrity check, and keeps it in
@@ -337,11 +337,11 @@ cp -r ~/open-matte-backups/branding ~/restore-test/data/
 DATA_DIR=~/restore-test/data MEDIA_DIR=~/restore-test/media npm run dev
 ```
 
-The first line fetches the posters downloaded from TMDB, the logo and the tab icon,
-which the database file doesn't hold. If no poster was ever downloaded, or no logo or
-icon uploaded, there's no folder to copy, and that `scp` and `cp` say "No such file
-or directory". Nothing is wrong. `npm run dev` reads the rest of its settings from
-your local `.env`; the two on the command line win over it.
+The first line fetches the posters and backdrops downloaded from TMDB, the logo and
+the tab icon, which the database file doesn't hold. If nothing was ever downloaded
+from TMDB, or no logo or icon uploaded, there's no folder to copy, and that `scp` and
+`cp` say "No such file or directory". Nothing is wrong. `npm run dev` reads the rest
+of its settings from your local `.env`; the two on the command line win over it.
 
 Open `http://localhost:3000/admin` (or the `PORT` in your `.env`) and sign in with
 the password in your local `.env`. Everything but the films is there to look at: their
@@ -364,7 +364,7 @@ cp -r /srv/open-matte/backups/branding/. /srv/open-matte/data/branding
 docker compose start app
 ```
 
-If no poster was ever downloaded from TMDB, or no logo or icon uploaded, there's no
+If nothing was ever downloaded from TMDB, or no logo or icon uploaded, there's no
 folder to copy, and that `cp` says "No such file or directory". Nothing is wrong. If
 the backup is no longer on the server, copy yours back first, from your computer:
 
@@ -558,12 +558,53 @@ docker compose logs caddy                  # certificates and Caddy's errors
 ```
 
 The app logs its start and its first scan, clean-ups that deleted something, media
-requests and passkeys it refused, what browsers blocked under the pages' policy
-([below](#what-browsers-blocked)), and errors. It never logs ticket codes, link tokens,
+requests ([below](#refused-media-requests)) and passkeys it refused, what browsers
+blocked under the pages' policy ([below](#what-browsers-blocked)), and errors. It never logs ticket codes, link tokens,
 cookies or the admin password. Caddy keeps no access log. Its error log can hold a
 ticket link's address if someone opens it while the app is down
 ([access.md](access.md#secrets-and-sessions)). Each container keeps at most 50 MB of
 logs (five files of 10 MB), set in `compose.yml`.
+
+### Refused media requests
+
+When the app refuses a request for a film's files, or can't answer it, it writes a
+line to its log, and the booth counts it:
+
+```bash
+docker compose logs --since 24h app | grep media
+```
+
+```text
+media 403: /media/arrival/hls/v_h264_720/seg_12.m4s - no screening held by this browser - Apple media player (iPhone)
+media 403: /media/arrival/hls/v_h264_720/seg_19.m4s - no screening held by this browser - Apple media player (iPhone): 7 more like it in the minute before
+media 404: /artwork/arrival/poster-1a2b3c4d5e6f.jpg - no session cookie - Chrome on Android
+```
+
+Each line gives the status the browser was answered with, the address it asked for
+(only its start, if it's long), why, and the browser and device, as your account page
+names them. On an iPhone, Safari's own player fetches the video itself, so those
+requests are named "Apple media player (iPhone)". A poster or backdrop downloaded from
+TMDB that a browser may not have is answered 404, as if there were no such film
+([access.md](access.md#media-requests)), and logged with that 404 and the reason. A
+request for a film that doesn't exist is neither logged nor counted.
+
+Anyone can have a request refused, as often as they like, so these lines are limited
+like the policy's reports below. The same refusal (the same status, reason, kind of
+file, film and browser) is logged once a minute at most, then a line says how many
+more like it there were, ending with the address of the last. And the log takes at
+most 30 new lines a minute about browsers with a session, and 10 about requests with
+none (no cookie, or one that has expired or was made up), which anyone can send. Past
+those, a line says how many weren't logged:
+
+```text
+media: 412 more refused requests with no session not logged in the minute before
+```
+
+So someone with no session sending made-up requests can't push the lines about your
+viewers out of the log, though a browser with a ticket shares the allowance for
+sessions. The booth still counts every one. A ticket link's preview poster that the
+films' folder couldn't answer (`poster 503: ...`) shares the allowance for requests
+with no session.
 
 ### What browsers blocked
 
@@ -702,17 +743,36 @@ pressing a button in a loop:
 | Pressing Play (or **Watch here instead**) | 60 every 10 minutes |
 | Keeping a ticket | 30 every 10 minutes |
 | A ticket link's preview, the page and its poster together | 60 every 10 minutes |
+| Posters and backdrops downloaded from TMDB | 2000 requests that find nothing every 10 minutes, and 6000 for each IPv6 /48 |
 | Setting up a passkey from a setup or recovery link | 20 requests every 15 minutes |
 | Signing in with a passkey | 30 every 10 minutes |
-| Signing in to the admin | 10 tries every 15 minutes |
+| Signing in to the admin | 10 tries every 15 minutes, and 30 for each IPv6 /48 |
+
+Over a limit, the API says to try again later. A ticket link's preview previews as
+the cinema instead, and its poster, like a poster or backdrop downloaded from TMDB,
+answers as if there were no such film. Only the requests for posters and backdrops
+that find nothing count, whether the film isn't there or the browser may not have it,
+so a household sharing one address loads as many as it likes, while someone guessing
+films' names gets a little over three a second.
 
 The counts live in memory, so `docker compose restart app` clears them, should a
 household that shares one address get stuck.
 
 An IPv4 visitor counts by its address, an IPv6 visitor by its /64 (one household or
-server usually holds a whole one). For that the app has to see visitors' real
-addresses. If your domain has only an A record, everyone arrives over IPv4, and it
-does. Before you give it an AAAA record, give Docker's network IPv6, in
+server usually holds a whole one). Signing in to the admin, and posters and backdrops
+downloaded from TMDB, also count each IPv6 /48 as one, across all its /64s: anyone
+can have a /48 for nothing from a tunnel broker, and with it tens of thousands of
+/64s. Only what the /64's own limit lets through counts towards it. There's
+deliberately no limit for everyone together, which anyone could use up to lock you
+out. If someone else in your /48 has used up its tries, sign in from another network,
+or restart the app. Posters and backdrops downloaded from TMDB can be used up the
+same way: a phone network can put many people in one /48, or behind one IPv4 address.
+If they stop loading for everyone on one network, the limit starts again within ten
+minutes, and `docker compose restart app` clears it at once.
+
+Counting visitors by address needs the app to see their real addresses. If your
+domain has only an A record, everyone arrives over IPv4, and it does. Before you give
+it an AAAA record, give Docker's network IPv6, in
 [`compose.override.yml`](#your-own-changes-to-the-docker-setup):
 
 ```yaml

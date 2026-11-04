@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
 import { filmMedia } from '../films.js';
+import { rangeKey } from '../ratelimit.js';
 import { VIEWER_COOKIE, deviceLabel } from '../sessions.js';
 
 const NO_COOKIE = 'no session cookie';
@@ -65,17 +66,95 @@ export function createRefusals({ keep = 50, strangers = 5, now = () => Date.now(
   return { add, view };
 }
 
+// The lines refused media requests write to the server log, within a budget.
+// Anyone can have a request refused, as often as they like and each one a little
+// different, so as with browsers' policy reports (csp.js, createCspReports) the same
+// refusal (the same `key`: for logDenied, what makes one row in the booth) is
+// logged once a minute at most, and once the minute is over a line says how many
+// more like it there were. On top of that the log takes at most `perMinute` new
+// lines a minute; past that, refusals are only counted, and once the minute is over
+// one line says how many weren't logged. Strangers' requests (with no live session,
+// as createRefusals has it) draw on a budget of their own, `strangers` lines a
+// minute, so however many of them there are, they can't push the lines about
+// viewers out of the log. The booth still counts every one.
+export function createRefusalLog({ windowMs = 60 * 1000, perMinute = 30, strangers = 10, keep = 500, log = (line) => console.warn(line), now = () => Date.now() } = {}) {
+  // key → { until, more, line } for the current minute's lines.
+  const seen = new Map();
+  // Each budget's new lines this minute, and the refusals past them that weren't logged.
+  const budgets = {
+    viewers: { max: perMinute, says: 'refused requests', until: 0, used: 0, dropped: 0 },
+    strangers: { max: strangers, says: 'refused requests with no session', until: 0, used: 0, dropped: 0 },
+  };
+
+  // Starts a new minute for a budget once its last one is over, saying what it left out.
+  function nextMinute(budget, t) {
+    if (budget.until > t) return;
+    if (budget.dropped) log(`media: ${budget.dropped} more ${budget.says} not logged in the minute before`);
+    Object.assign(budget, { until: t + windowMs, used: 0, dropped: 0 });
+  }
+
+  function forget(key, had) {
+    if (had.more) log(`${had.line}: ${had.more} more like it in the minute before`);
+    seen.delete(key);
+  }
+
+  // `key` says which refusals are alike; `line` is the one to log. A repeat's line
+  // replaces the one kept, so the count at the end of the minute follows the last.
+  function add(key, line, { stranger = false } = {}) {
+    const t = now();
+    const budget = stranger ? budgets.strangers : budgets.viewers;
+    nextMinute(budget, t);
+    const k = `${stranger ? 'stranger' : 'viewer'} ${key}`;
+    const had = seen.get(k);
+    if (had && had.until > t) {
+      had.more++;
+      had.line = line;
+      return;
+    }
+    if (had) forget(k, had);
+    if (budget.used >= budget.max) {
+      budget.dropped++;
+      return;
+    }
+    // Never more than `keep`: forget the one that started longest ago, saying first
+    // how many more it had.
+    if (seen.size >= keep) {
+      const [oldest, was] = seen.entries().next().value;
+      forget(oldest, was);
+    }
+    budget.used++;
+    log(line);
+    seen.set(k, { until: t + windowMs, more: 0, line });
+  }
+
+  // For each minute that has ended with refusals unsaid, says how many.
+  function sweep() {
+    const t = now();
+    for (const [key, had] of seen) if (had.until <= t) forget(key, had);
+    for (const budget of Object.values(budgets)) nextMinute(budget, t);
+  }
+
+  const timer = setInterval(sweep, windowMs);
+  timer.unref();
+  return { add, sweep };
+}
+
 // `code` is the error code of a failed read, whose message (the reason) names
 // the file's full path: the booth gets the code alone. `who` is the request's
 // sessions, as sessions.load found them.
-function logDenied(req, status, reason, { refusals, film, ext, code, who }) {
+function logDenied(req, status, reason, { refusals, refusalLog, film, ext, code, who }) {
   const ua = req.get('user-agent') || '';
   const client = /AppleCoreMedia/.test(ua) ? `Apple media player (${deviceLabel(ua).split(' on ')[1]})` : deviceLabel(ua);
   // The Range header is the sender's to choose, of any length: only its start is logged.
   const range = req.headers.range ? ` - range ${req.headers.range.replace(/[^\x20-\x7e]/g, '?').slice(0, 40)}` : '';
-  console.warn(`media ${status}: ${req.path} - ${reason} - ${client}${range}`);
+  // So is the path, up to the size of a request's headers, and the budget below
+  // counts lines, not their length: only its start is logged too.
+  const where = req.path.replace(/[^\x20-\x7e]/g, '?').slice(0, 200);
   const kept = status === 500 ? `couldn't read the file${code ? ` (${code})` : ''}` : reason;
-  refusals?.add({ status, reason: kept, kind: KINDS[ext] ?? 'other', film: film.slug, client, stranger: !who.viewer && !who.admin });
+  const kind = KINDS[ext] ?? 'other';
+  const stranger = !who.viewer && !who.admin;
+  refusalLog.add(`${status} ${kept} ${kind} ${film.slug} ${client}`, `media ${status}: ${where} - ${reason} - ${client}${range}`, { stranger });
+  refusals?.add({ status, reason: kept, kind, film: film.slug, client, stranger });
 }
 
 export const TYPES = {
@@ -130,9 +209,12 @@ export function sendBare(res, status) {
 // never take the players' places. One browser holds four at most, as many as a
 // player needs at once (video, audio, subtitles, and the artwork as it starts),
 // and always leaves one for someone else; so does one address asking for posters.
-// A request over that waits for one of its own to finish. And a reader that stops
-// reading loses its connection, and its place, once nothing has been sent for
-// `idleMs`.
+// Of the posters' and backdrops' places, one browser or address holds all but one
+// at most (createShare), so one that reads its posters slowly leaves the others
+// one: in the Docker image, three of the four. Where there is only one, it can
+// still hold it. A request over any of these waits for one of its own to finish.
+// And a reader that stops reading loses its connection, and its place, once
+// nothing has been sent for `idleMs`.
 export function shareLimits(pool = Number(process.env.UV_THREADPOOL_SIZE) || 4) {
   const inFlight = Math.max(1, Math.floor(pool / 2));
   return {
@@ -181,14 +263,22 @@ function places(max) {
 // included, gets a 503, which players retry: nobody waits on a share that
 // doesn't answer. Even after its 503 a request keeps its place until nothing it
 // started there is still waiting, because until then it holds a thread.
-export function createShare({ inFlight, artwork = inFlight, perClient = inFlight, timeoutMs, idleMs = 20000 } = shareLimits()) {
+// `artworkPerClient` is how many of the artwork's places one client may hold: all
+// but one of them unless a test says otherwise, and at least one. Not half: a
+// members' page asks for every film's poster at once, and the time a poster waits
+// counts towards its deadline, so on slow storage the last of a long list would
+// fail, and a broken image is never asked for again. It doesn't change how many a
+// client holds in all (`perClient`): its posters count towards that too.
+export function createShare({ inFlight, artwork = inFlight, perClient = inFlight, artworkPerClient = Math.max(1, artwork - 1), timeoutMs, idleMs = 20000 } = shareLimits()) {
   const all = places(inFlight);
   const art = places(artwork);
-  // Each client's own places, while it holds or waits for one.
+  // Each client's own places, while it holds or waits for one: for anything, and
+  // for posters and backdrops.
   const clients = new Map();
-  const clientPlaces = (key) => {
-    let p = clients.get(key);
-    if (!p) clients.set(key, (p = places(perClient)));
+  const clientsArt = new Map();
+  const placesOf = (map, max, key) => {
+    let p = map.get(key);
+    if (!p) map.set(key, (p = places(max)));
     return p;
   };
 
@@ -205,9 +295,12 @@ export function createShare({ inFlight, artwork = inFlight, perClient = inFlight
     };
     // The places this request needs, taken in this order (the same for every
     // request, so none waits for a place another holds while holding one it
-    // needs) and given back the other way round.
-    const mine = clientPlaces(client);
-    const gates = [mine, ...(isArt ? [art] : []), all];
+    // needs) and given back the other way round. A poster waits for one of its
+    // client's artwork places first, holding nothing meanwhile, so at most
+    // `artworkPerClient` of a browser's posters hold its own places at once.
+    const mine = placesOf(clients, perClient, client);
+    const mineArt = isArt ? placesOf(clientsArt, artworkPerClient, client) : null;
+    const gates = isArt ? [mineArt, mine, art, all] : [mine, all];
     let held = 0;
     let placed = false;
     // Where the request waits for a place, if it does.
@@ -215,6 +308,7 @@ export function createShare({ inFlight, artwork = inFlight, perClient = inFlight
     const giveBackAll = () => {
       while (held > 0) gates[--held].giveBack();
       if (mine.unused) clients.delete(client);
+      if (mineArt?.unused) clientsArt.delete(client);
     };
     const ready = new Promise((resolve) => {
       const next = () => {
@@ -251,12 +345,15 @@ export function createShare({ inFlight, artwork = inFlight, perClient = inFlight
       if (closed || res.headersSent) return;
       late = true;
       if (!placed) {
-        const behindOwn = waiting?.gate === mine;
+        const gate = waiting?.gate;
         leaveQueue();
         const s = timeoutMs / 1000;
         return fail({
           status: 503,
-          reason: behindOwn ? `waited ${s} seconds behind ${perClient} other requests from the same ${clientName}` : `waited ${s} seconds for the films' folders, busy with other requests`,
+          reason:
+            gate === mine ? `waited ${s} seconds behind ${perClient} other requests from the same ${clientName}`
+            : gate === mineArt ? `waited ${s} seconds behind ${artworkPerClient} other posters and backdrops from the same ${clientName}`
+            : `waited ${s} seconds for the films' folders, busy with other requests`,
         });
       }
       // send may still be opening the file: nothing it reads comes here now.
@@ -352,7 +449,7 @@ export async function folderFile(mediaDir, film, rel) {
 // in, for a film shown to members); master and child playlists, init and media
 // segments, audio and subtitles need a screening that this browser holds.
 // Knowing a file path is not enough.
-export function mediaRoutes({ db, sessions, access, mediaDir, metadata, refusals, share }) {
+export function mediaRoutes({ db, sessions, access, mediaDir, metadata, refusals, refusalLog, share, counter }) {
   const router = express.Router();
   const filmBySlug = db.prepare('SELECT * FROM films WHERE slug = ?');
 
@@ -361,12 +458,16 @@ export function mediaRoutes({ db, sessions, access, mediaDir, metadata, refusals
     const ext = path.extname(rel).toLowerCase();
     // A kind of file never served, for any film.
     if (!TYPES[ext]) return res.status(404).end();
+    // The sessions before the film. Loading one can write when it was last seen
+    // (sessions.js), which the person's account page shows for each of their
+    // browsers: a session touched only when the film is real would say which
+    // films there are.
+    const who = { viewer: sessions.load(req, 'viewer'), admin: sessions.load(req, 'admin') };
     const film = filmBySlug.get(req.params.slug);
     // No such film is answered as a film this browser may not have, so the
     // answer doesn't say which films there are. Nothing to log.
     if (!film) return res.status(403).end();
-    const who = { viewer: sessions.load(req, 'viewer'), admin: sessions.load(req, 'admin') };
-    const about = { refusals, film, ext, who };
+    const about = { refusals, refusalLog, film, ext, who };
     const media = filmMedia(film);
     const isArtwork = rel === media.poster || rel === media.backdrop;
     const allowed = isArtwork ? access.filmAccess(who, film).canView : access.mayStream(who, film);
@@ -393,16 +494,47 @@ export function mediaRoutes({ db, sessions, access, mediaDir, metadata, refusals
   });
 
   // /artwork/<slug>/<file>: posters and backdrops downloaded from TMDb.
-  // Same rule as the folder's artwork: whatever shows you the page.
+  // Same rule as the folder's artwork: whatever shows you the page. But a refusal
+  // here is answered as no such film, not as a 403 like /media's: the file's name
+  // is the start of a hash of the image's path at TMDb (metadata.js), which anyone
+  // can look up, and a film's slug is its folder's name, often just its title. A
+  // 403 would tell anyone who asks for a film's likely poster that the film is
+  // here, published or not. So no such film, no such file, a browser that may not
+  // see it and one over either limit all get the same bare 404, and the file
+  // itself is only looked at for a browser that may have it.
+  //
+  // The limits slow down guessing names, so they count only the answers that find
+  // nothing: a poster that is sent tells its browser nothing it may not know, and
+  // a household sharing one IPv4 address loads a poster for every film on a page
+  // on each of its devices. Two thousand every ten minutes per client (an IPv4
+  // address, or an IPv6 /64) gives a script asking for name after name a little
+  // over three a second. Anyone can have an IPv6 /48 for nothing, and with it
+  // 65,536 /64s, so each /48 has six thousand as well (rangeKey), whichever of its
+  // /64s they come from. Over either limit, nothing is looked up, recorded or
+  // counted, so a script hammering from one /64 can't use up its neighbours' share
+  // of the /48.
+  const artworkCount = counter({ windowMs: 10 * 60 * 1000, max: 2000 });
+  const artworkRangeCount = counter({ windowMs: 10 * 60 * 1000, max: 6000, key: rangeKey });
+  // An answer that found nothing, counted against both limits. Only a request
+  // within both gets this far.
+  const noSuchArtwork = (req, res) => {
+    artworkCount(req);
+    artworkRangeCount(req);
+    sendBare(res, 404);
+  };
   router.get('/artwork/:slug/:file', (req, res) => {
+    if (artworkCount.over(req) || artworkRangeCount.over(req)) return sendBare(res, 404);
+    // The sessions before the film and its file, as on /media, so that no such
+    // film touches a session just as a refusal does.
+    const who = { viewer: sessions.load(req, 'viewer'), admin: sessions.load(req, 'admin') };
     const film = filmBySlug.get(req.params.slug);
     const file = film && metadata.artworkPath(film, req.params.file);
-    if (!file) return res.status(404).end();
-    const who = { viewer: sessions.load(req, 'viewer'), admin: sessions.load(req, 'admin') };
-    const about = { refusals, film, ext: path.extname(file).toLowerCase(), who };
+    if (!file) return noSuchArtwork(req, res);
+    const about = { refusals, refusalLog, film, ext: path.extname(file).toLowerCase(), who };
     if (!access.filmAccess(who, film).canView) {
-      logDenied(req, 403, denialReason(req, who, access, film), about);
-      return res.status(403).end();
+      // Still a refusal for the booth and the log, with the status it was answered with.
+      logDenied(req, 404, denialReason(req, who, access, film), about);
+      return noSuchArtwork(req, res);
     }
     // The file name changes whenever the image does.
     res.set('Cache-Control', 'private, max-age=604800, immutable');

@@ -210,9 +210,19 @@ function TmdbSettings({ settings, onSaved }) {
           </button>
         )}
       </div>
+      {/* TMDB's logo and notice, as on the site's footer (site.jsx), since the admin shows
+          TMDB's details and thumbnails too. The logo is TMDB's own file, unchanged, at its
+          own shape: only its height is set. */}
       <p className="faint" style={{ fontSize: '0.8rem', margin: '1rem 0 0' }}>
-        This product uses the TMDB API but is not endorsed or certified by TMDB. Images are downloaded to your server, so viewers’ browsers never
-        contact TMDB.
+        <img
+          src="/tmdb.svg"
+          width="92"
+          height="12"
+          alt="TMDB"
+          style={{ display: 'inline-block', height: 12, width: 'auto', verticalAlign: 'middle', marginRight: '0.5em' }}
+        />
+        This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. Images are downloaded to your
+        server, so viewers’ browsers never contact TMDB.
       </p>
     </form>
   );

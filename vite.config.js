@@ -219,6 +219,8 @@ export function licenceNotices(packages, { source = null } = {}) {
     '(at your option) any later version',
     '(https://www.gnu.org/licenses/gpl-3.0.html).',
     source ? `Its source code is at ${source}` : "This copy doesn't say where its source code is: ask whoever runs this site.",
+    // The one file in the build that isn't free software (web/public/tmdb.svg).
+    "tmdb.svg is TMDB's logo and trademark, and isn't covered by the GPL.",
     '',
     'It also includes code from the open-source packages below. Their licences ask for',
     'the licence text to go with every copy of the code, so here is each one as the',

@@ -6,6 +6,7 @@
 // Packages that carry others inside their published code (hls.js) have those listed
 // too. The admin's Settings show package.json's version; viewers are told nothing new.
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
@@ -217,6 +218,19 @@ describe('the build writes the file', { skip }, () => {
     const { emitted, warnings } = run(bundle);
     assert.equal(warnings.some((w) => NO_REPOSITORY.test(w)), !sourceUrl(PKG));
     if (sourceUrl(PKG)) assert.ok(emitted[0].source.includes(`Its source code is at ${sourceUrl(PKG)}\n`));
+  });
+
+  test('it says the TMDB logo is TMDB’s, and not under the GPL, whatever the build holds', () => {
+    for (const source of ['https://example.com/open-matte', null]) {
+      assert.match(licenceNotices([], { source }), /\ntmdb\.svg is TMDB's logo and trademark, and isn't covered by the GPL\.\n\n/);
+    }
+  });
+
+  // TMDB's terms let its logo be shown only as TMDB made it: not recoloured or
+  // distorted. This is the "Alt short" logo TMDB publishes, byte for byte.
+  test('the TMDB logo is TMDB’s own file, unchanged', () => {
+    const logo = fs.readFileSync(new URL('../web/public/tmdb.svg', import.meta.url));
+    assert.equal(crypto.createHash('sha256').update(logo).digest('hex'), '8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c');
   });
 
   test('a repository in any form package.json allows', () => {

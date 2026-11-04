@@ -19,12 +19,13 @@ const DEFAULT_ICON_BACKGROUND = '#111014';
 // styles.css's status colours, which stay the same whatever the cinema's colours.
 const STATUS = { good: '#7fc28b', warn: '#e8b04a', bad: '#e5776d' };
 
-// The colours drawn on the background, and how much contrast each needs. Faint
-// text is only ever used for things you can do without.
+// The colours drawn on the background, and how much contrast each needs.
+// styles.css's --text-faint is small text too (footers, hints under fields, table
+// headings), so it needs 4.5:1 like the secondary text, not the 3:1 of large text.
 const ON_BACKGROUND = [
   { color: '#ece8e1', what: 'text', needs: 7 },
   { color: '#a59f97', what: 'secondary text', needs: 4.5 },
-  { color: '#6f6a66', what: 'faint text', needs: 3 },
+  { color: '#8a847a', what: 'faint text', needs: 4.5 },
   { color: STATUS.good, what: 'the green of good news', needs: 4.5 },
   { color: STATUS.warn, what: 'the amber of warnings', needs: 4.5 },
   { color: STATUS.bad, what: 'the red of errors', needs: 4.5 },

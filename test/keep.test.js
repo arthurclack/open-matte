@@ -204,6 +204,24 @@ describe('keeping', () => {
     for (const x of [t, expired, usedUp, revoked]) assert.equal(ticketRow(x.id).person_id, null);
   });
 
+  test('a film that isn’t there is answered exactly as a film this person can’t see, so keeping tells nobody which films there are', async () => {
+    const { phone } = await member();
+    const answer = async (slug) => {
+      const r = await keep(phone, slug);
+      return { status: r.status, data: r.data, headers: [...r.headers].filter(([k]) => k !== 'date') };
+    };
+    const none = await answer('no-such-film');
+    assert.equal(none.status, 409);
+    assert.deepEqual(none.data, { error: 'cannot-keep' });
+    assert.deepEqual(await answer('heat'), none, 'published, no ticket here');
+    await admin.patch(`/api/admin/films/${films.heat}`, { published: false });
+    try {
+      assert.deepEqual(await answer('heat'), none, 'never shown to anyone');
+    } finally {
+      await admin.patch(`/api/admin/films/${films.heat}`, { published: true });
+    }
+  });
+
   test('the row afterwards, and every other browser that opened the link loses it at once', async () => {
     const t = await keepable({ screeningLimit: 3, daysAfterFirstPlay: 7 });
     const friend = await opened(fresh(), t);

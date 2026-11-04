@@ -3,12 +3,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 
 // Cookies get Secure from the request, as they do behind Caddy.
 process.env.COOKIE_SECURE = 'auto';
 const { adminBrowser, browser, makeFilm, startServer, tempDir } = await import('./helpers.js');
+const { sha256 } = await import('../server/sessions.js');
 
 let srv;
 let admin;
@@ -72,6 +74,36 @@ function rawPath(b, rawUrl) {
       })
       .on('error', reject);
   });
+}
+
+// The whole answer to a request, as it comes off the socket, but for its Date
+// header: the one line that changes with the clock. To compare two answers byte
+// for byte. `cookie` is a browser's cookies (or a made-up one), `from` the
+// visitor's address as Caddy would pass it on.
+function wire(url, { method = 'GET', body, cookie, from } = {}) {
+  const { port } = new URL(srv.base);
+  const head = [`${method} ${url} HTTP/1.1`, 'Host: 127.0.0.1', 'Connection: close'];
+  if (cookie) head.push(`Cookie: ${cookie}`);
+  if (from) head.push(`X-Forwarded-For: ${from}`);
+  if (body !== undefined) head.push('Content-Type: application/json', `Content-Length: ${Buffer.byteLength(body)}`);
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    const socket = net.connect(port, '127.0.0.1', () => socket.write(`${head.join('\r\n')}\r\n\r\n${body ?? ''}`));
+    socket.on('data', (c) => chunks.push(c));
+    socket.on('end', () => resolve(Buffer.concat(chunks).toString('latin1').replace(/^Date: [^\r]*\r\n/im, '')));
+    socket.on('error', reject);
+  });
+}
+const cookieOf = (b) => [...b.jar].map(([k, v]) => `${k}=${v}`).join('; ');
+// A browser holding a ticket for Arrival and nothing else. It opens the link from
+// an address of its own, so the other tests keep 127.0.0.1's tries at opening links.
+let arrivalOnly;
+async function arrivalHolder() {
+  if (arrivalOnly) return arrivalOnly;
+  const b = browser(srv.base);
+  const r = await b.send('POST', '/api/tickets/open', { code: (await newTicket('arrival')).code }, { headers: { 'x-forwarded-for': '198.51.100.40' } });
+  assert.equal(r.status, 200);
+  return (arrivalOnly = b);
 }
 
 const master = (slug) => `/media/${slug}/hls/master.m3u8`;
@@ -394,15 +426,189 @@ test('downloaded artwork: an error is never cached as the image, and the booth h
     const past = await raw(viewer, url, { headers: { range: 'bytes=100-200' } });
     assert.equal(past.status, 416);
     assert.equal(past.headers.get('cache-control'), null);
-    // Refused to a browser with no ticket, like the folder's artwork, and the booth hears of it.
+    // Refused to a browser with no ticket, as no such film (see below), and the booth hears of it.
     const before = await refusals();
-    assert.equal(await status(browser(srv.base), url), 403);
+    assert.equal(await status(browser(srv.base), url), 404);
     const now = await refusals();
     assert.equal(now.total, before.total + 1);
-    assert.deepEqual(row(now.recent[0], ['status', 'kind', 'film', 'reason']), { status: 403, kind: 'artwork', film: 'heat', reason: 'no session cookie' });
+    assert.deepEqual(row(now.recent[0], ['status', 'kind', 'film', 'reason']), { status: 404, kind: 'artwork', film: 'heat', reason: 'no session cookie' });
   } finally {
     srv.db.prepare("UPDATE films SET artwork = NULL WHERE slug = 'heat'").run();
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// A downloaded poster's name is the start of a hash of its path at TMDb, which
+// anyone can look up, and a slug is a folder's name: a refusal that answered
+// differently from no such film would say which films are here.
+test('downloaded artwork that is refused is answered exactly as no such film, byte for byte, and no file is read for it', async (t) => {
+  const file = 'poster-0123456789ab.jpg';
+  const artworkDir = path.join(srv.dataDir, 'artwork');
+  const setArtwork = srv.db.prepare('UPDATE films SET artwork = ? WHERE slug = ?');
+  // Heat is published, Secret never was. Both have the poster, on the disk too.
+  for (const slug of ['heat', 'secret']) {
+    setArtwork.run(JSON.stringify({ poster: { file } }), slug);
+    fs.mkdirSync(path.join(artworkDir, slug), { recursive: true });
+    fs.writeFileSync(path.join(artworkDir, slug, file), 'jpeg');
+  }
+  try {
+    const other = await arrivalHolder();
+    // Every way of looking at a file on the disk, sending one included.
+    const ways = ['stat', 'lstat', 'open', 'access', 'readFile', 'realpath'];
+    const looks = [
+      ...[...ways, 'createReadStream', 'existsSync', ...ways.map((w) => `${w}Sync`)].map((name) => t.mock.method(fs, name)),
+      ...ways.map((name) => t.mock.method(fs.promises, name)),
+    ];
+    const readings = () => looks.flatMap((m) => m.mock.calls.map((c) => String(c.arguments[0]))).filter((p) => p.startsWith(artworkDir));
+    const before = await refusals();
+    const since = Date.now();
+    // A stranger with no cookie, one with a made-up cookie, and a browser with a ticket for another film.
+    const visitors = [{}, { cookie: 'om_session=made-up' }, { cookie: cookieOf(other) }];
+    for (const who of visitors) {
+      const none = await wire(`/artwork/no-such-film/${file}`, who);
+      assert.match(none, /^HTTP\/1\.1 404 Not Found\r\n/);
+      for (const h of ['content-type', 'cache-control', 'etag', 'last-modified', 'set-cookie']) assert.doesNotMatch(none, new RegExp(`^${h}:`, 'im'), `no ${h}`);
+      assert.equal(await wire(`/artwork/heat/${file}`, who), none, 'published, but not for this browser');
+      assert.equal(await wire(`/artwork/secret/${file}`, who), none, 'never published');
+      assert.equal(await wire('/artwork/heat/poster-ffffffffffff.jpg', who), none, 'a name that isn’t the film’s');
+      assert.equal(await wire(`/artwork/no-such-film/${file}`, { ...who, method: 'HEAD' }), await wire(`/artwork/heat/${file}`, { ...who, method: 'HEAD' }), 'HEAD alike');
+    }
+    assert.deepEqual(readings(), [], 'nothing on the disk was looked at for any of them');
+    // Still refusals for the booth, as the 404s they were answered with: the real films' only.
+    const now = await refusals();
+    assert.equal(now.total - before.total, visitors.length * 3);
+    const rows = now.recent.filter((r) => r.at >= since);
+    assert.ok(rows.length > 0 && rows.every((r) => r.status === 404 && r.kind === 'artwork'), JSON.stringify(rows));
+    assert.ok(!JSON.stringify(now).includes('no-such-film'));
+    // A browser that may see it gets the file, read from the disk as the spies see.
+    const allowed = await wire(`/artwork/heat/${file}`, { cookie: cookieOf(await watchingHeat()) });
+    assert.match(allowed, /^HTTP\/1\.1 200 OK\r\n/);
+    assert.ok(readings().length > 0, 'the spies see a file sent');
+  } finally {
+    for (const slug of ['heat', 'secret']) setArtwork.run(null, slug);
+    fs.rmSync(artworkDir, { recursive: true, force: true });
+  }
+});
+
+// Loading a session writes when it was last seen, at most every five minutes
+// (sessions.js), and another browser signed in as the same person sees that on
+// its account page. A session touched only for a film that is here would say
+// which films there are, so a refusal touches it just as no such film does.
+test('a refused media request touches the browser’s session exactly as one for no such film', async () => {
+  const file = 'poster-0123456789ab.jpg';
+  const setArtwork = srv.db.prepare('UPDATE films SET artwork = ? WHERE slug = ?');
+  setArtwork.run(JSON.stringify({ poster: { file } }), 'secret');
+  try {
+    const b = await arrivalHolder();
+    const hash = sha256(b.jar.get('om_session'));
+    // Whether asking for `url` touched the session, last seen an hour before.
+    const touches = async (url) => {
+      const anHourAgo = Date.now() - 60 * 60 * 1000;
+      srv.db.prepare('UPDATE sessions SET last_seen_at = ? WHERE id_hash = ?').run(anHourAgo, hash);
+      await wire(url, { cookie: cookieOf(b), from: '198.51.100.41' });
+      return srv.db.prepare('SELECT last_seen_at FROM sessions WHERE id_hash = ?').get(hash).last_seen_at !== anHourAgo;
+    };
+    for (const [none, ...refused] of [
+      [master('no-such-film'), master('secret'), master('heat')],
+      [`/artwork/no-such-film/${file}`, `/artwork/secret/${file}`, '/artwork/secret/poster-ffffffffffff.jpg'],
+    ]) {
+      const expected = await touches(none);
+      assert.equal(expected, true, `a live session is seen whatever it asks for: ${none}`);
+      for (const url of refused) assert.equal(await touches(url), expected, url);
+    }
+  } finally {
+    setArtwork.run(null, 'secret');
+  }
+});
+
+test('over its limit, a client’s downloaded artwork is no such film too, even for a browser that may see it', async () => {
+  const file = 'poster-0123456789ab.jpg';
+  const dir = path.join(srv.dataDir, 'artwork', 'heat');
+  srv.db.prepare("UPDATE films SET artwork = ? WHERE slug = 'heat'").run(JSON.stringify({ poster: { file } }));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, file), 'jpeg');
+  try {
+    const cookie = cookieOf(await watchingHeat());
+    const from = '198.51.100.20';
+    const ask = (url, by = from) => fetch(srv.base + url, { headers: { cookie, 'x-forwarded-for': by } }).then(async (r) => (await r.arrayBuffer(), r.status));
+    // 2000 requests that find nothing, in ten minutes from one address: the limit.
+    // The posters sent between them don't count, so a household sharing an address
+    // loads as many as it likes.
+    for (let sent = 0; sent < 2000; sent += 50) {
+      const posters = await Promise.all(Array.from({ length: 10 }, () => ask(`/artwork/heat/${file}`)));
+      assert.deepEqual(posters, Array(10).fill(200), `posters after ${sent} that found nothing`);
+      const guesses = await Promise.all(Array.from({ length: 50 }, (_, i) => ask(`/artwork/no-such-film/${sent + i}.jpg`)));
+      assert.ok(guesses.every((s) => s === 404), `after ${sent}`);
+    }
+    const before = await refusals();
+    const none = await wire(`/artwork/no-such-film/${file}`, { cookie, from: '198.51.100.21' });
+    assert.equal(await wire(`/artwork/heat/${file}`, { cookie, from }), none, 'answered as no such film');
+    // A request that would have been refused is answered the same, and neither is recorded.
+    assert.equal(await wire(`/artwork/heat/${file}`, { from }), none, 'a stranger’s');
+    assert.equal((await refusals()).total, before.total, 'and neither is recorded');
+    // From another address, another client, the stranger's request is a refusal the booth hears of.
+    assert.equal(await wire(`/artwork/heat/${file}`, { from: '198.51.100.22' }), none);
+    assert.equal((await refusals()).total, before.total + 1);
+    assert.equal(await ask(`/artwork/heat/${file}`, '198.51.100.22'), 200);
+  } finally {
+    srv.db.prepare("UPDATE films SET artwork = NULL WHERE slug = 'heat'").run();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('downloaded artwork counts each IPv6 /48 as well, whichever of its /64s ask', async () => {
+  const file = 'poster-0123456789ab.jpg';
+  const dir = path.join(srv.dataDir, 'artwork', 'heat');
+  srv.db.prepare("UPDATE films SET artwork = ? WHERE slug = 'heat'").run(JSON.stringify({ poster: { file } }));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, file), 'jpeg');
+  try {
+    const cookie = cookieOf(await watchingHeat());
+    const ask = (url, from) => fetch(srv.base + url, { headers: { cookie, 'x-forwarded-for': from } }).then(async (r) => (await r.arrayBuffer(), r.status));
+    // `n` requests from `from` that find nothing.
+    const guess = async (from, n) => {
+      for (let sent = 0; sent < n; sent += 50) {
+        const batch = await Promise.all(Array.from({ length: Math.min(50, n - sent) }, (_, i) => ask(`/artwork/no-such-film/${sent + i}.jpg`, from)));
+        assert.ok(batch.every((s) => s === 404), from);
+      }
+    };
+    // Three /64s of one /48 find nothing 5999 times between them, one short of the
+    // /48's 6000. The first asks a hundred times past its own 2000, and those don't
+    // count towards the /48: the /64's limit turned them away first.
+    await guess('2001:db8:a:1::1', 2100);
+    await guess('2001:db8:a:2::1', 2000);
+    await guess('2001:db8:a:3::1', 1999);
+    // A fourth /64 is within both limits: its poster is sent, and counts for nothing.
+    assert.equal(await ask(`/artwork/heat/${file}`, '2001:db8:a:4::1'), 200);
+    // Its next request that finds nothing is the /48's last.
+    assert.equal(await ask('/artwork/no-such-film/last.jpg', '2001:db8:a:4::1'), 404);
+    // Now anywhere in that /48 is over, even a browser that may see the poster.
+    const none = await wire(`/artwork/no-such-film/${file}`, { cookie, from: '2001:db8:b:1::1' });
+    assert.equal(await wire(`/artwork/heat/${file}`, { cookie, from: '2001:db8:a:5::1' }), none, 'answered as no such film');
+    assert.equal(await ask(`/artwork/heat/${file}`, '2001:db8:a:4::1'), 404, 'the fourth /64 too');
+    // The next /48 is someone else.
+    assert.equal(await ask(`/artwork/heat/${file}`, '2001:db8:b:1::1'), 200, 'the next /48 is another client');
+  } finally {
+    srv.db.prepare("UPDATE films SET artwork = NULL WHERE slug = 'heat'").run();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a film’s page, Play and its media answer a film the browser may not have exactly as no such film, byte for byte', async () => {
+  const other = await arrivalHolder();
+  // From an address of its own, so its presses of Play leave the other tests theirs.
+  const from = '198.51.100.30';
+  for (const who of [{ from }, { from, cookie: 'om_session=made-up' }, { from, cookie: cookieOf(other) }]) {
+    for (const [url, init] of [
+      ['/api/films/%s', {}],
+      ['/api/films/%s/screenings', { method: 'POST', body: '{}' }],
+      ['/media/%s/hls/master.m3u8', {}],
+      ['/media/%s/poster.jpg', {}],
+    ]) {
+      const none = await wire(url.replace('%s', 'no-such-film'), { ...who, ...init });
+      assert.match(none, /^HTTP\/1\.1 40[34] /, url);
+      for (const slug of ['secret', 'heat']) assert.equal(await wire(url.replace('%s', slug), { ...who, ...init }), none, `${url} ${slug}`);
+    }
   }
 });
 

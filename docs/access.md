@@ -318,8 +318,14 @@ person without being signed in as them, nor holding a ticket without pressing
 Play. A ticket for one film unlocks nothing of another, and a file in a
 film folder that is really a symlink to somewhere outside it is never served.
 A film that doesn't exist is refused exactly as one you may not have, so asking
-doesn't tell anyone which films you've imported, published or not. Whether a
-film's folder is missing is only said to a browser that may play it.
+doesn't tell anyone which films you've imported, published or not. The same goes
+for a film's page, **Play** and **Keep it**. Posters and backdrops downloaded from
+TMDB, at `/artwork/<film>/<file>`, need the same as a film folder's own, but are
+refused the other way round: a browser that may not have one is answered exactly as
+if there were no such film, a bare 404. Their file names are made from the image's
+address at TMDB, which anyone can look up, so a refusal that said "not for you"
+would say the film is here. Whether a film's folder is missing is only said to a
+browser that may play it.
 Revoking a ticket, signing a browser out, disabling a person or removing a passkey
 stops future requests, playlists and segments included; none of them can take back
 what is already in the player's buffer (typically under a minute of video).
@@ -340,9 +346,12 @@ however slowly it reads them. In the Docker image there are 16. One browser hold
 at most, enough for a player's video, audio and subtitles, and its next request waits
 for one of its own to finish. Posters and backdrops take 4 at most, so the poster of a
 link preview, which anyone with the preview's address can fetch, never takes a
-player's place, and one address takes no more of them than one browser. A download
-that has sent nothing for 20 seconds, because the browser stopped reading it, is cut
-off and gives its place back.
+player's place, and one address takes no more of them than one browser. Of those 4,
+one browser, or one address asking for preview posters, holds 3 at most, so one that
+reads its posters slowly leaves the others one. A poster waiting behind the browser's
+other posters holds none of its places, so its posters never hold more than 3 of the
+browser's own 4, waiting or not. A download that has sent nothing for 20 seconds,
+because the browser stopped reading it, is cut off and gives its place back.
 
 Outside `/media/`, two kinds of image need no session. A ticket's preview poster,
 `/poster/<id>.<mac>`, follows the rule under [Link previews](#link-previews). The
@@ -595,9 +604,13 @@ included.
 - A passkey response must come from this site's own address, exactly (`PUBLIC_URL`;
   in development, `http://localhost` on any port), and one made inside another
   site's frame is refused.
-- Opening ticket links and their link previews, pressing Play, setup and recovery
-  links, signing in and the admin password are rate-limited per visitor. An IPv6
-  visitor counts by its /64.
+- Opening ticket links and their link previews, pressing Play, keeping a ticket,
+  setup and recovery links, signing in, the admin password and posters and backdrops
+  downloaded from TMDB are rate-limited per visitor
+  ([deploying.md](deploying.md#ipv6-and-rate-limits)). An IPv6 visitor counts by its
+  /64. The admin password and those posters and backdrops are also limited for each
+  IPv6 /48 together, so someone holding a whole range of addresses doesn't get a fresh
+  allowance from each /64 in it.
 - The API accepts changes only as JSON (apart from the logo and tab icon you upload
   in the admin, which are sent as the image itself), and refuses them when the
   browser says they come from another site or from another subdomain of this one
@@ -691,9 +704,12 @@ told on the film page that progress is recorded. This is operational information
 not proof that anyone watched.
 
 **Refused media requests** aren't stored in the database. Besides a line in the
-server's log, the latest 50 are kept in memory for **Status** in the admin (the
-projection booth): the time, status and reason, the kind of file (playlist, segment,
-subtitles, artwork or other), the film and the coarse device label. Repeats of the
+server's log (the same refusal once a minute at most, and a few dozen lines a minute
+in all: [deploying.md](deploying.md#refused-media-requests)), the latest 50 are kept
+in memory for **Status** in the admin (the projection booth): the time, status and
+reason, the kind of file (playlist, segment, subtitles, artwork or other), the film
+and the coarse device label. A refused poster or backdrop downloaded from TMDB is kept
+with the status it was answered with, 404, and the reason it was refused. Repeats of the
 same refusal share a row, with how many there were and when the last was. Requests
 with no session the server knows (no cookie, or one that has expired, been signed
 out or was made up) can come from anyone, so they keep to the latest five rows:

@@ -211,10 +211,11 @@ describe('one browser, or one address, can’t take every place on the films’ 
 
   // Asks for a file and reads only the start of the answer: its status line,
   // or null if the server cuts the connection first. The socket stays open.
-  function stall(base, file, cookie) {
+  // `from` is the visitor's address, as Caddy would pass it on.
+  function stall(base, file, cookie, from) {
     return new Promise((resolve) => {
       const socket = net.connect(new URL(base).port, '127.0.0.1', () => {
-        socket.write(`GET ${file} HTTP/1.1\r\nHost: 127.0.0.1\r\n${cookie ? `Cookie: ${cookie}\r\n` : ''}\r\n`);
+        socket.write(`GET ${file} HTTP/1.1\r\nHost: 127.0.0.1\r\n${cookie ? `Cookie: ${cookie}\r\n` : ''}${from ? `X-Forwarded-For: ${from}\r\n` : ''}\r\n`);
       });
       sockets.push(socket);
       socket.once('data', (chunk) => {
@@ -253,6 +254,42 @@ describe('one browser, or one address, can’t take every place on the films’ 
     assert.equal(sending(await stalled), 1, 'one poster at a time');
   });
 
+  test('one browser’s posters take all but one of the artwork’s places at most, and leave its player one of its own', async () => {
+    // As in the Docker image: 16 places, 4 of them for artwork, 4 for one browser.
+    const { srv, cookies } = await cinema({ inFlight: 16, artwork: 4, perClient: 4, timeoutMs: 3000, idleMs: 60_000 });
+    const [greedy, other] = cookies;
+    const poster = '/media/arrival/poster.jpg';
+    // Five big posters at once, read slowly: three are sent, two wait for those.
+    const stalled = Promise.all(Array.from({ length: 5 }, () => stall(srv.base, poster, greedy)));
+    await sleep(200);
+    // The posters waiting behind the browser's other posters hold none of its places,
+    // so they hold three of its four, waiting or not, and its player still plays.
+    let t = Date.now();
+    const own = await timed(`${srv.base}/media/arrival/hls/v_h264_720/seg_0.m4s`, { headers: { cookie: greedy } });
+    assert.equal(own.status, 200, 'the same browser’s segment');
+    assert.ok(Date.now() - t < 1500, 'without waiting for a place');
+    // And another viewer's poster still has places of its own.
+    t = Date.now();
+    const theirs = await timed(srv.base + poster, { headers: { cookie: other } });
+    assert.equal(theirs.status, 200, 'another viewer’s poster');
+    assert.ok(Date.now() - t < 1500, 'without waiting for a place');
+    const done = await stalled;
+    assert.deepEqual(done.map((s) => s.status).sort(), [200, 200, 200, 503, 503]);
+    const rows = srv.app.locals.refusals.view().recent.filter((r) => r.status === 503).map((r) => [r.reason, r.count]);
+    assert.deepEqual(rows, [['waited 3 seconds behind 3 other posters and backdrops from the same browser', 2]]);
+  });
+
+  test('so does one address asking for a link preview’s poster', async () => {
+    const { srv, poster } = await cinema({ inFlight: 16, artwork: 4, perClient: 4, timeoutMs: 1000, idleMs: 60_000 }, 1);
+    const stalled = Promise.all(Array.from({ length: 4 }, () => stall(srv.base, poster, null, '203.0.113.50')));
+    await sleep(200);
+    const t = Date.now();
+    const r = await timed(srv.base + poster, { headers: { 'x-forwarded-for': '203.0.113.51' } });
+    assert.equal(r.status, 200, 'someone else’s preview');
+    assert.ok(Date.now() - t < 900, 'without waiting for a place');
+    assert.equal(sending(await stalled), 3, 'three of the four at a time');
+  });
+
   test('a download nobody reads is cut off, and its place goes to the next viewer', async () => {
     const { srv, cookies } = await cinema({ inFlight: 1, artwork: 1, perClient: 1, timeoutMs: 3000, idleMs: 300 });
     const [stopped, other] = cookies;
@@ -281,6 +318,7 @@ test('the Docker image gives Node threads enough that the films take half at mos
   assert.ok(perClient >= 3, 'a player gets its video, audio and subtitles at once');
   assert.ok(perClient * 2 <= inFlight, 'one browser takes a few at most');
   assert.ok(artwork <= inFlight / 4, 'posters leave the players most of them');
+  assert.ok(artwork >= 4, 'one browser’s posters, all but one of them at most, load three at a time and leave the others one');
   // And with Node's default of four, or fewer: one browser still leaves one for the others.
   assert.deepEqual(shareLimits(4), { ...shareLimits(4), inFlight: 2, artwork: 1, perClient: 1 });
   assert.equal(shareLimits(1).inFlight, 1);

@@ -5,6 +5,7 @@ import { publicOrigin } from '../config.js';
 import { tx } from '../db.js';
 import { artworkUrl, filmArtwork, filmMedia } from '../films.js';
 import { MetadataError, TMDB_FIELDS } from '../metadata.js';
+import { rangeKey } from '../ratelimit.js';
 import { META_FIELDS, scanMedia } from '../scan.js';
 import { peopleRoutes } from './people.js';
 import { ADMIN_COOKIE, clearCookie, ticketCode } from '../sessions.js';
@@ -58,10 +59,18 @@ const metadataRoute = (fn) => async (req, res) => {
 export function adminRoutes(deps) {
   const { db, sessions, access, settings, mediaDir, metadata, backups, rp, limit, branding, retention, booth } = deps;
   const router = express.Router();
+  // Ten tries per client: an IPv4 address, or an IPv6 /64. Someone holding a whole
+  // range of IPv6 addresses would get ten fresh tries from each of its /64s, so
+  // there are thirty across each /48 as well (rangeKey), whichever of its /64s they
+  // come from. Only tries the first limit lets through count towards the second, so
+  // a script hammering from one /64 can't use up its neighbours' tries on its own.
+  // There's deliberately no limit across every address together: anyone could use
+  // it up, and the real admin would be locked out along with them.
   const loginLimit = limit({ windowMs: 15 * 60 * 1000, max: 10 });
+  const loginRangeLimit = limit({ windowMs: 15 * 60 * 1000, max: 30, key: rangeKey });
 
   // ------------------------------------------------------------ sign-in
-  router.post('/api/admin/login', loginLimit, (req, res) => {
+  router.post('/api/admin/login', loginLimit, loginRangeLimit, (req, res) => {
     if (!sessions.adminPasswordMatches(req.body?.password)) return res.status(401).json({ error: 'wrong-password' });
     sessions.create(req, res, 'admin');
     res.json({ ok: true });

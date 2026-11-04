@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { NavLink, Route, Routes, useMatch } from 'react-router-dom';
 import { api } from '../api.js';
 import Activity from './Activity.jsx';
 import FilmDetail from './FilmDetail.jsx';
@@ -15,6 +15,9 @@ import { AdminContext } from './ui.jsx';
 export default function AdminApp() {
   const [state, setState] = useState('checking'); // checking | in | out
   const [signOutError, setSignOutError] = useState(null);
+  // A film's own page is part of Films, so Films stays marked there. The link itself
+  // keeps `end`, or it would be marked on every other section too.
+  const onFilm = useMatch('/admin/films/:id');
 
   useEffect(() => {
     document.title = 'Admin · Open Matte';
@@ -50,7 +53,7 @@ export default function AdminApp() {
         <nav className="admin-nav">
           <div className="brand">Open Matte</div>
           <div className="tabs">
-            <NavLink to="/admin" end>
+            <NavLink to="/admin" end className={({ isActive }) => (isActive || onFilm ? 'active' : undefined)}>
               Films
             </NavLink>
             <NavLink to="/admin/tickets">Tickets</NavLink>
@@ -61,7 +64,7 @@ export default function AdminApp() {
           </div>
           <div className="bottom">
             <a href="/">View site</a>
-            <button className="linklike" style={{ textAlign: 'left' }} onClick={signOut}>
+            <button style={{ textAlign: 'left' }} onClick={signOut}>
               Sign out
             </button>
           </div>

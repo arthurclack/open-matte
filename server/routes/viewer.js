@@ -160,13 +160,15 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
   });
 
   // Keeping the ticket this film's page shows in the signed-in person's account.
+  // No such film is answered as a film with no ticket here to keep, which is what
+  // every film this browser can't see gets: a 404 for one and not the other would
+  // tell anyone signed in which films there are, unpublished ones included.
   const keepLimit = limit({ windowMs: 10 * 60 * 1000, max: 30 });
   router.post('/api/films/:slug/keep', keepLimit, (req, res) => {
     const viewer = sessions.load(req, 'viewer');
     if (viewer?.person_id == null) return res.status(401).json({ error: 'sign-in-required' });
     const film = q.filmBySlug.get(req.params.slug);
-    if (!film) return res.status(404).json({ error: 'not-found' });
-    const r = access.keep(viewer, film);
+    const r = film ? access.keep(viewer, film) : { error: 'cannot-keep' };
     if (r.error) return res.status(409).json({ error: r.error });
     res.json({ ticket: ticketForViewer(r.ticket, access.ticketStatus(r.ticket)) });
   });

@@ -15,7 +15,7 @@ server, or on your computer. The paths are the defaults, under `/srv/open-matte`
 | | |
 |---|---|
 | A server | Ubuntu 26.04 LTS or 24.04 LTS, on x86_64 or ARM64, with a public IPv4 address, and SSH access as a user who can use `sudo`. Docker comes from Ubuntu's own packages below. |
-| Disk | Room for your films: about 50 GB for a two-hour 4K HDR film with every rendition, 8 to 15 GB for one without a 4K source ([encoding.md](encoding.md#storage)). The films can live on network storage mounted on the server. |
+| Disk | Room for your films: up to about 38 GB for a two-hour 4K HDR film with every rendition, and up to about 23 GB (17 GB without HDR) for one without a 4K source, often much less ([encoding.md](encoding.md#storage)). The films can live on network storage mounted on the server. |
 | A domain | A name you can add DNS records to, such as `cinema.example.com`. |
 | Ports | 80 and 443 (TCP), and 443 (UDP), reachable from the internet. |
 | On your computer | SSH and `rsync`, to copy films. To prepare films with the encoder, Node 22.13 or later and `ffmpeg` ([encoding.md](encoding.md)). |
@@ -183,7 +183,7 @@ chmod 700 /srv/open-matte/data /srv/open-matte/backups
 | Folder | What it holds | The app |
 |---|---|---|
 | `app` | The code, and your settings in `app/deploy/.env` | Docker builds the image from it |
-| `data` | The database, posters downloaded from TMDB (`artwork`), and your logo and tab icon (`branding`) | Reads and writes |
+| `data` | The database, posters and backdrops downloaded from TMDB (`artwork`), and your logo and tab icon (`branding`) | Reads and writes |
 | `media` | One folder per film | Only reads |
 | `backups` | The daily backups | Reads and writes |
 

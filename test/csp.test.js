@@ -10,6 +10,7 @@ import { after, before, describe, test } from 'node:test';
 process.env.TMDB_IMAGE_BASE = 'https://images.example.test/t/p/';
 const { adminBrowser, browser, makeFilm, startServer, tempDir } = await import('./helpers.js');
 const { LOCKED_POLICY, createCspReports, originOf, pagePath, pagePolicy, readReports, styleHash } = await import('../server/csp.js');
+const { createRefusalLog } = await import('../server/routes/media.js');
 
 // index.html as Vite builds it.
 const TEMPLATE = `<!doctype html>
@@ -595,5 +596,95 @@ describe('the media refusal log line', () => {
     const lines = logged.mock.calls.map((c) => c.arguments.join(' ')).filter((l) => l.startsWith('media 403'));
     assert.equal(lines.length, 1);
     assert.match(lines[0], / - range bytes=0-1,9{30}$/);
+  });
+
+  test("logs only the start of a refused request's path", async (t) => {
+    const logged = t.mock.method(console, 'warn', () => {});
+    // A path as long as a request's headers allow, from a stranger, which anyone can send.
+    const long = `/media/arrival/${'a'.repeat(10_000)}.vtt`;
+    const res = await fetch(srv.base + long, { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0' } });
+    assert.equal(res.status, 403);
+    const lines = logged.mock.calls.map((c) => c.arguments.join(' ')).filter((l) => l.startsWith('media 403'));
+    assert.equal(lines.length, 1);
+    assert.ok(lines[0].length <= 300, `${lines[0].length} characters`);
+    assert.match(lines[0], /^media 403: \/media\/arrival\/a{185} - no session cookie - Firefox on Windows$/);
+  });
+
+  test('the same refusal is one line a minute, then how many more like it there were', () => {
+    const lines = [];
+    let now = 0;
+    const log = createRefusalLog({ log: (l) => lines.push(l), now: () => now });
+    // What makes one row in the booth: status, reason, kind of file, film and client.
+    const SEGMENTS = '403 no screening held by this browser segment arrival Safari on iPhone';
+    const segment = (i) => `media 403: /media/arrival/hls/v_h264_720/seg_${i}.m4s - no screening held by this browser - Safari on iPhone`;
+    const playlist = 'media 403: /media/arrival/hls/master.m3u8 - no screening held by this browser - Safari on iPhone';
+    for (let i = 0; i < 5; i++) log.add(SEGMENTS, segment(i));
+    log.add('403 no screening held by this browser playlist arrival Safari on iPhone', playlist);
+    assert.deepEqual(lines, [segment(0), playlist]);
+    now = 59_999;
+    log.sweep();
+    assert.equal(lines.length, 2, 'not before the minute is up');
+    now = 60_000;
+    log.sweep();
+    assert.deepEqual(lines.slice(2), [`${segment(4)}: 4 more like it in the minute before`]);
+    // The next minute starts with a line of its own.
+    log.add(SEGMENTS, segment(5));
+    assert.deepEqual(lines.slice(3), [segment(5)]);
+  });
+
+  test('at most 30 new lines a minute, and requests with no session have 10 of their own', () => {
+    const lines = [];
+    let now = 0;
+    const log = createRefusalLog({ log: (l) => lines.push(l), now: () => now });
+    // Someone with no session, making every request different.
+    for (let i = 0; i < 2000; i++) log.add(`stranger ${i}`, `stranger line ${i}`, { stranger: true });
+    assert.equal(lines.length, 10);
+    // Viewers' refusals in the same minute still get lines of their own, up to 30.
+    for (let i = 0; i < 40; i++) log.add(`viewer ${i}`, `viewer line ${i}`);
+    assert.equal(lines.length, 40);
+    assert.equal(lines[10], 'viewer line 0');
+    now = 60_000;
+    log.sweep();
+    assert.deepEqual(lines.slice(40), [
+      'media: 10 more refused requests not logged in the minute before',
+      'media: 1990 more refused requests with no session not logged in the minute before',
+    ]);
+    // A new minute, a new allowance; said by the next refusal, too, if it comes before the sweep.
+    for (let i = 0; i < 12; i++) log.add(`stranger again ${i}`, `stranger line again ${i}`, { stranger: true });
+    assert.equal(lines.length, 52);
+    now = 120_000;
+    log.add('stranger at last', 'stranger line at last', { stranger: true });
+    assert.deepEqual(lines.slice(52), ['media: 2 more refused requests with no session not logged in the minute before', 'stranger line at last']);
+  });
+
+  test('a flood of refused requests writes a few lines, the booth counts every one, and a viewer’s still gets its line', async (t) => {
+    const logged = t.mock.method(console, 'warn', () => {});
+    const booth = async () => (await admin.get('/api/admin/booth')).data.attention.refusals.total;
+    const before = await booth();
+    // A script trying every kind of file, as half a dozen browsers, with no cookie and with one it made up.
+    const agents = ['curl/8.7.1', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) Safari/604.1', 'AppleCoreMedia/1.0.0.22F76 (iPhone; U; CPU OS 18_5 like Mac OS X; en_us)',
+      UA.chrome, 'Mozilla/5.0 (X11; Linux x86_64; rv:144.0) Gecko/20100101 Firefox/144.0', 'Mozilla/5.0 (Linux; Android 15) Chrome/141.0.0.0 Mobile Safari/537.36'];
+    const files = ['hls/master.m3u8', 'hls/v_h264_720/index.m3u8', 'hls/v_h264_720/init.mp4', 'hls/v_h264_720/seg_0.m4s', 'hls/a_en/seg_1.m4s', 'subtitles/en.vtt', 'poster.jpg', 'guessed.m4s'];
+    let sent = 0;
+    for (const cookie of [null, 'om_session=made-up']) {
+      for (const ua of agents) {
+        for (const file of files) {
+          const res = await fetch(`${srv.base}/media/arrival/${file}`, { headers: { 'user-agent': ua, ...(cookie && { cookie }) } });
+          assert.equal(res.status, 403, file);
+          sent++;
+        }
+      }
+    }
+    const flood = logged.mock.callCount();
+    assert.ok(flood <= 10, `${flood} lines for ${sent} refusals`);
+    // In the same minute, a browser with a ticket that hasn't pressed Play.
+    const viewer = browser(srv.base);
+    assert.equal((await viewer.post('/api/tickets/open', { code: ticket.code })).status, 200);
+    assert.equal((await viewer.get('/media/arrival/hls/master.m3u8')).status, 403);
+    assert.deepEqual(
+      logged.mock.calls.slice(flood).map((c) => c.arguments.join(' ')),
+      ['media 403: /media/arrival/hls/master.m3u8 - no screening held by this browser - Browser on unknown device'],
+    );
+    assert.equal(await booth(), before + sent + 1, 'the booth counts every one');
   });
 });

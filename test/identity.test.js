@@ -19,6 +19,9 @@ const segment = (i) => `/media/arrival/hls/v_h264_720/seg_${i}.m4s`;
 // Artwork: each folder's poster, and for Arrival a backdrop downloaded from TMDb.
 const BACKDROP = 'backdrop-0123456789ab.jpg';
 const ARTWORK = { arrival: ['/media/arrival/poster.jpg', `/artwork/arrival/${BACKDROP}`], heat: ['/media/heat/poster.jpg'] };
+// Refused, the folder's artwork is a 403, like the rest of /media; downloaded
+// artwork is a 404, exactly as if there were no such film (media.js).
+const refusedArtwork = (urls) => urls.map((u) => (u.startsWith('/artwork/') ? 404 : 403));
 
 let srv;
 let admin;
@@ -110,7 +113,7 @@ async function refused(b, slug = 'arrival', { page = [404] } = {}) {
   assert.equal(p.status, 404, `Play: ${p.status} ${JSON.stringify(p.data)}`);
   assert.equal(p.data.masterUrl, undefined);
   assert.deepEqual(await statuses(b, playbackFiles(slug)), every(playbackFiles(slug), 403), 'playback files');
-  assert.deepEqual(await statuses(b, ARTWORK[slug]), every(ARTWORK[slug], 403), 'artwork');
+  assert.deepEqual(await statuses(b, ARTWORK[slug]), refusedArtwork(ARTWORK[slug]), 'artwork');
   assert.deepEqual(await listed(b, slug), [], 'not under Your tickets');
 }
 

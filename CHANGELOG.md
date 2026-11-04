@@ -8,6 +8,93 @@ A release has an **Upgrading** note when updating to it takes more than copying 
 new code and rebuilding: a backup first, a setting to choose, or a migration you can't
 undo without a restore. Read it before you update.
 
+## 1.0.2 — 2026-11-04
+
+### Upgrading
+
+- **If you chose your own background colour, it may now be refused the next time you
+  change colours.** Faint text is now held to 4.5:1, not 3:1, so some backgrounds that
+  passed before are too light for it: about a third of them, such as `#101820` and
+  greys from `#151515` up. Colours already saved stay saved, and the site shows them
+  as before, with faint text easier to read on them than it was. Nothing checks them
+  again until you change either colour under Branding: then the admin says faint text
+  would be hard to read, and won't save the pair, even if you only changed the accent.
+  Choose a darker background. Open Matte's own colours pass.
+
+### Changed
+
+- **TMDB's logo and the notice its terms ask for.** While anything from TMDB can be on
+  show, every page's footer shows TMDB's logo and, word for word, "This website uses
+  TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by
+  TMDB." It used to say "Film information and images from TMDB". The admin's TMDB
+  settings show the same logo and notice, with "product" for "website"
+  ([docs/metadata.md](docs/metadata.md#credit)).
+- **Faint text is easier to read**: the hints under fields, table headings, the
+  footer. It's a lighter grey, `#8a847a`, at 4.5:1 or more on the background, like the
+  rest of the small text, where it needed only 3:1. The background colours you can
+  choose are checked against it (see Upgrading).
+- **What TMDB's terms ask of you** is in [docs/metadata.md](docs/metadata.md#commercial-use):
+  a free key is for personal, non-commercial use only, and charging for tickets or
+  membership, adverts or affiliate links make it commercial. The README says the key
+  is free for non-commercial use, and that `web/public/tmdb.svg` is TMDB's logo and
+  trademark, not covered by the GPL, as the site's licences file now does too.
+
+### Fixed
+
+- **The TMDB credit no longer goes when you remove the key.** The details and artwork
+  fetched with it stay, so the credit now shows while a key is set, or once any film
+  has been matched or has a poster or backdrop downloaded from TMDB.
+- The docs said a two-hour 4K HDR film with every rendition takes about 50 GB. The
+  encoder's caps for that ladder add up to 41.5 Mbit/s, so it's at most about 38 GB,
+  often much less, and 1 TB holds at least 26 of them
+  ([docs/encoding.md](docs/encoding.md#storage)). One without a 4K source is up to
+  about 23 GB, or 17 GB without HDR, where the docs gave its usual 8 to 15 GB as if
+  that were all it could take. The backup docs now say backdrops
+  downloaded from TMDB are backed up with the posters.
+- In the admin and on the site: on a phone, every admin tab can be reached. Cards side
+  by side in two-column grids line up at the top. **Films** stays marked in the
+  sidebar on a film's own page. The sidebar's **View site** lines up with the links
+  above it, and **Sign out** is plain text like it. Everything the keyboard can reach
+  shows a focus ring. On a 12-hour clock, times have no leading zero, and never break
+  before AM or PM. The projection booth's sentence about the server log says what the
+  log now keeps: the first refusal of each kind each minute, up to a few dozen a
+  minute, then how many more there were.
+
+### Security
+
+- A poster or backdrop downloaded from TMDB that a browser may not have is answered
+  exactly as if there were no such film: the same bare 404, byte for byte. It used
+  to be a 403, and since the file's name comes from TMDB and a film's address from its
+  folder's name, asking for a film's likely poster told anyone whether the film was
+  here, drafts included. The refusal still reaches the booth and the log, as a 404
+  with its reason, and nothing on the disk is read for it.
+- A request for a film's files or its downloaded artwork marks the browser's session
+  as seen whether the film exists or not. Only a real film's used to, so a person
+  signed in on two browsers could see the difference on their account page and find
+  out which films there are, unpublished ones included.
+- Requests for posters and backdrops downloaded from TMDB that find nothing are
+  limited to 2000 every ten minutes per visitor, and 6000 for each IPv6 /48, whichever
+  of its /64s they come from. Posters that are sent don't count, so a household
+  loads as many as it likes. Over the limit, every one answers the same 404.
+- Refused media requests no longer write a line each to the log. The same refusal is
+  logged once a minute at most, then a line says how many more like it there were,
+  and the log takes at most 30 new lines a minute about browsers with a session and
+  10 about requests with none, then says how many it left out
+  ([docs/deploying.md](docs/deploying.md#refused-media-requests)). Only the start of a
+  long address is logged. So nobody can fill the log with made-up requests. The
+  projection booth still counts every one.
+- Signing in to the admin is also limited to 30 tries every 15 minutes for each IPv6
+  /48, on top of 10 per /64, so someone holding a whole range of addresses no longer
+  gets ten fresh tries from each /64 in it. IPv4 is unchanged, and there's still no
+  limit for everyone together, which anyone could use to lock you out.
+- One browser, or one address asking for link preview posters, no longer holds every
+  place for posters and backdrops on the films' folders. It holds all but one at most
+  (3 of 4 in the Docker image), so one that reads them slowly leaves the others one.
+  Posters waiting behind the browser's other posters no longer hold its places, so
+  they never take more than three of its own four.
+- **Keep it** answers a film that doesn't exist as it answers one with nothing to
+  keep, so a signed-in person can't use it to find out which films there are.
+
 ## 1.0.1 — 2026-11-04
 
 ### Changed

@@ -12,6 +12,7 @@ import { after, before, describe, test } from 'node:test';
 process.env.COOKIE_SECURE = 'auto';
 const { ADMIN_PASSWORD, adminBrowser, browser, enroll, makeFilm, newPerson, setupLink, startServer, tempDir, writeFilmJson } = await import('./helpers.js');
 const { ADMIN_KEY_COST } = await import('../server/sessions.js');
+const { clientKey, rangeKey } = await import('../server/ratelimit.js');
 // The admin page's rule for which fields Reset to film.json would change. The web
 // app's source isn't in the server's image, where docs/deploying.md runs the tests
 // on the server's own Node: there the checks of that rule are left out, and the
@@ -60,6 +61,48 @@ describe('the admin password (default limits)', () => {
     for (let i = 0; i < 10; i++) assert.equal((await login(`2001:db8:7:8::${(i + 1).toString(16)}`, 'not the password')).status, 401, String(i));
     assert.equal((await login('2001:db8:7:8:ffff::1', ADMIN_PASSWORD)).status, 429, 'another address in the same /64');
     assert.equal((await login('2001:db8:7:9::1', ADMIN_PASSWORD)).status, 200, 'the next /64 is another client');
+  });
+
+  test('an IPv6 range counts by its /48 as well: 30 tries across all its /64s', async () => {
+    // Ten from each of three /64s in one /48, as many as each /64 may make.
+    for (const net of [1, 2, 3]) {
+      for (let i = 0; i < 10; i++) assert.equal((await login(`2001:db8:a:${net}::${i + 1}`, 'not the password')).status, 401, `${net} ${i}`);
+    }
+    // A fourth /64 of the same /48 has made no tries of its own, but the range is used up.
+    const r = await login('2001:db8:a:4::1', ADMIN_PASSWORD);
+    assert.equal(r.status, 429);
+    assert.equal(r.data.error, 'too-many-requests');
+    const wait = Number(r.headers.get('retry-after'));
+    assert.ok(wait > 0 && wait <= 15 * 60, `Retry-After ${wait}`);
+    assert.deepEqual(r.headers.getSetCookie(), [], 'no session for a refused try');
+    assert.equal((await login('2001:db8:a:ffff:1::1', ADMIN_PASSWORD)).status, 429, 'anywhere in that /48');
+    // The next /48 is someone else.
+    assert.equal((await login('2001:db8:b:1::1', ADMIN_PASSWORD)).status, 200, 'the next /48 is another client');
+  });
+
+  test('tries refused by the /64 limit don’t count towards the /48', async () => {
+    // A script hammering from one /64 uses up that /64, not its neighbours'.
+    for (let i = 0; i < 40; i++) await login('2001:db8:c:1::1', 'not the password');
+    assert.equal((await login('2001:db8:c:1::2', ADMIN_PASSWORD)).status, 429, 'its own /64 is refused');
+    assert.equal((await login('2001:db8:c:2::1', ADMIN_PASSWORD)).status, 200, 'another /64 of the same /48 still signs in');
+  });
+
+  test('IPv4 is unchanged: each address has its ten, and no range is counted', async () => {
+    // Ten wrong tries from each of four addresses in one /24: more than thirty in all.
+    for (const host of [40, 41, 42, 43]) {
+      for (let i = 0; i < 10; i++) assert.equal((await login(`203.0.113.${host}`, 'not the password')).status, 401, `${host} ${i}`);
+    }
+    assert.equal((await login('203.0.113.44', ADMIN_PASSWORD)).status, 200, 'the next address signs in');
+    assert.equal((await login('203.0.113.40', ADMIN_PASSWORD)).status, 429, 'an address over its own ten is still refused');
+  });
+
+  test('the keys: a /48 for IPv6, none for IPv4', () => {
+    assert.equal(rangeKey('2001:db8:a:1::1'), '2001:db8:a::/48');
+    assert.equal(rangeKey('2001:0db8:000a:ffff:1:2:3:4'), rangeKey('2001:db8:a::'));
+    assert.notEqual(rangeKey('2001:db8:a::1'), rangeKey('2001:db8:b::1'));
+    assert.equal(rangeKey('203.0.113.9'), null);
+    assert.equal(rangeKey('::ffff:203.0.113.9'), null, 'IPv4-mapped is IPv4');
+    assert.equal(clientKey('2001:db8:a:1::1'), '2001:db8:a:1::/64', 'the /64 as before');
   });
 });
 

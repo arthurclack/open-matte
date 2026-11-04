@@ -81,7 +81,10 @@ the folder's own.
 The server sends TMDB the titles and years it searches for, along with your key.
 Posters and backdrops are downloaded to the server (`DATA_DIR/artwork`) and
 served with the same access rules as the film folder's artwork, so viewers'
-browsers never contact TMDB and nothing about your viewers is sent there. The
+browsers never contact TMDB and nothing about your viewers is sent there. A browser
+that may not have one is answered as if there were no such film, so their names,
+which anyone could work out from TMDB, don't tell anyone which films you have
+([access.md](access.md#media-requests)). The
 server only takes them from TMDB's image server, and only if they really are
 JPEG, PNG or WebP images of at most 15 MB. A ticket
 link's preview in a chat app shows the same poster, fetched from your server, not
@@ -90,7 +93,32 @@ TMDB thumbnails while you're choosing a match.
 
 ## Credit
 
-TMDB's terms ask for credit wherever its data appears. When a key is set, the
-site footer says "Film information and images from TMDB". This product uses the
-TMDB API but is not endorsed or certified by TMDB. Personal, non-commercial use
-of the API is free; check TMDB's terms if that changes.
+TMDB's terms require its logo and a set notice, shown prominently on your site.
+Every page's footer shows TMDB's logo and this notice while a key is set, or once
+any film has been matched:
+
+> This website uses TMDB and the TMDB APIs but is not endorsed, certified, or
+> otherwise approved by TMDB.
+
+Your own name, logo and colours don't change it. It stays after you remove the key,
+because the details and artwork already fetched stay too. Once any film has been
+matched, it stays for good, even after you replace everything TMDB filled in, since
+nothing in the admin undoes a match.
+
+The admin shows the same logo and notice under **Settings → Film information**, with
+"product" for "website".
+
+## Commercial use
+
+Each cinema uses its own TMDB key, so TMDB's terms apply to you, the owner. A free
+key covers personal, non-commercial use only. TMDB counts it as commercial if you make
+money in connection with its data or images: charging for tickets or membership,
+showing adverts, or earning from your recommendations, such as affiliate links to buy
+or rent a film. TMDB decides what counts, and commercial use needs a separate written
+agreement with TMDB.
+
+If that's you, contact TMDB first, or remove the key and use `film.json` and your own
+artwork. Removing the key keeps what was already fetched, so replace that too: the
+details it filled in, marked "from TMDB" on a film's page (or "edited here", where you
+took TMDB's with **Find details…**), and its images, with **Don't use TMDB's** under
+each.

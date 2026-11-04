@@ -105,7 +105,7 @@ export default function Account() {
           </li>
         ))}
       </ul>
-      <p className="faint">
+      <p className="dim" style={{ fontSize: '0.875rem' }}>
         Synced passkeys are on every device signed in to the same Apple ID, Google account or password manager. On a new computer, you can also sign in
         with the passkey on your phone: choose “Use a phone or tablet”. To add a passkey or remove a lost one, ask {host}.
       </p>
@@ -133,7 +133,7 @@ export default function Account() {
           Sign out everywhere
         </button>
       </div>
-      <p className="faint" style={{ marginTop: '0.8rem' }}>
+      <p className="dim" style={{ fontSize: '0.875rem', marginTop: '0.8rem' }}>
         {others
           ? `Sign out everywhere also signs out the ${others === 1 ? 'other browser' : `${others} other browsers`} above. Don't recognise one? Sign out everywhere, then tell ${host}.`
           : `Don't recognise a passkey? Tell ${host}.`}

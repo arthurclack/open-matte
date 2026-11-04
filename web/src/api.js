@@ -34,20 +34,41 @@ export const api = {
 
 // ---- formatting
 
+// The hour has no leading zero on a 12-hour clock ("8:49 PM", not "08:49 PM") and keeps
+// it on a 24-hour one ("08:49"). Asked for 'numeric' there, Firefox keeps the zero and
+// Chromium and WebKit drop it, so '2-digit' is the only way all three agree.
+const twelveHour = ['h11', 'h12'].includes(new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hourCycle);
+const hour = twelveHour ? 'numeric' : '2-digit';
+
 const dateFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-const dateTimeFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const timeFmt = new Intl.DateTimeFormat(undefined, { hour, minute: '2-digit' });
+const dateTimeFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour, minute: '2-digit' });
 // With the year as well, for a time that may be in another year, such as a deadline that has passed.
-const dateTimeYearFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const dateTimeYearFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour, minute: '2-digit' });
 
 // With the weekday, for things that happen within a week or so: "Tue 29 Oct", "Tue 29 Oct, 21:00".
 const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-const dayTimeFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const dayTimeFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour, minute: '2-digit' });
+
+// A space inside the time, as before the PM in "8:49 PM", becomes a no-break space,
+// so a phone's narrow column can't leave the PM on a line of its own.
+const timeParts = new Set(['hour', 'minute', 'dayPeriod']);
+const withTime = (fmt) => (ms) =>
+  fmt
+    .formatToParts(new Date(ms))
+    .map((p, i, all) => (p.type === 'literal' && timeParts.has(all[i - 1]?.type) && timeParts.has(all[i + 1]?.type) ? p.value.replace(/ /g, ' ') : p.value))
+    .join('');
+const time = withTime(timeFmt);
+const dateTime = withTime(dateTimeFmt);
+const dateTimeYear = withTime(dateTimeYearFmt);
+const dayTime = withTime(dayTimeFmt);
 
 export const formatDate = (ms) => (ms ? dateFmt.format(new Date(ms)) : '');
-export const formatDateTime = (ms) => (ms ? dateTimeFmt.format(new Date(ms)) : '');
-export const formatDateTimeYear = (ms) => (ms ? dateTimeYearFmt.format(new Date(ms)) : '');
+export const formatTime = (ms) => (ms ? time(ms) : '');
+export const formatDateTime = (ms) => (ms ? dateTime(ms) : '');
+export const formatDateTimeYear = (ms) => (ms ? dateTimeYear(ms) : '');
 export const formatDay = (ms) => (ms ? dayFmt.format(new Date(ms)) : '');
-export const formatDayTime = (ms) => (ms ? dayTimeFmt.format(new Date(ms)) : '');
+export const formatDayTime = (ms) => (ms ? dayTime(ms) : '');
 
 export function formatAgo(ms, now = Date.now()) {
   if (!ms) return 'never';

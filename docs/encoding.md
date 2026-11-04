@@ -81,5 +81,8 @@ HDR film carefully on an HDR screen and an SDR one.
 
 ## Storage
 
-Roughly 50 GB for a two-hour 4K HDR film with the full ladder, so 1 TB holds about
-20 films. Drop rungs to save space: a film without a 4K source might be 8 to 15 GB.
+Up to about 38 GB for a two-hour 4K HDR film with the full ladder, whose renditions'
+caps add up to 41.5 Mbit/s. It's often much less, since simple scenes stay well under
+the caps. So 1 TB holds at least 26 such films. A film without a 4K source is up to
+about 23 GB with HDR and 17 GB without, often 8 to 15 GB. To save space, leave rungs
+out with `--ladder`.

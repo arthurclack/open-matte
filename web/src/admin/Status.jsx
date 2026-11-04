@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, formatAgo, formatBytes, formatDateTime, formatDay, formatDayTime, plural } from '../api.js';
+import { api, formatAgo, formatBytes, formatDateTime, formatDay, formatDayTime, formatTime, plural } from '../api.js';
 import { ErrorNote, keptFor, lastClearedText, useLoad } from './ui.jsx';
 
 const HOUR = 3600 * 1000;
@@ -14,8 +14,7 @@ const linkName = (purpose) => (purpose === 'recovery' ? 'recovery link' : 'setup
 const ticketName = (t) => t.label || t.person?.name || 'Unnamed ticket';
 
 // "14:02" today, "2 Nov, 14:02" before then.
-const timeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
-const when = (ms) => (new Date(ms).toDateString() === new Date().toDateString() ? timeFmt.format(new Date(ms)) : formatDateTime(ms));
+const when = (ms) => (new Date(ms).toDateString() === new Date().toDateString() ? formatTime(ms) : formatDateTime(ms));
 
 // The attention list in a few words each, for the strip at the top of the admin.
 // Empty when all is quiet.
@@ -175,7 +174,7 @@ function Attention({ a }) {
           ? `${plural(refusals.total, 'media request')} refused since the server started, ${when(refusals.since)}.`
           : `No media requests refused since the server started, ${when(refusals.since)}.`}{' '}
         <span className="faint">
-          Kept in memory only, with no addresses, and forgotten on restart. The server's log has every one. Repeats share a row, with the time
+          Kept in memory only, with no addresses, and forgotten on restart. The server's log has the first of each kind each minute, up to a few dozen a minute, then how many more there were. Repeats share a row, with the time
           of the last. Requests with no session (no cookie, or one that has expired or was made up) can come from anyone, so they keep to a few rows.
         </span>
       </p>

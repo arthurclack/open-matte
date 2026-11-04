@@ -16,7 +16,7 @@ import { rateCounter, rateLimit } from './ratelimit.js';
 import { createRetention } from './retention.js';
 import { accountRoutes } from './routes/account.js';
 import { adminRoutes } from './routes/admin.js';
-import { createRefusals, createShare, mediaRoutes, shareLimits } from './routes/media.js';
+import { createRefusalLog, createRefusals, createShare, mediaRoutes, shareLimits } from './routes/media.js';
 import { publicRoutes } from './routes/public.js';
 import { viewerRoutes } from './routes/viewer.js';
 import { createSessionStore, deviceLabel } from './sessions.js';
@@ -52,26 +52,42 @@ export function createApp({
   const sessions = createSessionStore(db);
   const access = createAccess(db, settings);
   const rp = relyingParty(webauthn);
+  // Rate limits: as middleware that answers 429 (the API), or as a counter for the
+  // routes that answer otherwise over the limit (pages and images).
   const limit = (opts) => rateLimit({ ...opts, scale: limits.scale ?? 1 });
+  const counter = (opts) => rateCounter({ ...opts, scale: limits.scale ?? 1 });
   const people = createPeople({ db, sessions, access, settings, rp, ceremonies: createCeremonies() });
   const branding = createBranding({ settings, dataDir });
   // What the viewer site shows in its header and footer: /api/site, /api/me's
-  // `site`, and the copy written into every page. TMDb asks for credit wherever
-  // its data and images appear.
-  const site = (s = settings.get()) => ({ ...branding.publicView(s), tmdbCredit: metadata.status().configured });
+  // `site`, and the copy written into every page. TMDB's terms ask for its logo
+  // and notice on the site, while any of its details or images can be on show.
+  // That's with a key set, and also once any film has been matched or holds a
+  // poster or backdrop downloaded from TMDB, since those stay when the key goes.
+  // A match counts, not the fields marked as TMDB's: one taken by hand over
+  // film.json's is marked as an edit (metadata.js, applyDetails). CASE, so one
+  // damaged column can't stop every page from being drawn.
+  const fromTmdb = db.prepare(`
+    SELECT 1 FROM films
+    WHERE CASE WHEN json_valid(tmdb_status) THEN json_extract(tmdb_status, '$.state') = 'matched' END
+       OR CASE WHEN json_valid(artwork) THEN json_extract(artwork, '$.poster') IS NOT NULL OR json_extract(artwork, '$.backdrop') IS NOT NULL END
+    LIMIT 1`);
+  const tmdbCredit = () => metadata.status().configured || fromTmdb.get() !== undefined;
+  const site = (s = settings.get()) => ({ ...branding.publicView(s), tmdbCredit: tmdbCredit() });
   // Ticket links' previews. The page and the poster count against one limit per
   // client. The key signs the posters' addresses; it is made once and never sent.
-  const previewCount = rateCounter({ windowMs: 10 * 60 * 1000, max: 60, scale: limits.scale ?? 1 });
+  const previewCount = counter({ windowMs: 10 * 60 * 1000, max: 60 });
   const previewKey = settings.ensureSecret('previewKey', () => crypto.randomBytes(32).toString('base64url'));
   const previews = createTicketPreviews({ db, access, counter: previewCount, key: previewKey });
   // Deleting old events and ended sessions, daily (index.js starts it).
   const retention = createRetention({ db, settings });
-  // Refused media requests, in memory only, for the projection booth.
+  // Refused media requests, in memory only, for the projection booth, and their
+  // lines in the server log, within a budget a minute.
   const refusals = createRefusals();
+  const refusalLog = createRefusalLog();
   const booth = createBooth({ db, mediaDir, dataDir, backups, retention, refusals, startedAt });
   // Reading from the films' folders, which may be network storage that stops answering.
   const share = createShare({ ...shareLimits(), ...mediaOptions });
-  const deps = { db, mediaDir, dataDir, settings, metadata, backups, sessions, access, rp, people, limit, branding, site, previews, retention, refusals, booth, share };
+  const deps = { db, mediaDir, dataDir, settings, metadata, backups, sessions, access, rp, people, limit, counter, branding, site, previews, retention, refusals, refusalLog, booth, share };
   app.locals.metadata = metadata;
   app.locals.backups = backups;
   app.locals.retention = retention;
