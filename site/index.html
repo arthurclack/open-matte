@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open Matte, a small self-hosted cinema for friends</title>
+    <meta name="description" content="Publish a handful of films you think people should see, write a few lines on why, and send a friend a ticket: a link that opens the film in their browser. Free and open source." />
+    <link rel="canonical" href="https://openmatte.dev/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://openmatte.dev/" />
+    <meta property="og:title" content="Open Matte" />
+    <meta property="og:description" content="A small, self-hosted cinema for recommending films to friends. Send a ticket: a link that opens the film in their browser." />
+    <meta property="og:image" content="https://openmatte.dev/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Open Matte. You should watch this film. A phone playing Sherlock Jr. from a ticket link." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#080101" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="/fonts/matte-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="./src/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="slab">
+      <div class="container slab__row">
+        <a class="wordmark" href="/" aria-label="Open Matte home">
+          <svg class="mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true" focusable="false">
+            <rect x="4" y="8" width="24" height="16" rx="1.5" stroke-width="2" />
+            <path d="M14 12.5v7l6-3.5z" />
+          </svg>
+          <span>Open Matte</span>
+        </a>
+        <nav class="slab__nav" aria-label="Main">
+          <ul class="slab__links">
+            <li><a href="#how-it-works">How it works</a></li>
+            <li><a href="#what-you-need">What you need</a></li>
+          </ul>
+          <details class="slab__menu">
+            <summary>Menu</summary>
+            <ul>
+              <li><a href="#how-it-works">How it works</a></li>
+              <li><a href="#what-you-need">What you need</a></li>
+              <li><a href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Install guide</a></li>
+            </ul>
+          </details>
+          <a class="btn btn--quiet btn--nav" href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Install</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="container hero__grid">
+          <div class="hero__text">
+            <h1 id="hero-title">You should watch this film.</h1>
+            <p class="lead">A small, self-hosted cinema for recommending films to friends.</p>
+            <div class="actions">
+              <a class="btn btn--primary btn--large" href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Read the install guide</a>
+              <a class="btn btn--quiet btn--large" href="https://github.com/arthurclack/open-matte">See it on GitHub</a>
+            </div>
+          </div>
+          <figure class="hero__figure scene" data-scene="ticket" data-label="the ticket demo" data-ss-fill>
+            <picture>
+              <source data-start media="(scripting: enabled) and (prefers-reduced-motion: no-preference) and (max-width: 511.98px), (scripting: enabled) and (prefers-reduced-motion: no-preference) and (min-width: 64rem) and (max-width: 74.99rem)" srcset="/stage/ticket-start-compact.webp" width="358" height="500" />
+              <source data-start media="(scripting: enabled) and (prefers-reduced-motion: no-preference)" srcset="/stage/ticket-start.webp" width="540" height="700" />
+              <source media="(max-width: 511.98px), (min-width: 64rem) and (max-width: 74.99rem)" srcset="/stage/ticket-compact.webp" width="358" height="500" />
+              <img src="/stage/ticket.webp" width="540" height="700" fetchpriority="high" alt="A phone. In a conversation a friend writes: You should watch this film. Here’s the link. The link’s preview shows Sherlock Jr. (1924), a ticket from Back Row. Tapped, it opens the film’s page with its admit-one ticket, and after Play the film’s title card fills the player." />
+            </picture>
+          </figure>
+        </div>
+      </section>
+
+      <section id="how-it-works" class="how" aria-labelledby="how-title">
+        <div class="container">
+          <h2 id="how-title">How a ticket reaches a friend.</h2>
+          <div class="moments" data-moments>
+            <div class="moment is-current">
+              <div class="moment__text">
+                <h3>Pick a film</h3>
+                <p>Publish a film you’ve prepared, with your few lines on why it’s worth their evening.</p>
+              </div>
+              <div class="moment__plate plate plate--card keep-motion">
+                <div class="titlecard">
+                  <p class="titlecard__title">Sherlock Jr.</p>
+                  <p class="titlecard__by">Buster Keaton, 1924</p>
+                </div>
+              </div>
+            </div>
+            <div class="moment">
+              <div class="moment__text">
+                <h3>Send a ticket</h3>
+                <p>An admit-one link, with an optional screening limit, start-by date and days after first play. Revoke it and it stops at the next request.</p>
+                <p class="visually-hidden moment__desc">The Open Matte admin, on a film’s page: a ticket for anyone with the link, one screening, valid for 7 days after first play, has just been issued. Under the form: 1 ticket ready, for Sam, with its link and Copy link pressed, now saying Copied.</p>
+              </div>
+              <figure class="moment__plate plate plate--scene scene keep-motion" data-scene="issue" data-label="the admin demo" data-ss-fill>
+                <picture>
+                  <source data-start media="(scripting: enabled) and (prefers-reduced-motion: no-preference) and (max-width: 631.98px), (scripting: enabled) and (prefers-reduced-motion: no-preference) and (min-width: 640.01px) and (max-width: 647.98px), (scripting: enabled) and (prefers-reduced-motion: no-preference) and (min-width: 960px) and (max-width: 1220.5px)" srcset="/stage/issue-start-compact.webp" width="358" height="342" />
+                  <source data-start media="(scripting: enabled) and (prefers-reduced-motion: no-preference)" srcset="/stage/issue-start.webp" width="600" height="560" />
+                  <source media="(max-width: 631.98px), (min-width: 640.01px) and (max-width: 647.98px), (min-width: 960px) and (max-width: 1220.5px)" srcset="/stage/issue-compact.webp" width="358" height="342" />
+                  <img src="/stage/issue.webp" width="600" height="560" loading="lazy" alt="The Open Matte admin, on a film’s page: a ticket for anyone with the link, one screening, valid for 7 days after first play, has just been issued. Under the form: 1 ticket ready, for Sam, with its link and Copy link pressed, now saying Copied." />
+                </picture>
+              </figure>
+            </div>
+            <div class="moment">
+              <div class="moment__text">
+                <h3>They press Play</h3>
+                <p>Any current browser will do: phones, TVs and apps’ built-in browsers included. They need no account.</p>
+              </div>
+              <div class="moment__plate plate plate--figure keep-motion">
+                <p class="fig"><span class="fig__n">48</span> <span class="fig__unit">hours</span></p>
+                <p class="plate__line">by default, to pick up where they left off, on one device at a time.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="isnt" aria-labelledby="isnt-title">
+        <div class="container">
+          <div class="isnt__panel">
+            <h2 id="isnt-title">Not a media server.</h2>
+            <p>No library of everything you own. You prepare each film, and the server sends it as it is, never transcoding.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="what-you-need" class="need" aria-labelledby="need-title">
+        <div class="container">
+          <div class="need__head">
+            <h2 id="need-title">Your server, their browser.</h2>
+            <div class="need__figure">
+              <p class="fig"><span class="fig__n">38</span> <span class="fig__unit">GB</span></p>
+              <p class="need__line">at most, for a two-hour 4K HDR film with every rendition. Often much less.</p>
+            </div>
+          </div>
+          <div class="need__lists">
+            <div class="need__group">
+              <h3>Yours</h3>
+              <dl class="rows">
+                <div><dt>A Linux server</dt><dd>Docker and Docker Compose, a public IPv4 address, ports 80 and 443 open.</dd></div>
+                <div><dt>A domain</dt><dd>Caddy gets its certificate.</dd></div>
+                <div><dt>Prepared films</dt><dd>Encoded on your computer with <code>scripts/encode.mjs</code> (Node and ffmpeg).</dd></div>
+                <div><dt>A TMDB key</dt><dd>Optional, for details and artwork.</dd></div>
+              </dl>
+            </div>
+            <div class="need__group">
+              <h3>Theirs</h3>
+              <dl class="rows">
+                <div><dt>A browser</dt><dd>No account needed.</dd></div>
+                <div><dt>A passkey</dt><dd>Only if you give them an account.</dd></div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="close" aria-labelledby="close-title">
+        <div class="container close__grid">
+          <div class="close__text">
+            <h2 id="close-title">Send your first ticket.</h2>
+            <p class="lead">The install guide runs from a fresh server to a ticket played.</p>
+            <div class="actions">
+              <a class="btn btn--primary btn--large" href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Read the install guide</a>
+              <a class="btn btn--quiet btn--large" href="https://github.com/arthurclack/open-matte">See it on GitHub</a>
+            </div>
+            <p class="close__licence">Free and open source, GPL-3.0-or-later.</p>
+          </div>
+          <figure class="close__figure">
+            <img src="/stage/playing.webp" width="358" height="500" loading="lazy" alt="The film playing on a friend’s phone: the Sherlock Jr. title card in the player, opened from a ticket link." />
+          </figure>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="container foot__grid">
+        <div class="foot__letter">
+          <p>Pick a film you love, say why in a few lines, and send the link.</p>
+          <p class="foot__signoff">Only share films you have the right to share.</p>
+        </div>
+        <ul class="foot__links">
+          <li><a href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Install guide</a></li>
+          <li><a href="https://github.com/arthurclack/open-matte">GitHub</a></li>
+          <li><a href="https://github.com/arthurclack/open-matte/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/arthurclack/open-matte/blob/main/SECURITY.md">Security</a></li>
+          <li><a href="https://github.com/arthurclack/open-matte/blob/main/LICENSE">Licence</a></li>
+          <li><a href="/third-party-licenses.txt">Third-party licences</a></li>
+        </ul>
+      </div>
+    </footer>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,52 @@
+/* Open Matte's own look, for the scenes: the app's colours, radius and type,
+   copied from web/src/styles.css (:root). The scenes show the app as it is,
+   so these differ from the website's tokens on purpose: the app's near-black
+   ground, its 10px radius, its pills. Scoped to a scene root (.om). */
+
+.om {
+  --om-bg: #0d0c0f;
+  --om-bg-raised: #17151b;
+  --om-bg-sunk: #09080b;
+  --om-line: #2a2730;
+  --om-line-strong: #3a3642;
+  --om-text: #ece8e1;
+  --om-text-dim: #a59f97;
+  --om-text-faint: #6f6a66;
+  --om-accent: #e8b04a;
+  --om-accent-ink: #1a1306;
+  --om-accent-hover: #f2c46d;
+  --om-good: #7fc28b;
+  --om-good-line: #2f5236;
+  --om-good-tint: #111a12;
+  --om-poster-from: #24202a;
+  --om-poster-to: #121015;
+  --om-radius: 10px;
+  --om-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --om-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --om-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* The page is the ground: no plate behind a scene */
+  & .ss-stage {
+    overflow: hidden;
+    background: transparent;
+    --ss-accent: var(--om-accent);
+    --ss-accent-2: var(--om-accent-hover);
+    --ss-accent-soft: rgb(232 176 74 / 0.16);
+  }
+}
+
+/* The poster placeholder the app draws for a film without artwork (.poster.placeholder) */
+.om .om-poster {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 2 / 3;
+  padding: 1rem;
+  overflow: hidden;
+  border-radius: 6px;
+  background: linear-gradient(160deg, var(--om-poster-from), var(--om-poster-to));
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.5);
+  color: var(--om-text-dim);
+  font-family: var(--om-serif);
+  text-align: center;
+  overflow-wrap: anywhere;
+}

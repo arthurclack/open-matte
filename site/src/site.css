@@ -1,0 +1,860 @@
+/* Hallmark · shape: Split Studio · genre: atmospheric · theme: Midnight (by request), reworked as a red room with amber light · job: try · draw: b51e9d
+ * hero: Counter, the install guide set large beside the phone · nav: slab · footer: letter close · imagery: the product built, two stageshow scenes of the real app with stills as posters · signature: the phone scene, a ticket link opening Sherlock Jr. in a friend's browser
+ * axes: dark/grotesk-sans/warm · posture: committed · contrast: pass · fold: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V4 · weakest: V, text beside a phone is the commonest hero; Counter sets the install guide large and the phone runs off the hero's foot into the next room, and Grid and Figures stay out of the page */
+/* Hallmark · waive 47b · one kit frame, the phone in the hero, the real ticket page and player inside; the admin is the app's own page cropped, with no browser drawn round it · the user asked for stageshow scenes of Open Matte in its own look, and a ticket only makes sense on a friend's phone */
+/* Hallmark · waive 84 · the app runs, but a capture would show the owner's own films, friends and links · the scenes rebuild the real ticket page, player and admin word for word, with an invented cinema and a public domain film */
+/* Hallmark · waive 47c · the scenes are the product built in React, each figure holding its still as a real img with alt text · by the user's request the app is shown in its own look, not captured into a slot */
+/* Hallmark · by request · the amber accent: Open Matte's own #e8b04a waives Midnight's cold light, kept to the one primary action, focus rings and the mark */
+/* Hallmark · dismissed 77 · the 404 is one screen and the footer on purpose: a way home, not a second page; the home page has six sections */
+/* Hallmark · by request · the scenes are React and need JavaScript: each figure holds its still as an img with real alt text, shown with scripting off and under reduced motion */
+/* Hallmark · answered F6 · the 38 and 48 figures stay proportional: Matte Sans's tabular zero is slashed, and nothing on the page compares figures */
+/* Hallmark · hero-review: in-thread, folded into the finish review · finish-review: subagent · 7 findings · 7 resolved · gap: the pinned admin scene, which now opens with Sam filled in, presses Issue within about 2s of its moment and keeps its ending · stageshow-review: subagent · 8 findings · 8 resolved */
+/* Hallmark · sweep: Floor 0 FAIL (47a kept: the admin is the app's own page, cropped, no browser drawn) · Reflex 0 open, 3 waived (47b, 84, 47c) · WARN 77 on the 404 dismissed · facts review 6 resolved · a11y review 8 resolved 2 partial (F3 the close keeps its own still, F7 the headers stay as agreed) */
+@import url("./tokens.css");
+@import url("./base.css");
+
+:root {
+  --slab-h: 4.5rem;
+  /* The hero's phone column, sized by the screen's height: the scene's wide
+     design is 540 x 700, so it is never drawn past its own size */
+  --phone: clamp(30rem, (100svh - var(--slab-h) - 7rem) * 0.7714, 33.75rem);
+}
+
+/* Type: one family at two widths. Heads at the expanded 300, items at 500 */
+h1, h2 {
+  font-stretch: var(--display-stretch);
+  line-height: 1.04;
+}
+h3 {
+  font-weight: 500;
+  font-stretch: 100%;
+  letter-spacing: 0;
+}
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.lead {
+  color: var(--color-ink-2);
+}
+
+a {
+  text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
+  transition: text-decoration-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+/* Hover only where there is a pointer that hovers: a tap on a touch screen
+   leaves :hover set, and the colour would stick after it */
+@media (hover: hover) and (pointer: fine) {
+  a:hover {
+    text-decoration-color: var(--color-accent);
+  }
+}
+
+.skip {
+  position: absolute;
+  left: var(--space-md);
+  top: calc(-1 * var(--space-3xl));
+  z-index: var(--z-toast);
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: var(--space-xs) var(--space-md);
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+.skip:focus-visible {
+  top: var(--space-md);
+}
+
+/* Controls: one filled primary (amber), one outlined secondary, square */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-height: 44px;
+  padding: 0 var(--space-lg);
+  border: var(--rule-hair) solid transparent;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--color-ink);
+  font: 500 var(--text-md) / 1 var(--font-body);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+/* The page's two actions: a step up from the nav's, never louder than the
+   light heads beside them, and a pair that fits one row of every column it
+   sits in from 640 up (the narrowest, the close's just over 960, is 436) */
+.btn--large {
+  min-height: 48px;
+  padding-inline: var(--space-lg);
+  font-size: 1.0625rem;
+}
+.btn--primary {
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+.btn--quiet {
+  border-color: var(--color-rule-2);
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn--primary:hover {
+    background: var(--color-accent-2);
+  }
+  .btn--quiet:hover {
+    background: var(--color-paper-2);
+    border-color: var(--color-muted);
+  }
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+/* Nav: a slab, one step lighter than the room, to every edge */
+.slab {
+  background: var(--color-paper-2);
+}
+.slab__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  min-height: var(--slab-h);
+}
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 44px;
+  font-size: var(--text-lg);
+  font-weight: 400;
+  font-stretch: 125%;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mark {
+  flex-shrink: 0;
+}
+.mark rect {
+  fill: none;
+  stroke: var(--color-accent);
+}
+.mark path {
+  fill: var(--color-accent);
+}
+.slab__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+.slab__links {
+  display: flex;
+  gap: var(--space-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.slab__links a,
+.slab__menu a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--color-ink-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+@media (hover: hover) and (pointer: fine) {
+  .slab__links a:hover,
+  .slab__menu a:hover {
+    color: var(--color-ink);
+  }
+  .btn--nav:hover {
+    background: var(--color-paper-3);
+  }
+}
+.slab__menu {
+  display: none;
+  position: relative;
+}
+.slab__menu summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: var(--space-sm);
+  color: var(--color-ink-2);
+  list-style: none;
+  cursor: pointer;
+}
+.slab__menu summary::-webkit-details-marker {
+  display: none;
+}
+.slab__menu[open] summary {
+  color: var(--color-ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .slab__menu summary:hover {
+    color: var(--color-ink);
+  }
+}
+.slab__menu ul {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: var(--z-dropdown);
+  min-width: 12rem;
+  margin: 0;
+  padding: var(--space-xs) 0;
+  list-style: none;
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-card);
+}
+.slab__menu li a {
+  display: flex;
+  padding: 0 var(--space-md);
+}
+
+/* Hero: Counter. The text and the install guide, centred on the phone, which
+   stands on the hero's foot and runs off it into the next room. The screen's
+   height up to 52rem (a 1440 x 900 screen's): the phone never grows past its
+   700, so on a taller screen the next room shows under it instead of a void
+   over it */
+.hero {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: min(calc(100svh - var(--slab-h)), 52rem);
+  padding-top: var(--space-2xl);
+}
+.hero__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--phone);
+  column-gap: var(--space-2xl);
+  align-items: center;
+}
+.hero h1 {
+  max-width: none;
+}
+.hero .lead {
+  margin-top: var(--space-lg);
+  max-width: 34ch;
+}
+.hero .actions {
+  margin-top: var(--space-xl);
+}
+.hero__figure {
+  margin: 0;
+}
+/* The phones go on past the band's edge rather than stop on it: their last
+   3rem fade into the room. On the picture and the live layer, not the
+   figure, so a Pause set above the figure's box is never faded */
+.hero__figure > picture,
+.hero__figure > .scene-live,
+.close__figure > img {
+  mask-image: linear-gradient(to bottom, var(--color-ink) calc(100% - 3rem), transparent);
+}
+.hero__text {
+  animation: settle var(--dur-long) var(--ease-out) backwards;
+}
+.hero__figure > picture {
+  animation: settle var(--dur-long) var(--ease-out) 80ms backwards;
+}
+@keyframes settle {
+  from {
+    opacity: 0.6;
+  }
+}
+
+/* The live scenes' Pause / Play, just above a scene's top-right corner (the
+   hero's sits over its phone's corner: see the end of this file) */
+.scene-toggle {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  z-index: var(--z-raised);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 44px;
+  padding: 0 var(--space-xs);
+  border: 0;
+  background: none;
+  color: var(--color-muted);
+  font: 500 var(--text-sm) / 1 var(--font-body);
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out), opacity var(--dur-short) var(--ease-out), visibility 0s;
+}
+/* Made as the scene mounts, shown as it takes over from its still (mount.ts):
+   never a Pause over a picture that hasn't started */
+.scene-toggle[data-pending] {
+  opacity: 0;
+  visibility: hidden;
+}
+.scene-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+@media (hover: hover) and (pointer: fine) {
+  .scene-toggle:hover {
+    color: var(--color-ink);
+  }
+}
+.scene-toggle:active {
+  color: var(--color-ink-2);
+}
+.scene-toggle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 0;
+}
+
+/* How it works: a band one step up. Three moments, each with its picture on
+   the paper steps; on a wide screen the pictures pin beside the text */
+.how {
+  padding-block: var(--section-gap-l) var(--section-gap-s);
+  background: var(--color-paper-2);
+}
+.how h2 {
+  margin-bottom: var(--space-2xl);
+}
+.moments {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  column-gap: var(--space-2xl);
+  row-gap: var(--space-3xl);
+}
+.moment {
+  display: contents;
+}
+.moment__text {
+  grid-column: 1;
+  align-self: center;
+  transition: color var(--dur-long) var(--ease-out);
+}
+.moment__text p {
+  margin-top: var(--space-sm);
+  font-size: var(--text-lead);
+  line-height: 1.5;
+}
+.moment__plate {
+  grid-column: 2;
+  margin: 0;
+}
+.moment:nth-child(1) > * {
+  grid-row: 1;
+}
+.moment:nth-child(2) > * {
+  grid-row: 2;
+}
+.moment:nth-child(3) > * {
+  grid-row: 3;
+}
+/* Each picture is a screen in the lit band: the room's own dark, edged with
+   the rule */
+.plate {
+  position: relative;
+  background: var(--color-paper);
+  box-shadow: inset 0 0 0 var(--rule-hair) var(--color-rule);
+}
+.plate--card,
+.plate--figure {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  aspect-ratio: 600 / 560;
+  padding: var(--space-2xl);
+}
+/* The film's title card, as the player shows it: a double hairline frame */
+.titlecard {
+  padding: var(--space-xl) var(--space-lg);
+  border: var(--rule-hair) solid color-mix(in oklab, var(--color-ink) 40%, transparent);
+  outline: var(--rule-hair) solid color-mix(in oklab, var(--color-ink) 22%, transparent);
+  outline-offset: 4px;
+  text-align: center;
+}
+.titlecard__title {
+  font-size: var(--text-display);
+  font-weight: 300;
+  font-stretch: 125%;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.04;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+}
+.titlecard__by {
+  margin-top: var(--space-md);
+  color: var(--color-muted);
+  font-size: var(--text-lead);
+}
+.fig {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--space-md);
+}
+.fig__n {
+  font-size: var(--text-figure);
+  font-weight: 300;
+  font-stretch: 125%;
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+}
+.fig__unit {
+  font-size: var(--text-section);
+  font-weight: 400;
+  color: var(--color-ink-2);
+  line-height: 1;
+}
+.plate__line {
+  margin-top: var(--space-lg);
+  max-width: 28ch;
+  font-size: var(--text-lead);
+  line-height: 1.45;
+  color: var(--color-ink-2);
+}
+
+@media (min-width: 60rem) {
+  .moments.is-pinned {
+    row-gap: 0;
+  }
+  .moments.is-pinned .moment__text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 72svh;
+  }
+  .moments.is-pinned .moment:not(.is-current) .moment__text {
+    color: var(--color-muted);
+  }
+  /* The pictures and the screen they share: one box, pinned beside the text,
+     that stays while only what is in it changes */
+  .moments.is-pinned::before,
+  .moments.is-pinned .moment__plate {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    align-self: start;
+    justify-self: end;
+    position: sticky;
+    /* Centred on the screen: the plates are 560 tall at their full size */
+    top: max(var(--space-xl), calc(50svh - 17.5rem));
+  }
+  .moments.is-pinned::before {
+    content: "";
+    width: 100%;
+    max-width: 37.5rem;
+    aspect-ratio: 600 / 560;
+    background: var(--color-paper);
+    box-shadow: inset 0 0 0 var(--rule-hair) var(--color-rule);
+  }
+  .moments.is-pinned .moment__plate {
+    background: none;
+    box-shadow: none;
+  }
+  /* One picture at a time (moments.ts): the one leaving fades out at once,
+     on the frame its text dims (data-plate="out"), then the next fades in
+     (data-plate="in"), so two are never seen through each other */
+  .moments.is-pinned .moment__plate {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms var(--ease-out);
+  }
+  .moments.is-pinned .moment[data-plate="in"] > .moment__plate {
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity var(--dur-long) var(--ease-out);
+  }
+  .moments.is-pinned .moment:not([data-plate]) > .plate--scene {
+    display: none;
+  }
+  /* The admin scene comes out of display: none, so its fade starts here;
+     coming back from "out" it carries on from where it was */
+  @starting-style {
+    .moments.is-pinned .moment[data-plate="in"] > .plate--scene {
+      opacity: 0;
+    }
+  }
+  /* While the admin scene's place is hidden, its story is told to screen
+     readers here instead */
+  .moments.is-pinned .moment:not([data-plate]) .moment__desc {
+    display: block;
+  }
+}
+.moment__desc {
+  display: none;
+}
+
+/* What you need: the head beside one honest figure, then two lists */
+.need {
+  padding-block: var(--section-gap) var(--section-gap);
+}
+.need__head,
+.need__lists {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  column-gap: var(--space-2xl);
+}
+.need__head {
+  align-items: end;
+}
+.need__head h2 {
+  max-width: 12ch;
+}
+.need__line {
+  margin-top: var(--space-md);
+  max-width: 32ch;
+  color: var(--color-ink-2);
+  font-size: var(--text-lead);
+  line-height: 1.45;
+}
+.need__lists {
+  margin-top: var(--space-3xl);
+}
+.need__group h3 {
+  margin-bottom: var(--space-md);
+}
+.rows {
+  margin: 0;
+  border-top: var(--rule-hair) solid var(--color-rule);
+}
+.rows > div {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  column-gap: var(--space-2xl);
+  padding-block: var(--space-md);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+}
+.rows dt {
+  font-weight: 500;
+}
+.rows dd {
+  margin: 0;
+  color: var(--color-ink-2);
+  text-wrap: pretty;
+}
+
+/* What it isn't: one limit, said once, as the page's one statement: the
+   head across the container at the hero's size (a light face takes the
+   larger step), its line under the right-hand columns, between two of the
+   rules the lists use, on the gutter every section starts from. The quiet
+   band between the pinned run and the lists */
+.isnt {
+  padding-block: var(--section-gap) var(--section-gap-s);
+}
+.isnt__panel {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  column-gap: var(--space-2xl);
+  row-gap: var(--space-lg);
+  padding: var(--space-2xl) 0;
+  border-block: var(--rule-hair) solid var(--color-rule);
+}
+.isnt h2 {
+  grid-column: 1 / -1;
+  max-width: none;
+  font-size: var(--text-display);
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+.isnt p {
+  grid-column: 2;
+  max-width: 46ch;
+  font-size: var(--text-lead);
+  line-height: 1.5;
+  color: var(--color-ink-2);
+}
+
+/* The close: the install guide again, beside the film playing, which runs
+   off into the footer. The phone gives up a little width before the text
+   does, so the two actions stay on one row down to 960 */
+.close__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) min(26rem, 40%);
+  column-gap: var(--space-2xl);
+  align-items: center;
+}
+.close .lead {
+  margin-top: var(--space-lg);
+  max-width: 36ch;
+}
+.close .actions {
+  margin-top: var(--space-xl);
+}
+.close__licence {
+  margin-top: var(--space-lg);
+  color: var(--color-muted);
+}
+.close__figure {
+  margin: 0;
+}
+.close__figure img {
+  width: 100%;
+}
+
+/* Footer: a letter close, the sign-off last */
+.foot {
+  padding-block: var(--space-3xl) var(--space-2xl);
+  background: var(--color-paper-2);
+}
+.foot__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  column-gap: var(--space-2xl);
+  align-items: end;
+}
+.foot__letter p {
+  max-width: 46ch;
+  font-size: var(--text-lead);
+  color: var(--color-ink-2);
+}
+.foot__letter .foot__signoff {
+  margin-top: var(--space-md);
+  max-width: 26ch;
+  font-size: var(--text-2xl);
+  text-wrap: balance;
+  font-weight: 300;
+  font-stretch: 125%;
+  line-height: 1.15;
+  letter-spacing: var(--tracking-display);
+  color: var(--color-ink);
+}
+.foot__links {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: end;
+  gap: 0 var(--space-2xl);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.foot__links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--color-ink-2);
+  white-space: nowrap;
+}
+.foot__links a:hover {
+  color: var(--color-ink);
+}
+/* The 404's three links: one row that wraps, never one left alone */
+.foot__links--short {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-xl);
+}
+
+/* The 404: its one real number set like a title card, then the way home */
+.lost {
+  display: grid;
+  align-content: center;
+  min-height: calc(100svh - var(--slab-h));
+  padding-block: var(--space-2xl);
+}
+.lost h1 {
+  max-width: 12ch;
+}
+.lost__code {
+  display: block;
+  margin-bottom: var(--space-lg);
+  font-size: clamp(6rem, 16vw, 14rem);
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+}
+.lost .lead {
+  margin-top: var(--space-lg);
+}
+.lost .actions {
+  margin-top: var(--space-xl);
+}
+
+/* Between the full width and the phone column: the phone's compact design */
+@media (max-width: 74.99rem) {
+  :root {
+    --phone: 22.375rem;
+  }
+}
+
+@media (max-width: 63.99rem) {
+  .hero {
+    min-height: 0;
+  }
+  .hero__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero__figure {
+    justify-self: center;
+    width: 100%;
+    max-width: 33.75rem;
+    margin-top: var(--space-3xl);
+  }
+}
+
+@media (max-width: 59.99rem) {
+  .moments {
+    display: block;
+  }
+  .moment {
+    display: block;
+  }
+  .moment + .moment {
+    margin-top: var(--space-3xl);
+  }
+  .moment__plate {
+    margin-top: var(--space-2xl);
+  }
+  .need__head,
+  .need__lists,
+  .foot__grid,
+  .close__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .need__figure {
+    margin-top: var(--space-xl);
+  }
+  .need__group + .need__group {
+    margin-top: var(--space-2xl);
+  }
+  .isnt__panel {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-xl) 0;
+  }
+  .isnt p {
+    grid-column: 1;
+  }
+  .close__figure {
+    justify-self: center;
+    width: 100%;
+    max-width: 22.375rem;
+    margin-top: var(--space-2xl);
+  }
+  .foot__links {
+    justify-content: start;
+    margin-top: var(--space-xl);
+  }
+}
+
+@media (max-width: 47.99rem) {
+  .slab__links {
+    display: none;
+  }
+  .slab__menu {
+    display: block;
+  }
+  .slab__nav {
+    gap: var(--space-xs);
+  }
+  /* The menu carries the install guide here: the nav row fits a 320 screen */
+  .slab__menu ~ .btn--nav {
+    display: none;
+  }
+  .rows > div {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-2xs);
+  }
+}
+
+@media (max-width: 39.99rem) {
+  .actions .btn {
+    flex: 1 1 100%;
+  }
+  .foot__links {
+    grid-template-columns: repeat(2, minmax(0, max-content));
+    column-gap: var(--space-lg);
+  }
+  .foot__links a {
+    white-space: normal;
+  }
+}
+
+/* The pictures of How it works are never drawn past the admin scene's own
+   size: 600 wide where it shows its full design, its 358 phone design where
+   the column is narrower than that (the same widths as the still's source in
+   index.html). The type plates take the same shape, so the run's pictures
+   are one size */
+.moment__plate {
+  width: 100%;
+  max-width: 37.5rem;
+}
+@media (max-width: 631.98px), (min-width: 640.01px) and (max-width: 647.98px), (min-width: 960px) and (max-width: 1220.5px) {
+  .plate--card,
+  .plate--figure {
+    aspect-ratio: 358 / 342;
+    padding: var(--space-xl);
+  }
+  /* The title card at the phone size: its title on one line from 358 wide
+     (at 320 it breaks at the space) */
+  .plate--card {
+    padding: var(--space-lg);
+  }
+  .titlecard {
+    padding: var(--space-lg) var(--space-md);
+  }
+  .titlecard__title {
+    font-size: var(--text-3xl);
+  }
+}
+@media (min-width: 960px) and (max-width: 1220.5px) {
+  .moment__plate,
+  .moments.is-pinned::before {
+    max-width: 22.375rem;
+  }
+  .moments.is-pinned::before {
+    aspect-ratio: 358 / 342;
+  }
+  /* and 342 tall at the admin scene's phone size */
+  .moments.is-pinned::before,
+  .moments.is-pinned .moment__plate {
+    top: max(var(--space-xl), calc(50svh - 10.6875rem));
+  }
+}
+
+/* The hero's Pause / Play sits in the band above its phone, its edge on the
+   phone's edge, where the wide design shows (56 of 540 at each side); over
+   the compact design, whose band is 16 of 358, it stays just above */
+.hero__figure > .scene-toggle {
+  right: 4.47%;
+}
+@media (min-width: 512px) and (max-width: 63.99rem), (min-width: 75rem) {
+  .hero__figure > .scene-toggle {
+    top: 0;
+    bottom: auto;
+    right: 10.37%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero__text,
+  .hero__figure > picture {
+    animation: none;
+  }
+  .btn,
+  a,
+  .moment__text,
+  .scene-toggle {
+    transition: none;
+  }
+  /* The pictures of How it works still change by a short fade, which moves
+     nothing (they carry keep-motion, so base.css leaves them this) */
+  .moments.is-pinned .moment__plate,
+  .moments.is-pinned .moment[data-plate="in"] > .moment__plate {
+    transition: opacity 200ms var(--ease-out);
+  }
+}

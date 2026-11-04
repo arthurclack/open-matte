@@ -1,0 +1,37 @@
+/* stage.html only: the website's ground (Midnight, reworked red room) */
+:root {
+  --color-paper: oklch(9.5% 0.026 22);
+  --color-muted: oklch(72% 0.03 40);
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-muted);
+  font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
+}
+
+#preview {
+  display: grid;
+  gap: 64px;
+  padding: 48px 16px 96px;
+}
+
+.pv-shot {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+.pv-label {
+  margin: 0;
+}
+
+.pv-slot {
+  width: 100%;
+}
+
+.pv-slot--540 { max-width: 540px; }
+.pv-slot--600 { max-width: 600px; }
+.pv-slot--358 { max-width: 358px; }

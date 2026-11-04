@@ -1,0 +1,71 @@
+/* A scene's place on the page (mount.ts). Until the scene has drawn, its still
+   holds the space and the live layer waits invisibly on top of it, the same
+   width, so the stage measures the column it will play in. */
+
+[data-scene] {
+  position: relative;
+}
+
+/* The scenes are pictures of the app, as the stills are: forced colours
+   repaints page UI, never an img, so it leaves the live scene as drawn too */
+.scene-live {
+  forced-color-adjust: none;
+}
+
+[data-scene] > picture,
+[data-scene] > picture > img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Centred, as a stage stopped at its design size centres itself in a wider
+   column; a host marked data-ss-fill grows the stage to its width, so the
+   still grows with it */
+[data-scene] > picture > img {
+  margin-inline: auto;
+}
+
+[data-scene][data-ss-fill] > picture > img {
+  width: 100%;
+}
+
+[data-scene]:not([data-live]) > .scene-live {
+  position: absolute;
+  inset: 0 0 auto;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Live: the scene fades in over its still, which stays whole underneath
+   until the fade is done and only then steps out (it stays in the page for
+   screen readers: they read its alt text; the moving layer is aria-hidden).
+   Both frames are the same picture, so fading only the top one changes
+   nothing; fading both at once would dim it by a quarter half way. */
+[data-scene][data-live] > picture {
+  position: absolute;
+  inset: 0 0 auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0s linear var(--dur-short, 220ms);
+}
+
+[data-scene][data-live] > .scene-live {
+  animation: scene-in var(--dur-short, 220ms) var(--ease-out, ease-out) both;
+}
+
+@keyframes scene-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-scene][data-live] > picture {
+    transition: none;
+  }
+
+  [data-scene][data-live] > .scene-live {
+    animation: none;
+  }
+}

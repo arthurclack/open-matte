@@ -1,0 +1,431 @@
+/* The hero scene (TicketScene.tsx). Everything inside the phone is in iOS
+   points: the kit lays the screen out at true size and scales it down whole. */
+
+.tk {
+  /* Where the stage's crop falls on the phone's screen, in points: the pane
+     the conversation fits in ends a gutter above it */
+  & .ss-stage { --tk-pane: 513px; }
+  & .ss-stage[data-layout='compact'] { --tk-pane: 539px; }
+
+  .tk-phone {
+    position: absolute;
+  }
+
+  /* ---- The conversation ---- */
+
+  .tk-messages {
+    position: absolute;
+    top: 62px;
+    right: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    height: var(--tk-pane);
+  }
+
+  .tk-head {
+    position: relative;
+    display: grid;
+    flex: none;
+    justify-items: center;
+    padding: 2px 0 10px;
+    border-bottom: 0.5px solid rgb(255 255 255 / 0.14);
+  }
+
+  .tk-head__who {
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+  }
+
+  /* A neutral monogram, the chat app's own grey */
+  .tk-avatar {
+    background: linear-gradient(180deg, #8f8b95, #6f6b75);
+    font-size: 18px;
+  }
+
+  .tk-head__name {
+    font-size: 12px;
+    line-height: 15px;
+    color: #fff;
+  }
+
+  .tk-back {
+    position: absolute;
+    top: 14px;
+    left: 18px;
+    color: #e5e5ea;
+  }
+
+  /* The conversation sits on its (unseen) composer, a gutter above the
+     stage's foot, and runs up under the header */
+  .tk-thread {
+    flex: 1;
+    padding: 0 16px;
+    /* A chat app's sent bubble in a neutral grey, a step above the received
+       ones: no one platform's colour */
+    --ss-me: #4b4752;
+  }
+
+  /* An earlier message: the chat app's quieter grey, so the reply and Sam's
+     question are what the eye finds */
+  .tk-earlier .ss-bubble {
+    color: #8e8e93;
+  }
+
+  /* ---- The link, as it previews ---- */
+
+  /* The preview fills its bubble edge to edge: the picture on top, the
+     words on the bubble's own fill below (the bubble's padding is taken back
+     by the card, so the kit's bubble keeps its shape) */
+  .tk-link {
+    display: grid;
+    width: 248px;
+    margin: -0.42em -0.76em;
+    overflow: hidden;
+    border-radius: 1.06em;
+  }
+
+  .tk-link__poster {
+    aspect-ratio: auto;
+    height: 196px;
+    border-radius: 0;
+    box-shadow: none;
+    font-size: 22px;
+    line-height: 1.2;
+  }
+
+  .tk-link__text {
+    display: grid;
+    gap: 2px;
+    padding: 9px 13px 11px;
+  }
+
+  .tk-link__title {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 19px;
+    letter-spacing: -0.01em;
+    color: #fff;
+  }
+
+  .tk-link__desc,
+  .tk-link__site {
+    font-size: 14px;
+    line-height: 18px;
+    color: #aeaeb2;
+  }
+
+  .tk-link__site {
+    color: #8e8e93;
+  }
+
+  /* The card is taller than a line of text, so it doesn't fade in where it
+     lands (over the messages still gliding up out of its way): it comes up
+     from below with them, on the thread's own curve, its height behind it */
+  .tk-linkrow {
+    animation: tk-rise 0.55s cubic-bezier(0.25, 1, 0.5, 1) both;
+  }
+
+  /* A held bubble lightens a step, as iOS shows a press */
+  .tk-linkrow .ss-bubble::before {
+    transition: background-color 0.15s ease;
+  }
+
+  .tk-linkrow .ss-bubble[data-pressed]::before {
+    background-color: #36353b;
+  }
+
+  /* ---- The built-in browser ---- */
+
+  .tk-sheet {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--om-bg);
+    visibility: hidden;
+    transform: translate3d(0, 100%, 0);
+    /* Dismissed: down and away, quicker than it came; gone once it is out */
+    transition: transform 0.42s cubic-bezier(0.4, 0, 0.6, 1), visibility 0s linear 0.42s;
+    will-change: transform;
+  }
+
+  /* Presented the way iOS presents a screen: quick off the tap, a long settle */
+  .tk-sheet[data-open] {
+    visibility: visible;
+    transform: translate3d(0, 0, 0);
+    transition: transform 0.56s cubic-bezier(0.3, 0.75, 0.1, 1), visibility 0s linear 0s;
+  }
+
+  .tk-bar {
+    position: relative;
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    height: 106px;
+    padding: 62px 16px 0;
+    background: #1c1b20;
+    border-bottom: 0.5px solid rgb(255 255 255 / 0.12);
+  }
+
+  .tk-bar__done {
+    position: absolute;
+    bottom: 0;
+    left: 16px;
+    display: flex;
+    align-items: center;
+    height: 44px;
+    padding: 0 10px 0 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: #f2f2f7;
+    transition: opacity 0.12s ease;
+  }
+
+  .tk-bar__done[data-pressed] {
+    opacity: 0.5;
+  }
+
+  /* A fixed, even width, so the lock never sits on a half pixel */
+  .tk-bar__url {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 140px;
+    gap: 5px;
+    height: 44px;
+    font-size: 15px;
+    font-weight: 500;
+    color: #e5e5ea;
+  }
+
+  .tk-lock {
+    color: #a1a1a6;
+  }
+
+  .tk-viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* ---- The film's page, as the app lays it out at phone width ---- */
+
+  .tk-page {
+    background: var(--om-bg);
+    color: var(--om-text);
+    font: 16px/1.55 var(--om-sans);
+    letter-spacing: 0;
+    will-change: transform;
+  }
+
+  .tk-site {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 69px;
+    padding: 0 16px;
+  }
+
+  .tk-site__name {
+    font-family: var(--om-serif);
+    font-size: 20px;
+    letter-spacing: 0.01em;
+  }
+
+  .tk-site__signin {
+    font-size: 14.7px;
+    color: var(--om-text-dim);
+    transition: opacity 0.2s ease;
+  }
+
+  .tk-site__signin[data-hide] {
+    opacity: 0;
+  }
+
+  .tk-theatre-slot {
+    display: grid;
+    grid-template-rows: 0fr;
+  }
+
+  .tk-theatre-slot[data-open] {
+    grid-template-rows: 1fr;
+  }
+
+  .tk-theatre-slot > .tk-theatre {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .tk-theatre__in {
+    display: grid;
+  }
+
+  .tk-video {
+    position: relative;
+    display: grid;
+    place-items: center;
+    aspect-ratio: 16 / 9;
+    background: #000;
+  }
+
+  /* The film's first title card: off-white serif in a ruled frame on black */
+  .tk-card {
+    display: grid;
+    place-items: center;
+    width: 74%;
+    height: 66%;
+    border: 1px solid rgb(232 226 212 / 0.55);
+    outline: 1px solid rgb(232 226 212 / 0.3);
+    outline-offset: 4px;
+    opacity: 0;
+    transition: opacity 0.9s ease;
+  }
+
+  .tk-card[data-show] {
+    opacity: 1;
+  }
+
+  .tk-card__title {
+    font-family: var(--om-serif);
+    font-size: 30px;
+    font-style: italic;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: #e8e2d4;
+  }
+
+  .tk-playerbar {
+    display: flex;
+    gap: 19px;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--om-line);
+    background: var(--om-bg-sunk);
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--om-text-dim);
+  }
+
+  .tk-playerbar__help {
+    text-decoration: underline;
+  }
+
+  .tk-body {
+    display: grid;
+    gap: 24px;
+    padding: 43px 16px 48px;
+  }
+
+  .tk-poster {
+    width: 220px;
+    font-size: 16px;
+  }
+
+  .tk-title {
+    margin-bottom: -18px;
+    font-family: var(--om-serif);
+    font-size: 35px;
+    font-weight: 600;
+    line-height: 1.15;
+  }
+
+  .tk-meta {
+    color: var(--om-text-dim);
+  }
+
+  .tk-meta span + span::before {
+    content: '·';
+    margin: 0 0.5em;
+    color: var(--om-text-faint);
+  }
+
+  .tk-rec {
+    display: grid;
+    gap: 13px;
+    padding: 2px 0 6px 18px;
+    border-left: 3px solid var(--om-accent);
+  }
+
+  .tk-rec__label {
+    margin-bottom: -4px;
+    font-size: 12px;
+    line-height: 1.3;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--om-accent);
+  }
+
+  /* The ticket: the app's dashed admit-one panel */
+  .tk-panel {
+    padding: 17.6px 20.8px;
+    border: 1px dashed var(--om-line-strong);
+    border-radius: var(--om-radius);
+    background: rgb(23 21 27 / 0.7);
+  }
+
+  .tk-panel__admit {
+    margin-bottom: 6px;
+    font-size: 11.5px;
+    line-height: 1.4;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--om-accent);
+  }
+
+  /* At the phone column the phone is drawn smaller, so its smallest type
+     steps up to stay readable */
+  & .ss-stage[data-layout='compact'] .tk-head__name { font-size: 13.5px; }
+  & .ss-stage[data-layout='compact'] .tk-panel__admit { font-size: 13.5px; letter-spacing: 0.14em; }
+  & .ss-stage[data-layout='compact'] .tk-rec__label { font-size: 13.5px; }
+
+  .tk-panel p {
+    margin: 0 0 14.4px;
+    color: var(--om-text-dim);
+  }
+
+  .tk-play {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    padding: 13.4px 26.9px;
+    border-radius: 999px;
+    background: var(--om-accent);
+    color: var(--om-accent-ink);
+    font-size: 16.8px;
+    font-weight: 600;
+    line-height: 1.2;
+    transition: background-color 0.15s ease, opacity 0.25s ease;
+  }
+
+  .tk-play[data-pressed] {
+    background: var(--om-accent-hover);
+  }
+
+  .tk-play[data-gone] {
+    opacity: 0;
+  }
+
+  .tk-synopsis {
+    display: grid;
+    gap: 16px;
+    padding-top: 6px;
+  }
+
+  .tk-privacy {
+    display: grid;
+    gap: 9px;
+    margin-top: 16px;
+  }
+}
+
+@keyframes tk-rise {
+  from {
+    transform: translate3d(0, calc(100% + 3px), 0);
+  }
+}
