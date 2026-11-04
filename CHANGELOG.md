@@ -8,7 +8,7 @@ A release has an **Upgrading** note when updating to it takes more than copying 
 new code and rebuilding: a backup first, a setting to choose, or a migration you can't
 undo without a restore. Read it before you update.
 
-## Unreleased — 1.0.0
+## 1.0.0 — 2026-11-04
 
 The first numbered release. It brings together the three milestones built before
 there were version numbers: ticketed playback, people and passkeys, and the work for a
@@ -36,7 +36,10 @@ public release.
    folder's place, and a film imported from one shows as missing.
 4. **If you changed your copy of `deploy/compose.yml` or the Caddyfile**, carry your
    changes over to the new ones. Both have changed, and the Caddyfile has moved from
-   `deploy/Caddyfile` to `deploy/caddy/Caddyfile`. The pages now have a
+   `deploy/Caddyfile` to `deploy/caddy/Caddyfile`. If you added a block to send
+   another name, such as the bare domain, to `DOMAIN`, as the old Caddyfile suggested,
+   leave it out of the new one and put the name in `REDIRECT_FROM` in `deploy/.env`
+   instead: with both, Caddy won't start. The pages now have a
    Content-Security-Policy: if a proxy or CDN sits in front of Caddy, see [Your own
    changes to the Docker setup](docs/deploying.md#your-own-changes-to-the-docker-setup)
    so it doesn't add a policy of its own or change the pages.
@@ -192,6 +195,10 @@ The public release (milestone 3, November 2026):
   the packages it includes, at `/third-party-licenses.txt` and linked from the footer.
 - **Documentation** for installing on a fresh server, this changelog, and
   [SECURITY.md](SECURITY.md).
+- **Films on network storage**, in the install guide: how to mount CIFS (SMB)
+  storage, such as a storage box or a share on a NAS, on the media folder
+  ([docs/installing.md](docs/installing.md#films-on-network-storage)). The whole guide
+  was followed on a fresh Ubuntu 26.04 server, and put right where it tripped.
 
 ### Changed
 

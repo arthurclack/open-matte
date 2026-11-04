@@ -31,10 +31,10 @@ desktop Firefox and a non-HDR screen to milestone 3's.
 - [x] The encoder adds a 5.1 audio track when the source has surround
 - [x] Daily database backups with retention, a Back up now button, a restore guide, and an off-server copy timer
 
-## Milestone 2: people and passkeys
+## Milestone 2: people and passkeys (complete)
 
 Planned in [history/milestone-2.md](history/milestone-2.md) and built in six slices,
-all deployed. What's left is checking it on real devices
+all deployed, and checked on real devices
 ([history/device-checks.md](history/device-checks.md)).
 
 - [x] People, passkey setup and sign-in, with the relying party set once
@@ -50,20 +50,20 @@ all deployed. What's left is checking it on real devices
 - [x] An account page: passkeys, signed-in browsers, Sign out everywhere
 - [x] Keyboard only (Chromium): Play, pausing, the name menu
 - [x] Signing in and playing on iPhone and Mac Safari
-- [ ] Device checks that close the milestone
+- [x] Device checks that close the milestone
   ([history/device-checks.md](history/device-checks.md#to-close-milestone-2)):
   keeping a ticket and signing out on Safari; signing in with the phone's QR code;
   Android; a password manager; WhatsApp and Instagram's browsers; AirPlay and
   Chromecast
 - [x] Other names, such as the bare domain, redirect to the cinema's (`REDIRECT_FROM`)
 
-## Milestone 3: polish and public release
+## Milestone 3: polish and public release (complete)
 
 Planned in [history/milestone-3.md](history/milestone-3.md), in six slices, ending in
 v1.0.0. All six slices are merged: slices 5 and 6 built the Playwright journeys, the
-documentation, the changelog and the licence notices. What's left is the device
-checks, the rehearsal on a clean server, closing milestone 2, merging into `main` and
-tagging v1.0.0.
+documentation, the changelog and the licence notices. The device checks are done,
+the install guide has been rehearsed on a clean server, with the films on network
+storage, and v1.0.0 is released.
 
 - [x] Branding: accent and background colours, a logo and a tab icon, from the first
   paint; ticket links that preview their film's poster
@@ -74,12 +74,12 @@ tagging v1.0.0.
 - [x] Activity filters and summaries, and retention: progress reports for 30 days,
   other events for 12 months, ended browser sessions cleared; a "projection booth" page
   saying what needs attention and whether the server is well
-- [ ] Playback compatibility testing, starting with the checks moved here from
+- [x] Playback compatibility testing, starting with the checks moved here from
   milestone 2: a TV browser, desktop Firefox, Chrome's hls.js playback, a non-HDR
   screen and keyboard only in Safari
   ([history/device-checks.md](history/device-checks.md#for-milestone-3)); the main
   journeys as Playwright tests in Chromium, Firefox and WebKit
-- [ ] Installation, update, backup and restore documentation, rehearsed on a clean
+- [x] Installation, update, backup and restore documentation, rehearsed on a clean
   server; a changelog; licence notices for the code sent to browsers; v1.0.0 tagged and
   released on GitHub
 
@@ -87,7 +87,7 @@ tagging v1.0.0.
 
 Agreed as the next milestone, not yet planned in detail. Milestone 1 delivers the
 film, milestone 2 remembers the person, milestone 4 makes the recommendation personal.
-Whether it comes before or after the v1.0.0 release is still open.
+It comes after the v1.0.0 release.
 
 - Programmes: a named, ordered set of films with your introduction, a cover, a note for
   each film, optional suggested dates, draft and published. Shown to every member, or to

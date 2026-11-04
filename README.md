@@ -25,7 +25,7 @@ Only share films you have the right to share.
 
 | | |
 |---|---|
-| A server | Linux with Docker and Docker Compose, and ports 80 and 443 open. Disk for your films: a two-hour 4K HDR film with every rendition is about 50 GB, one without a 4K source 8 to 15 GB. |
+| A server | Linux with Docker and Docker Compose, a public IPv4 address, and ports 80 and 443 open. [docs/installing.md](docs/installing.md) is written for Ubuntu 26.04 or 24.04 LTS, and installs Docker for you. Disk for your films: a two-hour 4K HDR film with every rendition is about 50 GB, one without a 4K source 8 to 15 GB. |
 | A domain | A name whose DNS points at the server. Caddy, which runs alongside the app, gets the HTTPS certificate. Passkeys are tied to the domain for good, so pick one you'll keep. |
 | Prepared films | Encoded on your computer with `scripts/encode.mjs`, which needs Node and `ffmpeg`, into one folder per film ([docs/encoding.md](docs/encoding.md), [docs/import-format.md](docs/import-format.md)). |
 | Optionally | A TMDB API key, to fill in film details and artwork ([docs/metadata.md](docs/metadata.md)), and somewhere off the server to copy backups to. |
@@ -57,8 +57,8 @@ What your friends need:
 - **People and passkeys**: tickets only one person can use, signed in; letting someone
   keep a link ticket in their account; films shown to members; recovery when someone
   loses a device.
-- **Branding**: your cinema's name, colours, logo and tab icon. A ticket link shows its
-  film's poster and title in chat apps.
+- **Branding**: your cinema's name, colours, logo and tab icon. A ticket link for
+  anyone shows its film's poster and title in chat apps.
 - **The admin**: scan the media folder, publish, issue tickets, add people, see
   Activity, choose how long records are kept, and check on the server under
   **Status**.
@@ -130,8 +130,8 @@ server/         Express app: access rules, passkeys, scanner, routes, SQLite
 web/            React app: viewer pages, player, admin
 scripts/        encode.mjs (reference encoder), deploy.sh (copy to a server over SSH)
 deploy/         Docker Compose, Caddy and the backup-copy timer
-docs/           installing, access rules, import format, encoding, film information,
-                and the roadmap
+docs/           installing, running and updating, access rules, import format,
+                encoding, film information, and the roadmap
 docs/history/   the project's own build record: milestone plans and device checks
 test/           node:test suites
 ```

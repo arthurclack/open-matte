@@ -6,10 +6,10 @@ carry on alongside ([device-checks.md](device-checks.md#to-close-milestone-2)). 
 slice is deployed, its box in [roadmap.md](../roadmap.md) gets ticked and what it built
 moves into the docs that describe the app.
 
-**Status, 4 November:** all six slices are merged. Slices 1 to 4 are deployed; slices 5
-and 6 aren't yet, and neither are the fixes from a review before the release. Still to
-do: the device rows of slice 5, the rehearsal of slice 6, closing milestone 2, the
-merge into `main`, and the v1.0.0 tag and release.
+**Status, 4 November:** complete. All six slices are merged and deployed, with the fixes
+from a review before the release. The device checks are done, which also closes
+milestone 2. The rehearsal of slice 6 ran on a fresh Ubuntu 26.04 server, and its
+fixes are in commit cb8c36f. The work is merged into `main` and released as v1.0.0.
 
 ## What it's for
 
@@ -363,8 +363,8 @@ journeys pass in all three browsers.
 **Built (3 November)**: the README, [installing.md](../installing.md), the updating,
 backup, restore, rolling back, moving and removing parts of
 [deploying.md](../deploying.md), `CHANGELOG.md`, `SECURITY.md`, the version in the admin
-and the licence notices. Merged, not yet deployed. Still to do: the rehearsal, then
-closing milestone 2, the merge into `main`, the tag and the release.
+and the licence notices. Rehearsed on 4 November on a fresh Ubuntu 26.04 server, with
+the films on network storage (commit cb8c36f), and released as v1.0.0.
 
 **Done when** the rehearsal runs from an empty server to a played ticket with nothing
 but the docs, and v1.0.0 is on GitHub.
