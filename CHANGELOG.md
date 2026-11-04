@@ -8,7 +8,7 @@ A release has an **Upgrading** note when updating to it takes more than copying 
 new code and rebuilding: a backup first, a setting to choose, or a migration you can't
 undo without a restore. Read it before you update.
 
-## Unreleased
+## 1.0.1 — 2026-11-04
 
 ### Changed
 
