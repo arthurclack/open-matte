@@ -273,6 +273,10 @@ cd /srv/open-matte
 git clone --branch v1.0.0 https://github.com/arthurclack/open-matte.git app
 ```
 
+Git may warn that `refs/tags/v1.0.0` "is not a commit", and says you're in "detached
+HEAD" state. Both are expected when you check out a release: `git -C app describe
+--tags` prints `v1.0.0`, the release you asked for.
+
 Git ignores `deploy/.env`, so your settings stay put when you update.
 
 **With `scripts/deploy.sh`, from your computer.** Use this if you work on the code. It
