@@ -89,8 +89,13 @@ server, set by whoever publishes:
 
 ```bash
 node_modules/.bin/vite build --config site/vite.config.mjs
-rsync -rlt --delete --chmod=D755,F644 site/dist/ "$SITE_HOST:/srv/openmatte-site/public/"
+rsync -rlpt --delete site/dist/ "$SITE_HOST:/srv/openmatte-site/public/"
 ```
+
+`-p` copies the build's own permissions (files 644, folders 755 with the usual
+umask). The rsync that comes with macOS doesn't accept `--chmod`, so the command
+leaves it out. If the folder on the server belongs to root, add
+`--rsync-path="sudo rsync"`.
 
 ## Headers
 
@@ -106,23 +111,32 @@ Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
 Cache-Control: public, max-age=300
 ```
 
-With Caddy, for example, inside the site's block:
+With Caddy, for example. Headers set in the site's main route don't reach the
+responses `handle_errors` makes, so a snippet sets them in both, or the 404
+page goes out with none of them:
 
 ```caddyfile
-root * /srv/openmatte-site/public
-file_server
-handle_errors {
-	@missing expression {err.status_code} == 404
-	rewrite @missing /404.html
-	file_server
+(site_headers) {
+	header {
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Cross-Origin-Opener-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+		Cache-Control "public, max-age=300"
+	}
 }
-header {
-	Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
-	X-Content-Type-Options "nosniff"
-	Referrer-Policy "strict-origin-when-cross-origin"
-	Cross-Origin-Opener-Policy "same-origin"
-	Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()"
-	Cache-Control "public, max-age=300"
+
+openmatte.dev {
+	root * /srv/openmatte-site/public
+	import site_headers
+	file_server
+	handle_errors {
+		import site_headers
+		@missing expression {err.status_code} == 404
+		rewrite @missing /404.html
+		file_server
+	}
 }
 ```
 
