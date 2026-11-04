@@ -49,9 +49,11 @@ async function call(method, url, body, cookie = env('E2E_ADMIN_COOKIE')) {
 // As the admin, with the session global setup signed in.
 export const admin = {
   post: async (url, body = {}) => (await call('POST', url, body)).data,
-  // A ticket for anyone with the link, with no screening limit.
-  async issueTicket({ label, claimable = false, for: forFilm = film } = {}) {
-    const [ticket] = await admin.post('/api/admin/tickets', { filmId: forFilm.id, label, screeningLimit: null, claimable });
+  // A ticket for anyone with the link, with no screening limit, unless `fields` say
+  // otherwise: any of the admin's own fields, such as personId, screeningLimit,
+  // startBy or daysAfterFirstPlay.
+  async issueTicket({ label, for: forFilm = film, ...fields } = {}) {
+    const [ticket] = await admin.post('/api/admin/tickets', { filmId: forFilm.id, label, screeningLimit: null, ...fields });
     return ticket;
   },
   revoke: (ticketId) => admin.post(`/api/admin/tickets/${ticketId}/revoke`),
@@ -299,7 +301,9 @@ export function audioHeard(page) {
   const fetched = [];
   page.on('response', (res) => {
     const m = /\/hls\/(a_[^/]+)\//.exec(new URL(res.url()).pathname);
-    if (m && res.status() === 200) fetched.push(m[1]);
+    // Segments are checked with the server each time (server/routes/media.js), so a
+    // rendition heard before can come back as a 304, which Firefox reports as such.
+    if (m && (res.status() === 200 || res.status() === 304)) fetched.push(m[1]);
   });
   return {
     mark: () => fetched.length,

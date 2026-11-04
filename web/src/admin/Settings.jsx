@@ -34,7 +34,8 @@ export default function Settings() {
   async function expireAll() {
     if (!window.confirm('Sign out every viewer and member? People will need to open their ticket link or sign in again. Tickets and screenings are not affected.')) return;
     const r = await action.run(() => api.post('/api/admin/sessions/expire-all'));
-    if (r) setNotice(`Signed out ${r.expired} browser session${r.expired === 1 ? '' : 's'}.`);
+    // The server counts only browsers that were still signed in.
+    if (r) setNotice(r.expired ? `Signed out ${plural(r.expired, 'browser')}.` : 'No browsers were signed in.');
   }
 
   return (

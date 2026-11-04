@@ -1,6 +1,7 @@
-// Upgrading a milestone 1 database to milestone 2, and a schema 6 database to migration 7
-// (milestone 3, slice 4), and refusing one written by newer code. docs/milestone-2.md:
-// "Data model" and "Existing rows"; docs/milestone-3.md and the slice 4 spec.
+// Upgrading a milestone 1 database to milestone 2, and a schema 6 database to
+// migration 7 (milestone 3, slice 4), and refusing one written by newer code.
+// docs/history/milestone-2.md: "Data model" and "Existing rows";
+// docs/history/milestone-3.md, slice 4.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -274,8 +275,8 @@ describe('ids and constraints', () => {
 });
 
 // ====================================================================== migration 7
-// Milestone 3, slice 4. Written from docs/milestone-3.md and the slice 4 spec, not from
-// the implementation. Upgrading a schema 6 database (production when slice 4 started):
+// Milestone 3, slice 4. Written from docs/history/milestone-3.md (slice 4), not from the
+// implementation. Upgrading a schema 6 database (production when slice 4 started):
 // people gain last_signed_in_at, filled in from their sessions, so "Last signed in"
 // survives the clean-up deleting old sessions; events gain indexes for Activity's
 // filters and the clean-up. Nothing else changes.

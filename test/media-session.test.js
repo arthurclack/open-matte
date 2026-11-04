@@ -1,5 +1,5 @@
-// Media Session's setting: milestone 3, slice 3. Written from docs/milestone-3.md and
-// the slice 3 spec, not from the implementation. Lock screens, Control Center and
+// Media Session's setting: milestone 3, slice 3. Written from docs/history/milestone-3.md
+// (slice 3), not from the implementation. Lock screens, Control Center and
 // Chrome's media controls show the film's title and poster unless the admin switches
 // every viewer to the cinema's name only. The player reads which from the site's
 // public settings, so it reaches viewers the way the branding does: /api/site,

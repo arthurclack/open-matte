@@ -5,15 +5,29 @@ import { defineConfig } from 'vite';
 
 // The web app lives in web/ and builds to dist/, which the server serves.
 // In development, Vite proxies API, media and image requests to the server on :3000.
+// The keys end in a slash because Vite matches them as prefixes: '/media' alone would
+// also send a film's page, such as /mediastan, to the server.
 const server = 'http://127.0.0.1:3000';
 
 export default defineConfig({
   root: 'web',
   plugins: [react(), thirdPartyLicenses()],
-  build: { outDir: '../dist', emptyOutDir: true },
+  build: {
+    outDir: '../dist',
+    emptyOutDir: true,
+    // hls.js gets a chunk of its own. It is most of the player's code and changes far
+    // less often than the rest, so an update to the app doesn't make every viewer
+    // download it again. It still loads only with the player. It's the full build, at
+    // about 575 kB, because the light one has no alternate audio or subtitles: hence
+    // the limit, above the 500 kB that Vite warns about otherwise.
+    chunkSizeWarningLimit: 600,
+    rolldownOptions: {
+      output: { codeSplitting: { groups: [{ name: 'hls', test: /node_modules[\\/]hls\.js[\\/]/ }] } },
+    },
+  },
   server: {
     port: 5173,
-    proxy: { '/api': server, '/media': server, '/artwork': server, '/branding': server },
+    proxy: { '/api/': server, '/media/': server, '/artwork/': server, '/branding/': server },
   },
 });
 

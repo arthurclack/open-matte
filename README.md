@@ -88,6 +88,10 @@ npm run build               # build the web app into dist/
 npm run dev                 # server on http://localhost:3000
 ```
 
+The project's `.npmrc` stops packages running install scripts. None of them needs
+one, and it means a compromised release can't run its code as you just by being
+installed.
+
 To work on the web app with hot reload, run `npm run dev:web` alongside and use
 http://localhost:5173. Vite serves the page itself there, without what the server on
 :3000 writes into it: the page has Open Matte's own colours and tab icon rather than
@@ -123,7 +127,8 @@ web/            React app: viewer pages, player, admin
 scripts/        encode.mjs (reference encoder), deploy.sh (copy to a server over SSH)
 deploy/         Docker Compose, Caddy and the backup-copy timer
 docs/           installing, access rules, import format, encoding, film information,
-                and the project's plans and roadmap
+                and the roadmap
+docs/history/   the project's own build record: milestone plans and device checks
 test/           node:test suites
 ```
 

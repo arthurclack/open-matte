@@ -15,7 +15,7 @@ import { rateCounter, rateLimit } from './ratelimit.js';
 import { createRetention } from './retention.js';
 import { accountRoutes } from './routes/account.js';
 import { adminRoutes } from './routes/admin.js';
-import { createRefusals, mediaRoutes } from './routes/media.js';
+import { createRefusals, createShare, mediaRoutes, shareLimits } from './routes/media.js';
 import { publicRoutes } from './routes/public.js';
 import { viewerRoutes } from './routes/viewer.js';
 import { createSessionStore } from './sessions.js';
@@ -33,6 +33,8 @@ export function createApp({
   dataDir = config.dataDir,
   metadataOptions = {},
   backupOptions = {},
+  // The films' folders' places and deadlines (media.js, shareLimits); tests pass their own.
+  mediaOptions = {},
   // Passkeys' relying party; tests pass their own.
   webauthn = { publicUrl: config.publicUrl, rpId: config.webauthnRpId, production: config.production },
   // { scale } multiplies every rate limit, for test suites that sign in many times.
@@ -66,7 +68,9 @@ export function createApp({
   // Refused media requests, in memory only, for the projection booth.
   const refusals = createRefusals();
   const booth = createBooth({ db, mediaDir, dataDir, backups, retention, refusals, startedAt });
-  const deps = { db, mediaDir, dataDir, settings, metadata, backups, sessions, access, rp, people, limit, branding, site, previews, retention, refusals, booth };
+  // Reading from the films' folders, which may be network storage that stops answering.
+  const share = createShare({ ...shareLimits(), ...mediaOptions });
+  const deps = { db, mediaDir, dataDir, settings, metadata, backups, sessions, access, rp, people, limit, branding, site, previews, retention, refusals, booth, share };
   app.locals.metadata = metadata;
   app.locals.backups = backups;
   app.locals.retention = retention;
@@ -90,6 +94,10 @@ export function createApp({
   // can't send those types without a CORS preflight, which this server never
   // answers, and the admin cookie is SameSite=Lax besides.
   app.use('/api', (req, res, next) => {
+    // What the API says is for this browser, as it is now: never kept in a cache.
+    // On a shared computer the next person could otherwise read the admin's ticket
+    // links, or someone's account, from the browser's cache after signing out.
+    res.set('Cache-Control', 'no-store');
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       const site = req.get('sec-fetch-site');
       if (site === 'cross-site' || site === 'same-site') return res.status(403).json({ error: 'cross-site' });
@@ -121,13 +129,21 @@ export function createApp({
     app.get('/index.html', sendPage);
     app.use('/assets', express.static(path.join(webDist, 'assets'), { immutable: true, maxAge: '1y', index: false }));
     app.use(express.static(webDist, { index: false }));
+    // A file a page asks for that this build doesn't have, such as a part of the
+    // app from before a deploy: the page would refuse index.html in its place, and
+    // a 404 lets it say so.
+    app.use('/assets', (req, res) => res.status(404).end());
     app.get('/{*splat}', sendPage);
   }
 
+  // An API error is { error }: a kebab-case code the page turns into words, or, for
+  // what only the admin reads, a sentence it shows as it is.
   app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
     // express.raw refusing an upload over its limit, before the route runs.
     if (err.type === 'entity.too.large' && isUpload(req)) return res.status(413).json({ error: 'That image is larger than 1 MB.' });
+    // A body that isn't JSON gets a code, not the parser's own words.
+    if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'bad-json' });
     const status = err.status || err.statusCode || 500;
     // A deliberate 503 (passkeys unavailable) says why; anything else over 500 doesn't.
     const deliberate = status === 503 && err.status === 503;

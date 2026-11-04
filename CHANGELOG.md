@@ -30,17 +30,52 @@ public release.
    another domain, leaves every passkey useless. Without it, passkeys are switched off
    and say why in the log, and everything else, ticket links included, works as
    before.
-3. **Rename any film folder called `account`.** The name now belongs to the site, like
-   `admin` and `api`, and a scan skips a folder with it.
-4. **If you changed your copy of `deploy/compose.yml` or `deploy/Caddyfile`**, carry
-   your changes over to the new ones. Both have changed.
+3. **Check your film folders.** Rename any called `account`: the name now belongs to
+   the site, like `admin` and `api`, and a scan skips a folder with it. Move any that
+   is a symlink into the media folder itself: a scan now skips a symlink in a film
+   folder's place, and a film imported from one shows as missing.
+4. **If you changed your copy of `deploy/compose.yml` or the Caddyfile**, carry your
+   changes over to the new ones. Both have changed, and the Caddyfile has moved from
+   `deploy/Caddyfile` to `deploy/caddy/Caddyfile`.
 5. **Check any `BACKUP_HOUR`, `BACKUP_KEEP_DAYS` or `BACKUP_KEEP_MONTHS` lines in
    `deploy/.env`.** Docker ignored them until now. From this release they apply, and
    the first backup after the update deletes the backups they don't keep. Empty them
-   to keep the defaults: 4 (UTC), 14 days and 12 months.
-6. **Update.** Migrations run when the new code starts, and take the database to
+   to keep the defaults: 4 (UTC), 14 days and 12 months. A value out of range now
+   stops the app at start, and the log says which: `BACKUP_HOUR` must be 0 to 23,
+   `BACKUP_KEEP_DAYS` at least 1, and `BACKUP_KEEP_MONTHS` 0 or more. Keep
+   `BACKUP_PATH` on the server's own disk; for network storage, use the
+   [copy timer](docs/deploying.md#keeping-a-copy-off-the-server).
+6. **If you set `TRUST_PROXY`** (in `deploy/compose.override.yml`, say), check it. It
+   now takes how many proxies stand in front of the app, such as `1`, or their
+   addresses and subnets. Anything else, `true` and `false` included, stops the app
+   at start.
+7. **Make the data and backups folders yours alone.** They hold ticket links that work
+   for whoever reads them. The app now makes its files readable by itself only, but
+   the ones it made before are readable by every account on the server until you run,
+   on the server (with your own paths, if `DATA_PATH` or `BACKUP_PATH` differ):
+
+   ```bash
+   chmod 700 /srv/open-matte/data /srv/open-matte/backups
+   ```
+
+   Both should belong to user 1000, the app's user in its container, as in
+   [The folders](docs/installing.md#the-folders): `ls -ln /srv/open-matte` shows it.
+
+8. **Update.** Migrations run when the new code starts, and take the database to
    schema 7. **Status** in the admin shows the schema it's on, at the foot of the
-   page. The update signs you out of the admin once.
+   page. The update signs you out of the admin once. With git, the steps in
+   [docs/deploying.md](docs/deploying.md#updating-with-git) now end with a line that
+   has Caddy load its Caddyfile; `scripts/deploy.sh` does that itself.
+
+   Until the update has started the new Caddy, the one running reads the old
+   `deploy/Caddyfile`, and can't start again without it. `scripts/deploy.sh` leaves
+   that file on the server for this release (delete it afterwards, if you like), but
+   a git update removes it. So if a git update stops before it finishes, a failed
+   build say, move Caddy over at once, in `/srv/open-matte/app/deploy`:
+
+   ```bash
+   docker compose up -d --no-build --no-deps caddy
+   ```
 
 About a minute after the new code starts, its first clean-up deletes progress reports
 over 30 days old, other events over 12 months old, and browser sessions that ended
@@ -157,23 +192,185 @@ The public release (milestone 3, November 2026):
 
 ### Changed
 
-These matter only if you ran an earlier deploy:
+These matter only if you ran an earlier deploy.
+
+For viewers:
 
 - A screening held by a browser that can no longer play it (signed out, its person
   disabled, its ticket now someone else's) can be taken over at once, instead of after
   about 75 seconds. That includes tickets for anyone, after **Sign out every viewer**.
+- Pressing **Play**, or **Watch here instead**, is limited to 60 times every 10
+  minutes per visitor, so a script can't press it in a loop.
+- hls.js, most of the player's code, is a file of its own, so an update to the rest of
+  the app no longer makes every viewer download it again.
+
+For the admin:
+
+- A new `ADMIN_PASSWORD` signs every browser out of the admin. Before, one already
+  signed in stayed signed in for up to 12 hours.
+- Activity ends with **Show older** instead of stopping at the last 300 events.
+- Pressing Play again in the browser that already holds a screening is recorded at
+  most once every 5 minutes. A new screening, and a move to another device, are
+  always recorded.
+- **Reset to film.json** undoes only your own edits: what TMDB filled in stays. A
+  value you took with **Find details…** in place of `film.json`'s counts as your
+  edit, so it goes back. The button shows only when you've edited something.
+- A scan skips a folder with neither a `film.json` nor `hls/master.m3u8` in it,
+  instead of making it a film and looking it up on TMDB, and skips a symlink in a film
+  folder's place.
+- A file `film.json` names must be spelled exactly as in the folder, as a Linux
+  server's disk requires. On a Mac, which doesn't mind, a scan now warns; on Linux,
+  the error names the file the folder does have.
+- After the startup scan, the server log names each film and field where `film.json`
+  changed something you'd edited. Your version is kept, as before.
+- The projection booth shows repeated refusals as one row with a count, keeps those
+  from browsers with no session (no cookie, or one that has expired or was made up)
+  to the latest five, and also lists requests the films' folder didn't answer in
+  time.
+
+For installers:
+
 - Changes through the API are refused when the browser says they come from another
   site or from another subdomain of this one (`Sec-Fetch-Site: cross-site` or
   `same-site`), since passkeys can belong to the parent domain. Pages send no
   Referer, so a ticket's address goes no further.
 - Rate limits count an IPv6 visitor by its /64.
-- A new `ADMIN_PASSWORD` signs every browser out of the admin. Before, one already
-  signed in stayed signed in for up to 12 hours.
 - In Docker, `BACKUP_HOUR`, `BACKUP_KEEP_DAYS` and `BACKUP_KEEP_MONTHS` in
   `deploy/.env` now reach the app. Before, `compose.yml` didn't pass them on, and the
   defaults applied whatever they said.
 - The database refuses to open when newer code wrote it, so starting older code
   without a restore fails at once instead of misreading tickets.
-- Activity ends with **Show older** instead of stopping at the last 300 events.
 - `npm test` runs the test files by pattern, so it works on Node 24, which the
   container uses.
+- The Caddyfile is now `deploy/caddy/Caddyfile`, and Caddy sees its folder rather
+  than the file, so it can load a new one: `scripts/deploy.sh` has it do so, and so
+  does the last line of the git update. A Caddyfile Caddy refuses fails the deploy, and
+  Caddy carries on with the one it had.
+- Every backup of the last three days is kept, **Back up now**'s included, before the
+  daily and monthly rules apply (of the last day or two, if `BACKUP_KEEP_DAYS` is 1 or
+  2). So a second backup on the same day no longer deletes the one you made before an
+  update, on the server or in the off-server copy.
+- A backup setting out of range stops the app at start, saying which:
+  `BACKUP_HOUR` outside 0 to 23, `BACKUP_KEEP_DAYS` below 1 (0 deleted each backup as
+  it was made), or a negative `BACKUP_KEEP_MONTHS`.
+- `TRUST_PROXY` takes how many proxies stand in front of the app (`1` used to be read
+  as the address 0.0.0.1), or their addresses and subnets. Empty means the default.
+  Anything else, `true` and `false` included, stops the app at start.
+- `scripts/deploy.sh` leaves out only the top-level `data`, `media` and `dist`
+  folders, so a folder with one of those names deeper in the code is sent.
+- The encoder refuses an output folder whose name can't be a film's, since the name
+  becomes the film's address, and warns when a `--ladder` has no H.264 rung.
+
+### Fixed
+
+Found in a review before the release.
+
+For viewers:
+
+- The name menu (Your tickets, Your account, Sign out) opens over the player, not
+  behind the video.
+- A page left open from before an update no longer goes blank when Play is pressed:
+  it says the site may have just been updated, and offers Reload, after which the
+  screening shows as Resume. A mangled address shows the front page or "nothing
+  showing", and any other failure says so with a way back, never a blank page.
+- "Start watching by" shows its time as well as its day, so it's right in another time
+  zone, and once it has passed, its year too. "Resumable until" is never later than
+  the ticket's own expiry, on the film's page, Your tickets and every line of the
+  admin's ticket page. Before Play, a ticket that ends sooner than the resume window
+  says you can come back to it until the ticket expires, not for 48 hours.
+- When a screening ends mid-film (its resume window closes, or you give it back), the
+  player says the screening has ended, not that the ticket is no longer valid, and the
+  page offers **Play** again if the ticket has screenings left. After any other stop
+  the server explains, it offers **Play** or **Resume** if the ticket still allows
+  them. After a takeover, a refused request says the film is playing on another
+  device, with **Watch here instead**, rather than offering Playback help.
+- A browser signed out while it plays is told so, and offered Sign in. A Play that
+  fails for any other reason, such as a lost connection, says so instead of doing
+  nothing, and the film's page shows the screening Play opened. The page reading
+  itself again like this isn't logged as another open.
+- The tab is named after the film on its page, and after the cinema again once you
+  leave.
+- After a passkey attempt the browser refuses, an app's built-in browser offers
+  **Copy link**, to open it in Safari or Chrome, on the setup page too. WeChat's and
+  Android's plain WebView count as built-in browsers.
+- A film you re-encode never plays old pieces from a browser's cache: the browser
+  checks with the server before reusing any part of a film, instead of keeping it for
+  a day. A poster or backdrop that failed to load is tried again, not remembered as
+  failed for a week.
+- Network storage for the films that stops answering stops playback, with an error
+  players retry, not the whole site. A request waits up to 5 seconds for the films'
+  folder, then gets a 503.
+- No one can take all of the films' places by asking for many files and reading them
+  slowly or not at all. One browser holds 4 at most, posters and backdrops a quarter
+  of them, so a link preview's poster never takes a player's place, and a download
+  that has sent nothing for 20 seconds is cut off.
+
+For the admin:
+
+- **Sign out** shows the sign-in form only once the server has signed the browser out.
+  If it couldn't, the admin stays and says so.
+- The sign-in form tells a wrong password, too many tries and a lost connection apart.
+- A ticket's page counts and lists only browsers still signed in as holding or waiting
+  for it, and **Sign out every viewer** counts only browsers that were signed in.
+- The admin's API refuses values of the wrong type with a 400 instead of misreading
+  them: the text `"false"` no longer publishes a film or ticks a switch, and a TMDB key
+  that isn't text no longer removes the saved one. A body that isn't JSON gets
+  `bad-json`. Giving a ticket to someone who's gone or disabled says so in words.
+- A title that shares a word with release names, such as *Charlotte's Web*, is no
+  longer taken for a file name, so TMDB doesn't replace it and matching works. A
+  title you edited is never replaced by matching.
+- A `tmdbId` added to `film.json` after the first lookup is applied, which settles a
+  film waiting for you to choose its match.
+- A TMDB image that stalls or breaks off says "Couldn't download the image from TMDB."
+  instead of failing with a server error.
+
+For installers:
+
+- The reference encoder picks its ladder from the picture's width as well as its
+  height, so a cropped widescreen source (1920×800, say) gets the 1080p ladder, and a
+  4K one keeps its 4K rung. `--help` no longer prints a line of code.
+- If the app stops in the middle of a backup, the half-made copy is removed when it
+  next starts.
+- The restore guide says which tickets come back as they were with an older backup
+  (revoked ones work again, kept and given ones are for anyone again), and how to find
+  what to redo.
+- `npm test` leaves nothing behind in the system's temp folder. With `npm run
+  dev:web`, a film whose name starts with `api`, `media`, `artwork` or `branding`
+  loads when you reload its page.
+
+### Security
+
+- Answers from `/api` are never cached, and a page brought back with Back reloads. So
+  after someone signs out on a shared computer, Back shows the signed-out page, not
+  their account, the admin or ticket links.
+- **Sign out**, **Sign out everywhere** and the "You already have a passkey" page
+  forget a setup link the tab was keeping. The browser's own history still lists every
+  link opened in it, as [docs/access.md](docs/access.md) now says.
+- `/media` answers a film that doesn't exist as it answers one you can't play (403),
+  so it no longer tells anyone which films there are, drafts included, and such
+  probes no longer fill the projection booth.
+- A browser that sends two different session cookies, as a site under the same parent
+  domain could arrange, is treated as signed out instead of using the last one.
+- A settings change refuses any name that isn't a setting. Names such as `toString`
+  and `constructor` used to be stored and sent to every visitor, and `__proto__` got
+  a 500.
+- Setting up a passkey refuses an over-long credential id, and keeps only the
+  transport names browsers use.
+- Requests built to break the server (a ticket code or password that isn't text, a
+  position that isn't a number, a NUL byte in a media address) get a 4xx, not a 500
+  with a stack trace in the log.
+- TMDB images are downloaded without following redirects, read no further than 15 MB,
+  and judged by their bytes rather than the type the response claims.
+- The encoder checks the language tags it reads from a source file, and the names given
+  with `--audio`, so a crafted file can't make it write outside the output folder.
+- The app makes its files readable by its own user only: the database, backups,
+  artwork and branding. Existing installs need the `chmod` in step 7 above.
+- In production on `https`, cookies are always marked Secure, even when the proxy
+  isn't trusted and a request looks like plain HTTP. `COOKIE_SECURE` still overrides
+  it.
+- `scripts/deploy.sh` never sends a database file (`*.db`) from your copy of the code,
+  such as a backup you downloaded, and the image build leaves them out too.
+- `npm install` runs no package's install scripts (`.npmrc`, and the same in the
+  Dockerfile), and the running image has no `npm` or `npx`. Dependabot proposes
+  dependency updates once a week; its security alerts need turning on in the
+  repository's settings.

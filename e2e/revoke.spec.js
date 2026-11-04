@@ -1,8 +1,11 @@
 // Revoke → refused: a ticket revoked while its film plays stops the player at
 // the next request it makes, a media request from that browser is refused, and
-// the lock screen forgets the film. Every browser; skips where the browser
-// can't decode H.264 and AAC, since it needs the film playing.
-import { admin, expect, film, heartbeats, media, playbackSupport, test, unique } from './fixtures.js';
+// the lock screen forgets the film. A screening given back while it plays stops
+// the same way, and the player says the screening ended, not that the ticket is
+// gone; the page then offers Play, which starts a new screening. Every browser;
+// skips where the browser can't decode H.264 and AAC, since it needs the film
+// playing.
+import { admin, expect, film, heartbeats, media, playButton, playbackSupport, test, unique } from './fixtures.js';
 
 // What the player says when the server refuses it: the ticket is gone (a
 // progress report), or the media itself (a playlist or segment).
@@ -53,4 +56,47 @@ test('revoking a ticket mid-film stops the player and refuses its media', async 
     if (!after.supported) testInfo.annotations.push({ type: 'skipped check', description: 'no Media Session in this browser' });
     else expect(after.metadata).toBeNull();
   });
+});
+
+test('giving a screening back mid-film stops the player, which says the screening ended', async ({ page }, testInfo) => {
+  const ticket = await admin.issueTicket({ label: unique('Give back', testInfo) });
+  const reports = heartbeats(page);
+
+  await page.goto(`/t/${ticket.code}`);
+  await expect(page.getByRole('heading', { level: 1, name: film.title })).toBeVisible();
+  const support = await playbackSupport(page);
+  test.skip(!support.canPlay, support.why);
+
+  const started = page.waitForResponse((r) => r.url().endsWith(`/api/films/${film.slug}/screenings`) && r.request().method() === 'POST');
+  await page.getByRole('button', { name: /Play/ }).click();
+  const { screeningId, masterUrl } = await (await started).json();
+  await media.playedPast(page, 1);
+  await expect.poll(() => reports.filter((r) => r.status === 200).length).toBeGreaterThan(0);
+
+  await admin.post(`/api/admin/screenings/${screeningId}/void`);
+  // As above: pausing sends a progress report at once.
+  await page.locator('video').evaluate((v) => {
+    if (v.paused) v.play().catch(() => {});
+    else v.pause();
+  });
+  await expect.poll(() => reports.filter((r) => r.status !== 200).map((r) => r.status)).toContain(409);
+  await expect.poll(() => page.evaluate(() => window.__playerMessages)).toContain('This screening has ended.');
+  expect(await page.evaluate(() => window.__playerMessages)).not.toContain('This ticket is no longer valid.');
+  expect(await page.evaluate((url) => fetch(url).then((r) => r.status), masterUrl)).toBe(403);
+  // The ticket is still good: the page offers a new screening, and Play starts it,
+  // from the beginning.
+  await expect(page.getByText('Pressing Play starts a screening.', { exact: false })).toBeVisible();
+  await expect(playButton(page)).toHaveText('▶ Play');
+  await expect(playButton(page)).toBeEnabled();
+  const again = page.waitForResponse((r) => r.url().endsWith(`/api/films/${film.slug}/screenings`) && r.request().method() === 'POST');
+  await playButton(page).click();
+  const next = await again;
+  expect(next.status()).toBe(200);
+  const { screeningId: newId, position } = await next.json();
+  expect(newId).not.toBe(screeningId);
+  expect(position).toBe(0);
+  await media.playedPast(page, 1);
+  // Playing again, the panel tells of the new screening and offers no Play.
+  await expect(page.locator('.ticket-panel')).toContainText('Your screening is open until');
+  await expect(playButton(page)).toHaveCount(0);
 });

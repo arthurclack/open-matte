@@ -50,7 +50,41 @@ test('assets are served and cached for good', async () => {
   assert.match(res.headers.get('cache-control'), /immutable/);
 });
 
+test("a file the build doesn't have is a 404, not the app", async () => {
+  // A part of the app from before a deploy: the page must be told it's gone, not be
+  // handed index.html to run as a script.
+  for (const p of ['/assets/Player-OLDHASH.js', '/assets/index-OLDHASH.css', '/assets/nope/deep.js']) {
+    const res = await fetch(base + p);
+    assert.equal(res.status, 404, p);
+    assert.doesNotMatch(res.headers.get('content-type') ?? '', /html/, p);
+    assert.doesNotMatch(await res.text(), /<title>/, p);
+  }
+});
+
+test('nothing the API answers is kept in a cache', async () => {
+  // Answers, refusals and errors alike: on a shared computer, the next person mustn't
+  // read the last one's from the browser's cache.
+  const answers = [
+    await fetch(`${base}/api/me`),
+    await fetch(`${base}/api/admin/session`),
+    await fetch(`${base}/api/nope`),
+    await fetch(`${base}/api/admin/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"password":"no"}' }),
+    await fetch(`${base}/api/signout`, { method: 'POST', body: 'not json' }),
+  ];
+  assert.deepEqual(
+    answers.map((r) => r.status),
+    [200, 401, 404, 401, 415],
+  );
+  for (const r of answers) assert.equal(r.headers.get('cache-control'), 'no-store', r.url);
+  // Pages are still revalidated rather than never stored, so Back stays quick.
+  assert.equal((await fetch(`${base}/`)).headers.get('cache-control'), 'no-cache');
+});
+
 test('unknown API and media paths are not the app', async () => {
   assert.equal((await fetch(`${base}/api/nope`)).status, 404);
-  assert.equal((await fetch(`${base}/media/nope/master.m3u8`)).status, 404);
+  // No such film is refused as any film you may not have (boundaries.test.js).
+  const media = await fetch(`${base}/media/nope/master.m3u8`);
+  assert.equal(media.status, 403);
+  assert.equal(await media.text(), '');
+  assert.equal((await fetch(`${base}/media/nope/notes.txt`)).status, 404);
 });

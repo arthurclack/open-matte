@@ -5,8 +5,9 @@ follows: `server/access.js` implements the ticket rules, `server/people.js` and
 `server/webauthn.js` people and passkeys, and the tests in `test/` check them.
 
 This page covers the two kinds of ticket, screenings, people and passkeys, and what
-is recorded about viewers and for how long. The checks made on real phones,
-computers and TVs are listed in [device-checks.md](device-checks.md).
+is recorded about viewers and for how long. The checks the project made on real
+phones, computers and TVs are in its build record,
+[history/device-checks.md](history/device-checks.md).
 
 ## The records
 
@@ -41,7 +42,9 @@ Each ticket has, all optional:
 
 - **Screening limit**: how many screenings it allows.
 - **Start by**: if the first screening hasn't started by this date, the ticket expires.
-  Once it has started, the deadline no longer matters.
+  Once it has started, the deadline no longer matters. The day ends at midnight where
+  you are when you set it. A friend's film page shows the deadline with its time, in
+  their own time zone, so a friend abroad sees when it really is.
 - **Days after first play**: the ticket expires this long after the first screening starts.
 - **Revocation**: immediate, and can be undone.
 
@@ -205,13 +208,16 @@ On the ticket's page you can also:
 - **Let anyone with the link use it**: the ticket is for anyone again, not keepable
   unless you tick the box again. The person loses it from their next request (an open
   screening can then be taken over at once), and browsers that opened the link get it
-  back.
+  back, if they haven't been signed out since.
 - **Give it to a person** (or to someone else): only they, signed in, can use it from
   the next request. You can do this with any ticket, kept or not; browsers that opened
   the link lose it and are told it has been kept. A ticket you gave shows as "Only Sam,
   signed in"; one Sam kept shows as "Only Sam · kept from a link".
 - See which browsers opened the link before it was kept or given, and **Forget it in
   these browsers**, so a release gives it to nobody until the link is opened again.
+  Only browsers still signed in are listed and counted, here and under **Browsers
+  holding this ticket**: one signed out since (by its viewer, by you, or by **Sign
+  out every viewer**), or whose session expired, can't use the ticket or get it back.
 
 Revoking a kept ticket also forgets those browsers, as it does for any ticket.
 
@@ -247,18 +253,25 @@ the page says they don't have a ticket and to ask whoever runs the cinema.
 | Open a ticket link | Shows the film page (for a ticket for one person, once they're signed in). No screening is used. |
 | Press Play | Resumes the ticket's open screening, or starts a new one if the limit allows. |
 | Pause, refresh, reconnect | Continues the same screening. |
-| Switch device | The new device takes the screening over once the old one has paused, closed the tab, or gone quiet for about 75 seconds. Two devices can't play one screening at once. |
+| Switch device | The new device takes the screening over once the old one has paused, closed the tab, or gone quiet for about 75 seconds. Two devices can't play one screening at once. The next time the old device asks for anything, playing or paused, it says the screening is playing on another device and offers **Watch here instead**. |
 | The device playing can no longer play: it was signed out (by its viewer or by you), its session expired, its person was disabled, or **Sign out browsers** took the ticket out of it | Another device can take the screening over at once, without waiting. This covers link tickets too, for example after **Sign out every viewer**. |
 | Two devices signed in as the same person, with a ticket for them | One at a time, with the same takeover rules as two browsers that opened the same link. |
 | Reach the limit | No new screenings; an open one can still be resumed. |
+| The resume window ends while the film is playing | Playback stops at the next request, and the player says the screening has ended. The page offers Play again: it starts a new screening, from the beginning, if the limit allows. |
+| You give a screening back (**Give back**, on the ticket's page), say because playback failed | It no longer counts towards the limit and stays in the history. If it's playing, playback stops at the next request and the player says the screening has ended. The page offers Play again, which starts a new screening, from the beginning. The ticket's expiry clock keeps running from the first play. |
 | Revoke the ticket | Page and media requests fail from the next request on. |
 | Unpublish the film | The page disappears and playback under way stops, for every ticket. Publishing again restores both; open screenings keep their place, and their resume windows keep running meanwhile. |
 | The film's folder goes missing, or a scan finds errors in it | The page stays and says the film isn't available right now; nothing plays and no screening can start. Resume windows keep running meanwhile. |
 | The ticket is kept, given or released | Its open screening stays as it is. A browser that can no longer use the ticket stops on its next request, and whoever can use it now can take the screening over at once. |
 
 A screening can be resumed for a fixed window after it starts: **48 hours** by
-default, set in the admin under Settings. Changing it affects new screenings only.
-Ticket expiry always wins over a resume window that is still running.
+default, set in the admin under Settings (from 1 to 720 hours). Changing it affects
+new screenings only. The window doesn't wait for the film to end: resume a screening
+an hour before its window closes, and it stops an hour later. Ticket expiry always
+wins over a resume window that is still running, so the film page, Your tickets and
+the ticket's page in the admin say a screening can be resumed until whichever ends
+first. Before Play, the film page of a ticket that ends sooner than the window says
+you can come back to it until the ticket expires.
 
 Checking the limit and creating the screening happen in one write transaction,
 so two simultaneous presses of Play can't both take the last screening.
@@ -267,7 +280,10 @@ A browser can have more than one ticket it may use for a film: say a link ticket
 opened and one for the person it's signed in as. Then the ticket in the best state
 wins; among those, one with an open screening this browser could resume now, rather
 than one another browser is busy playing; then the person's own ticket; then the
-oldest. The film page, Play and Your tickets all go by the same choice.
+oldest. The film page, Play and Your tickets all go by the same choice. So a ticket
+that another browser is busy playing can still be chosen ahead of one with no open
+screening, if it comes first in that order. Play then says the screening is playing
+on another device, until it's paused there or goes quiet.
 
 ### On the lock screen
 
@@ -301,10 +317,32 @@ So knowing a file's URL is not enough, nor is having the link of a ticket for on
 person without being signed in as them, nor holding a ticket without pressing
 Play. A ticket for one film unlocks nothing of another, and a file in a
 film folder that is really a symlink to somewhere outside it is never served.
-Media responses are marked `private`, so only the viewer's own browser caches them.
+A film that doesn't exist is refused exactly as one you may not have, so asking
+doesn't tell anyone which films you've imported, published or not. Whether a
+film's folder is missing is only said to a browser that may play it.
 Revoking a ticket, signing a browser out, disabling a person or removing a passkey
 stops future requests, playlists and segments included; none of them can take back
 what is already in the player's buffer (typically under a minute of video).
+
+Media responses are marked `private`, so only the viewer's own browser caches them.
+A film folder's poster and backdrop keep for a day: their address changes when the
+image does. Playlists, segments, audio and subtitles are checked with the server
+each time (an unchanged file costs a short "not modified" answer), so encoding a
+film again into its folder never leaves a browser mixing old and new.
+
+If the films' folder stops answering, as network storage can, a request that has
+had no answer within 5 seconds gets an error that players retry. The films' files
+only ever use half of the threads the app reads files with, so the pages, the
+admin and the booth keep working meanwhile.
+
+One browser can't take all of those places, however many files it asks for and
+however slowly it reads them. In the Docker image there are 16. One browser holds 4
+at most, enough for a player's video, audio and subtitles, and its next request waits
+for one of its own to finish. Posters and backdrops take 4 at most, so the poster of a
+link preview, which anyone with the preview's address can fetch, never takes a
+player's place, and one address takes no more of them than one browser. A download
+that has sent nothing for 20 seconds, because the browser stopped reading it, is cut
+off and gives its place back.
 
 Outside `/media/`, two kinds of image need no session. A ticket's preview poster,
 `/poster/<id>.<mac>`, follows the rule under [Link previews](#link-previews). The
@@ -355,8 +393,13 @@ permanent way in.
 
 Passkeys need a real browser: the built-in browsers of some apps (Instagram,
 Facebook and the like) don't handle them, so the person may need to open the link in
-Safari or Chrome. TV browsers usually can't use them either, so for watching on a
-TV's own browser, issue a ticket for anyone with the link.
+Safari or Chrome. The page knows the common ones and says so straight away, with
+**Copy link**. Any other browser that refuses a passkey gets the same advice under
+its message, since an app's browser the page doesn't know refuses just as a
+cancelled attempt does. On a setup link, Copy link still copies the whole link,
+though its secret part has already left the address. TV browsers usually can't use
+passkeys either, so for watching on a TV's own browser, issue a ticket for anyone
+with the link.
 
 ## Setup and recovery links
 
@@ -429,6 +472,16 @@ Creating a passkey from a link signs in the same way. Then:
 | Sign out | Cookie cleared; session ended | Forgotten (the links still work if opened again); the screening is freed | Unaffected |
 | Sign out everywhere, from the account page | Cookie cleared; session ended | Forgotten; the screening is freed | Signed out too, and playback stops on their next request |
 
+Signing out also makes the tab forget a setup or recovery link it was keeping, as
+does the page that says this device already has a passkey. So the next person at a
+shared computer can't press Back and finish someone else's link.
+
+Signing out doesn't touch the browser's own history, though. Every ticket link and
+setup link opened in that browser is still listed there, as it was opened. A ticket
+for anyone works again if it's opened from there, and so does a setup link that
+hasn't been used. So send setup links to the person's own phone or computer, and
+suggest a private window on a borrowed one.
+
 **Your account** (`/account`, in the menu under their name) shows a signed-in person
 their passkeys (Synced or This device only, when and where each was added, whether
 from the setup link or a recovery link, when last used, and which one signed in
@@ -439,7 +492,17 @@ signed in as them, this one included; their passkeys still work. Adding or remov
 a passkey is still something they ask you for.
 
 You can sign people out too (below). Whichever way a browser is signed out, it
-forgets the link tickets it opened, and a screening it held is freed at once.
+forgets the link tickets it opened, and a screening it held is freed at once. A
+film playing there stops on its next request, and the page says the browser has
+been signed out, with a way to sign in again.
+
+After signing out, the pages the browser showed before don't come back, which
+matters on a shared computer. The API's answers are never kept in the browser's
+cache, and a page that Back or Forward brings back from the browser's memory loads
+afresh, so it shows only what is true now. That goes for the admin too. Sign out,
+the viewer's and the admin's, only looks done once the server has ended the session:
+if the server can't be reached, the page says so and stays signed in, so you can try
+again.
 
 Tickets for the person themselves aren't held by any browser: every browser signed
 in as them can use them, and a browser that signs out simply can't any more.
@@ -497,12 +560,28 @@ included.
   for the admin's, so a new `ADMIN_PASSWORD` signs every admin browser out. Admin
   sign-out, session expiry, ticket revocation, signing a person out and signing out
   every viewer (in Settings) take effect on the server, from the next request.
+- The cinema sets one session cookie in a browser, and one admin cookie. A browser
+  that sends two different values for either is treated as having neither. The
+  other one can only come from a site on another name under the same parent
+  domain, and that site chooses whether it comes first or last, so neither can be
+  trusted. Such a site can stop a browser using the cinema until its cookie expires
+  or is cleared. It can also give its own session to a browser that has no cookie
+  from the cinema, and it can make that so: browsers keep only so many cookies for
+  one parent domain, so by setting enough of its own it can crowd the cinema's out.
+  The browser then acts as that site's session, and ticket links opened in it work
+  for whoever runs that site too, until the browser next signs in. Only `__Host-`
+  cookie names (planned) or a domain of the cinema's own rule this out. So keep
+  every name under the cinema's parent domain in your own hands (see
+  [Choices you make once](installing.md#choices-you-make-once)).
 - Setup and recovery link tokens are 256 random bits. The database keeps only their
   SHA-256 hash, so a link can't be shown again, and a leaked database or backup
   holds no usable link.
 - For each passkey the database keeps its public key and credential id, neither of
   which can be used to sign in. Credential ids go only to whoever holds a link for
   that person (so their device can tell it already has one), never to anyone else.
+  A passkey whose credential id is longer than the standard's 1023 bytes is
+  refused. Of the ways to reach it that the browser reports (USB, NFC, this device
+  and so on), only the ones the standard names are kept and sent back.
 - Challenges, the one-off values a passkey signs, live in memory only. Each lasts
   5 minutes, is taken once whatever the outcome, and is tied to its purpose (and a
   setup challenge to its link), so a response can't be replayed. A restart forgets
@@ -512,9 +591,9 @@ included.
 - A passkey response must come from this site's own address, exactly (`PUBLIC_URL`;
   in development, `http://localhost` on any port), and one made inside another
   site's frame is refused.
-- Opening ticket links and their link previews, setup and recovery links, signing
-  in and the admin password are rate-limited per visitor. An IPv6 visitor counts by
-  its /64.
+- Opening ticket links and their link previews, pressing Play, setup and recovery
+  links, signing in and the admin password are rate-limited per visitor. An IPv6
+  visitor counts by its /64.
 - The API accepts changes only as JSON (apart from the logo and tab icon you upload
   in the admin, which are sent as the image itself), and refuses them when the
   browser says they come from another site or from another subdomain of this one
@@ -536,8 +615,11 @@ included.
 
 Viewing:
 
-- **opened**: the film page was loaded with a ticket (at most once per 30 minutes per browser)
-- **play**: a screening started or resumed
+- **opened**: the film page was loaded with a ticket (at most once per 30 minutes per
+  browser; the page reading itself again after Play, or once the player stops, isn't
+  an open)
+- **play**: a screening started or resumed (pressing Play again in the same browser
+  is logged at most once per 5 minutes; moving to another device always is)
 - **heartbeat**: playback position, reported every 30 seconds while playing and
   logged every 5 minutes
 - **finished**: playback reached 92% of the running time (decided on the server)
@@ -587,11 +669,16 @@ told on the film page that progress is recorded. This is operational information
 not proof that anyone watched.
 
 **Refused media requests** aren't stored in the database. Besides a line in the
-server's log, the last 50 are kept in memory for **Status** in the admin (the
+server's log, the latest 50 are kept in memory for **Status** in the admin (the
 projection booth): the time, status and reason, the kind of file (playlist, segment,
-subtitles, artwork or other), the film and the coarse device label. They hold no IP
-address, cookie, session, ticket, person or full address, and a restart forgets
-them. Opening the booth records nothing.
+subtitles, artwork or other), the film and the coarse device label. Repeats of the
+same refusal share a row, with how many there were and when the last was. Requests
+with no session the server knows (no cookie, or one that has expired, been signed
+out or was made up) can come from anyone, so they keep to the latest five rows:
+however many there are, they can't push out the others. A request for a film that
+doesn't exist isn't kept or logged. They hold no IP address, cookie, session,
+ticket, person or full address, and a restart forgets them. Opening the booth
+records nothing.
 
 ### How long it's kept
 

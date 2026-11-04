@@ -15,8 +15,10 @@ import { guessTitleYear, looksLikeReleaseName } from '../titles.js';
 const bad = (message, status = 400) => Object.assign(new Error(message), { status });
 
 function passwordMatches(given) {
+  // Only a string can be the password. Anything else is wrong, not a server error.
+  if (typeof given !== 'string') return false;
   // Compare digests so the comparison is constant-time whatever the length.
-  const a = crypto.createHash('sha256').update(String(given ?? '')).digest();
+  const a = crypto.createHash('sha256').update(given).digest();
   const b = crypto.createHash('sha256').update(config.adminPassword).digest();
   return crypto.timingSafeEqual(a, b);
 }
@@ -27,7 +29,17 @@ const optInt = (v, name, { min = 0, max = 100000 } = {}) => {
   if (!Number.isInteger(n) || n < min || n > max) throw bad(`${name} must be a whole number from ${min} to ${max}`);
   return n;
 };
-const optText = (v, max = 10000) => (v === null || v === undefined || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
+// Text, or nothing. Anything else is refused: an object would be stored as "[object Object]".
+const optText = (v, max, name) => {
+  if (v === null || v === undefined) return null;
+  if (typeof v !== 'string') throw bad(`${name} must be text`);
+  return v.trim() === '' ? null : v.trim().slice(0, max);
+};
+// A switch is true or false. Anything else is refused: the string "false" would turn it on.
+const bool = (v, name) => {
+  if (typeof v !== 'boolean') throw bad(`${name} must be true or false`);
+  return v;
+};
 const optTime = (v, name) => {
   if (v === null || v === undefined || v === '') return null;
   const n = Number(v);
@@ -191,27 +203,35 @@ export function adminRoutes(deps) {
     args.push(JSON.stringify(sources));
     if ('sortOrder' in b) sets.push('sort_order = ?'), args.push(optInt(b.sortOrder, 'Sort order', { min: -100000 }) ?? 0);
     if ('published' in b) {
-      if (b.published && (f.media_status === 'error' || f.media_status === 'missing')) {
+      if (bool(b.published, 'published') && (f.media_status === 'error' || f.media_status === 'missing')) {
         throw bad("This film's media has errors. Fix the folder and scan again before publishing.");
       }
       sets.push('published = ?'), args.push(b.published ? 1 : 0);
     }
-    if ('memberVisible' in b) sets.push('member_visible = ?'), args.push(b.memberVisible ? 1 : 0);
+    if ('memberVisible' in b) sets.push('member_visible = ?'), args.push(bool(b.memberVisible, 'memberVisible') ? 1 : 0);
     if (sets.length) db.prepare(`UPDATE films SET ${sets.join(', ')}, updated_at = ? WHERE id = ?`).run(...args, Date.now(), f.id);
     res.json(adminFilm(getFilm(f.id)));
   });
 
   // Throw away admin edits and take the values film.json gave at the last scan.
+  // Only edits: a value from TMDb isn't one (the page marks it "from TMDB", not
+  // "edited here"), and stays. film.json usually has nothing there, and with the
+  // film matched nothing would fill it again. (One taken by hand in place of
+  // film.json's is an edit: metadata.js, applyDetails.) `fields`, if given,
+  // narrows it to those keys.
   router.post('/api/admin/films/:id/reset-metadata', (req, res) => {
     const f = getFilm(req.params.id);
     const meta = f.imported_meta ? JSON.parse(f.imported_meta) : null;
     if (!meta) throw bad('This film has no imported metadata yet');
-    const fields = Object.entries(META_FIELDS).filter(([key]) => !req.body?.fields || req.body.fields.includes(key));
+    const only = req.body?.fields;
+    if (only != null && !(Array.isArray(only) && only.every((k) => typeof k === 'string' && Object.hasOwn(META_FIELDS, k)))) {
+      throw bad(`fields must be a list of these: ${Object.keys(META_FIELDS).join(', ')}`);
+    }
     const sources = parseJson(f.meta_sources, {});
-    for (const [key] of fields) delete sources[key];
+    const fields = Object.entries(META_FIELDS).filter(([key]) => (!only || only.includes(key)) && sources[key] !== 'tmdb');
     if (fields.length) {
-      db.prepare(`UPDATE films SET ${fields.map(([, { column }]) => `${column} = ?`).join(', ')}, meta_sources = ?, updated_at = ? WHERE id = ?`).run(
-        ...fields.map(([key]) => meta[key] ?? (key === 'title' ? f.title : null)), JSON.stringify(sources), Date.now(), f.id,
+      db.prepare(`UPDATE films SET ${fields.map(([, { column }]) => `${column} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(
+        ...fields.map(([key]) => meta[key] ?? (key === 'title' ? f.title : null)), Date.now(), f.id,
       );
     }
     res.json(adminFilm(getFilm(f.id)));
@@ -224,7 +244,7 @@ export function adminRoutes(deps) {
     '/api/admin/films/:id/metadata/search',
     metadataRoute(async (req, res) => {
       getFilm(req.params.id);
-      const query = optText(req.query.q, 200);
+      const query = optText(req.query.q, 200, 'The search');
       if (!query) throw bad('Type a title to search for');
       const year = optInt(req.query.year, 'Year', { min: 1870, max: 2200 });
       res.json({ results: await metadata.search(query, year) });
@@ -282,10 +302,20 @@ export function adminRoutes(deps) {
   };
   const deviceOf = db.prepare('SELECT device FROM sessions WHERE id_hash = ?');
 
+  // The browsers holding a ticket from its link: session_tickets joined to sessions
+  // that are still live, by the rule sessions.load uses (not signed out or expired,
+  // and if signed in, as a person who exists and isn't disabled). A signed-out
+  // browser keeps its rows until the clean-up deletes the session, which can be
+  // months, but it can't use the ticket, nor get it back on a release. Its one
+  // parameter is the time now.
+  const LIVE_HOLDERS = `
+    session_tickets st JOIN sessions s ON s.id_hash = st.session_hash LEFT JOIN people p ON p.id = s.person_id
+    WHERE s.revoked_at IS NULL AND s.expires_at > ? AND (s.person_id IS NULL OR (p.id IS NOT NULL AND p.disabled_at IS NULL))`;
+
   // What the admin shows about tickets besides the tickets themselves, in a few
   // grouped queries for the lot rather than several per ticket. Pass ticket ids
   // to limit it to those, or nothing for all tickets.
-  function ticketContext(ids = null) {
+  function ticketContext(ids = null, now = Date.now()) {
     const only = ids ? `AND ticket_id IN (${ids.map(() => '?').join(', ')})` : '';
     const args = ids || [];
     const byTicket = (rows) => new Map(rows.map((r) => [r.ticket_id, r]));
@@ -298,7 +328,7 @@ export function adminRoutes(deps) {
     return {
       films,
       people,
-      browsers: byTicket(db.prepare(`SELECT ticket_id, COUNT(*) AS n FROM session_tickets WHERE 1 ${only} GROUP BY ticket_id`).all(...args)),
+      browsers: byTicket(db.prepare(`SELECT st.ticket_id, COUNT(*) AS n FROM ${LIVE_HOLDERS} ${only} GROUP BY st.ticket_id`).all(now, ...args)),
       // The latest in Activity's order, (at, id), so of two events at the same
       // moment it's the one Activity lists first.
       lastEvent: byTicket(db.prepare(`
@@ -314,6 +344,10 @@ export function adminRoutes(deps) {
       ),
     };
   }
+
+  // The ticket's expiry wins over a screening's resume window: it can be resumed
+  // until whichever comes first, as the viewer is told (films.js).
+  const resumableUntil = (until, status) => Math.min(until, status.expiresAt ?? Infinity);
 
   function adminTicket(req, t, now = Date.now(), ctx = ticketContext([t.id])) {
     const status = access.ticketStatus(t, now);
@@ -357,7 +391,7 @@ export function adminRoutes(deps) {
       openScreening: open
         ? {
             id: open.id,
-            resumableUntil: open.resumable_until,
+            resumableUntil: resumableUntil(open.resumable_until, status),
             playingNow: open.active_until > now,
             device: open.session_hash ? deviceOf.get(open.session_hash)?.device ?? null : null,
           }
@@ -372,7 +406,7 @@ export function adminRoutes(deps) {
   }
 
   function ticketFields(b, sets, args) {
-    if ('label' in b) sets.push('label = ?'), args.push(optText(b.label, 200));
+    if ('label' in b) sets.push('label = ?'), args.push(optText(b.label, 200, 'The label'));
     if ('screeningLimit' in b) sets.push('screening_limit = ?'), args.push(optInt(b.screeningLimit, 'Screening limit', { min: 1, max: 1000 }));
     if ('startBy' in b) sets.push('start_by = ?'), args.push(optTime(b.startBy, 'Start-by date'));
     if ('daysAfterFirstPlay' in b) sets.push('days_after_first_play = ?'), args.push(optInt(b.daysAfterFirstPlay, 'Days after first play', { min: 1, max: 3650 }));
@@ -381,12 +415,14 @@ export function adminRoutes(deps) {
   // Only a ticket for anyone with the link can be keepable.
   function claimableField(b, personId, sets, args) {
     if (!('claimable' in b)) return;
-    if (b.claimable && personId != null) throw bad('Only a ticket for anyone with the link can be kept');
+    if (bool(b.claimable, 'claimable') && personId != null) throw bad('Only a ticket for anyone with the link can be kept');
     sets.push('claimable = ?'), args.push(b.claimable ? 1 : 0);
   }
 
   const personRow = db.prepare('SELECT * FROM people WHERE id = ?');
-  // A person a ticket can be issued or given to.
+  // A person a ticket can be issued or given to. A missing one is a 400, not the
+  // 404 of /api/admin/people/:id: here the address is fine, and it's the request
+  // that names someone who isn't there. The page shows both codes in words.
   function enabledPerson(id) {
     const person = personRow.get(Number(id));
     if (!person) throw bad('person-not-found');
@@ -438,6 +474,7 @@ export function adminRoutes(deps) {
 
   router.get('/api/admin/tickets/:id', (req, res) => {
     const t = getTicket(req.params.id);
+    const status = access.ticketStatus(t);
     const screenings = db
       .prepare(`
         SELECT s.id, s.started_at AS startedAt, s.resumable_until AS resumableUntil, s.last_heartbeat_at AS lastHeartbeatAt,
@@ -445,14 +482,15 @@ export function adminRoutes(deps) {
                s.duration_seconds AS duration, s.finished_at AS finishedAt, s.voided_at AS voidedAt, ss.device
         FROM screenings s LEFT JOIN sessions ss ON ss.id_hash = s.session_hash
         WHERE s.ticket_id = ? ORDER BY s.started_at DESC`)
-      .all(t.id);
+      .all(t.id)
+      .map((s) => ({ ...s, resumableUntil: resumableUntil(s.resumableUntil, status) }));
+    const now = Date.now();
     const browserList = db
       .prepare(`
         SELECT st.added_at AS addedAt, s.device, s.last_seen_at AS lastSeenAt, substr(s.id_hash, 1, 8) AS ref
-        FROM session_tickets st JOIN sessions s ON s.id_hash = st.session_hash
-        WHERE st.ticket_id = ? ORDER BY st.added_at`)
-      .all(t.id);
-    res.json({ ...adminTicket(req, t), screenings, browserList });
+        FROM ${LIVE_HOLDERS} AND st.ticket_id = ? ORDER BY st.added_at`)
+      .all(now, t.id);
+    res.json({ ...adminTicket(req, t, now, ticketContext([t.id], now)), screenings, browserList });
   });
 
   router.patch('/api/admin/tickets/:id', (req, res) => {
@@ -473,7 +511,8 @@ export function adminRoutes(deps) {
     const b = req.body || {};
     if (!('personId' in b)) throw bad('Say who gets it: personId, or null for anyone with the link');
     const personId = b.personId == null ? null : enabledPerson(b.personId).id;
-    const r = access.setTicketPerson(t.id, personId, { claimable: Boolean(b.claimable) });
+    const claimable = 'claimable' in b ? bool(b.claimable, 'claimable') : false;
+    const r = access.setTicketPerson(t.id, personId, { claimable });
     res.json(adminTicket(req, r.ticket));
   });
 
@@ -583,11 +622,14 @@ export function adminRoutes(deps) {
   router.patch(
     '/api/admin/settings',
     metadataRoute(async (req, res) => {
-      const b = req.body || {};
+      // The TMDB key is a secret, kept apart from the settings proper.
+      const { tmdbApiKey, ...patch } = req.body || {};
       // Check everything before saving anything, so a save either applies in full or not at all.
-      settings.validate(b);
-      const changingKey = 'tmdbApiKey' in b;
-      const key = changingKey && typeof b.tmdbApiKey === 'string' ? b.tmdbApiKey.trim() : '';
+      settings.validate(patch);
+      const changingKey = Object.hasOwn(req.body || {}, 'tmdbApiKey');
+      // Text, or empty or null to remove it: anything else is a mistake, not a removal.
+      if (changingKey && tmdbApiKey !== null && typeof tmdbApiKey !== 'string') throw bad('A TMDB key is text');
+      const key = changingKey && tmdbApiKey !== null ? tmdbApiKey.trim() : '';
       if (key) {
         if (key.length > 1000) throw bad('That is too long to be a TMDB key');
         // Check it with TMDb before saving, so a typo shows up now rather than at the next scan.
@@ -595,7 +637,7 @@ export function adminRoutes(deps) {
       }
       tx(db, () => {
         if (changingKey) settings.setSecret('tmdbApiKey', key || null);
-        settings.update(b);
+        settings.update(patch);
       });
       if (key) metadata.queueUnmatched();
       res.json(adminSettings());
@@ -637,9 +679,12 @@ export function adminRoutes(deps) {
     }
   });
 
-  // Every viewer has to open their ticket link again.
+  // Signs out every viewer's browser, members' included: they open their ticket
+  // links or sign in again. Live sessions only, as sessions.js does for one
+  // person: expired ones are refused anyway, and counting them would tell you more
+  // browsers were signed out than were ever signed in.
   router.post('/api/admin/sessions/expire-all', (req, res) => {
-    const r = db.prepare("UPDATE sessions SET revoked_at = ? WHERE kind = 'viewer' AND revoked_at IS NULL").run(Date.now());
+    const r = db.prepare("UPDATE sessions SET revoked_at = ?1 WHERE kind = 'viewer' AND revoked_at IS NULL AND expires_at > ?1").run(Date.now());
     res.json({ expired: Number(r.changes) });
   });
 

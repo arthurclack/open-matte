@@ -3,8 +3,10 @@ import { filmDetail, filmSummary, masterUrl, ticketForViewer } from '../films.js
 
 const OPENED_DEDUPE_MS = 30 * 60 * 1000;
 
-// What a viewer's browser talks to. The ticket secret is only ever sent once,
-// to /api/tickets/open; after that the browser uses its session cookie.
+// What a viewer's browser talks to. The ticket secret is only ever sent to
+// /api/tickets/open: once for a ticket for anyone, and for a ticket for one person
+// again after signing in, since its code waits in /t/ until then. Everything else
+// goes by the session cookie.
 export function viewerRoutes({ db, sessions, access, site, limit }) {
   const router = express.Router();
 
@@ -38,7 +40,9 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
   // fetch the URL but don't run scripts, neither create sessions nor count as opens.
   const openLimit = limit({ windowMs: 10 * 60 * 1000, max: 30 });
   router.post('/api/tickets/open', openLimit, (req, res) => {
-    const code = String(req.body?.code || '').trim().toLowerCase();
+    // Only a string can be a code. Anything else (a number, an object built to
+    // break String()) is no ticket, not a server error.
+    const code = typeof req.body?.code === 'string' ? req.body.code.trim().toLowerCase() : '';
     const ticket = code && q.ticketByCode.get(code);
     if (!ticket) return res.status(404).json({ error: 'unknown-ticket' });
     const status = access.ticketStatus(ticket);
@@ -93,7 +97,8 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
 
   // A film page. A film you have no ticket for looks the same as no film at all,
   // unless it's shown to members and you're signed in. Reading a member film's
-  // page records nothing.
+  // page records nothing. ?again=1 is the page reading itself again, after Play or
+  // once the player stops: nobody opened anything, so that isn't logged as opened.
   router.get('/api/films/:slug', (req, res) => {
     const { viewer, admin } = who(req);
     const film = q.filmBySlug.get(req.params.slug);
@@ -107,7 +112,7 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
       // A ticket for one person may never have been opened by its link.
       q.firstOpen.run(Date.now(), a.ticket.id);
       const last = q.lastOpened.get(viewer.id_hash, a.ticket.id);
-      if (!last || Date.now() - last.at > OPENED_DEDUPE_MS) {
+      if (req.query.again !== '1' && (!last || Date.now() - last.at > OPENED_DEDUPE_MS)) {
         access.logEvent('opened', { filmId: film.id, ticketId: a.ticket.id, sessionHash: viewer.id_hash });
       }
     }
@@ -129,7 +134,10 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
   });
 
   // Pressing Play: start or resume a screening, then hand over the playlist.
-  router.post('/api/films/:slug/screenings', (req, res) => {
+  // A person presses it a few times an evening; the limit stops a script that
+  // presses it in a loop with a forwarded link.
+  const playLimit = limit({ windowMs: 10 * 60 * 1000, max: 60 });
+  router.post('/api/films/:slug/screenings', playLimit, (req, res) => {
     const { viewer, admin } = who(req);
     const film = q.filmBySlug.get(req.params.slug);
     if (!film) return res.status(404).json({ error: 'not-found' });
@@ -165,8 +173,12 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
 
   router.post('/api/screenings/:id/heartbeat', (req, res) => {
     const viewer = sessions.load(req, 'viewer');
+    // No session any more: this browser was signed out (or its person disabled)
+    // while it played. Saying so tells nothing that /api/me doesn't.
+    if (!viewer) return res.status(404).json({ error: 'signed-out' });
     const r = access.heartbeat(viewer, Number(req.params.id), {
-      position: Number(req.body?.position),
+      // Only a number is a position. Anything else keeps the last one (access.js).
+      position: typeof req.body?.position === 'number' ? req.body.position : NaN,
       playing: req.body?.playing !== false,
     });
     if (r.error === 'not-found') return res.status(404).json({ error: 'not-found' });

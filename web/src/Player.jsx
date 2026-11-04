@@ -13,12 +13,12 @@ const HALT_MESSAGES = {
   'playing-elsewhere': 'This screening is now playing on another device.',
   'screening-ended': 'This screening has ended.',
   expired: 'This ticket has expired.',
-  used_up: 'This ticket has been used up.',
   revoked: 'This ticket is no longer valid.',
   unavailable: "This film isn't available right now.",
   unpublished: "This film isn't available right now.",
   forbidden: 'Playback stopped: this browser is no longer allowed to stream this film.',
   'not-found': 'This ticket is no longer valid.',
+  'signed-out': 'This browser has been signed out, so the film has stopped.',
   unsupported: "This browser can't play this film. Try a recent version of Safari, Chrome, Edge or Firefox.",
   error: 'Something went wrong during playback.',
 };
@@ -183,7 +183,30 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     }
     logError('player', code);
     setHalted(code in HALT_MESSAGES ? code : 'error');
-    if (code !== 'playing-elsewhere' && code !== 'unsupported') onHalt?.();
+    if (code !== 'playing-elsewhere' && code !== 'unsupported') onHalt?.(code);
+  }
+
+  // While progress is reported (below): sends a report now, as paused, and resolves
+  // true if the server refused the screening and the player halted with its reason.
+  const reportNow = useRef(null);
+  const asking = useRef(false);
+
+  // The server refused a media request, or Safari's own player stopped with no hls.js
+  // to carry on in. Usually the screening has moved on: another device took it over,
+  // it ended, or the ticket went. Only a progress report hears which, so the player
+  // asks with one and halts with the server's reason, for example with Watch here
+  // instead after a takeover. `fallback` is for when the server still answers for this
+  // browser, or can't be asked (admin preview has no screening).
+  function refused(fallback) {
+    if (asking.current) return;
+    asking.current = true;
+    // Nothing more is fetched while the server is asked.
+    hlsRef.current?.stopLoad();
+    const ask = reportNow.current;
+    (ask ? ask() : Promise.resolve(false)).then((handled) => {
+      asking.current = false;
+      if (!handled) halt(fallback);
+    });
   }
 
   // The lock screen and media keys, cleared once playback halts.
@@ -205,7 +228,6 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
       logError('player', 'unsupported');
       setHalted('unsupported');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---- note what the <video> itself reports, whichever player feeds it. Only the
@@ -220,14 +242,13 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     };
     video.addEventListener('error', onError);
     return () => video.removeEventListener('error', onError);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---- load the stream (again, when Safari hands over to hls.js)
   useEffect(() => {
     if (!engine) return undefined;
     const video = videoRef.current;
-    const { position: start, rendition, audioName } = handoff.current;
+    const { position: start, rendition } = handoff.current;
 
     if (engine === 'native') {
       video.src = screening.masterUrl;
@@ -275,7 +296,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
       // If Safari's own player gives up, carry on in hls.js from the same moment
       // (on Auto). If that fails too, its error handling explains why.
       const onError = () => {
-        if (!Hls.isSupported()) return halt('error');
+        if (!Hls.isSupported()) return refused('error');
         handoff.current = {
           position: video.currentTime || start,
           rendition: null,
@@ -359,7 +380,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
       // Only the kind of error and the status: d.url, d.frag, d.response,
       // d.networkDetails, d.context and d.error can all hold the stream's address.
       logError('hls.js', `${d.type}: ${d.details}`, { fatal: Boolean(d.fatal), status: code ?? null });
-      if (code === 403) return halt('forbidden');
+      if (code === 403) return refused('forbidden');
       if (!d.fatal) return;
       if (d.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries++ < 3) {
         hls.startLoad();
@@ -423,17 +444,23 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     if (!screening.screeningId) return undefined;
     const video = videoRef.current;
     let stopped = false;
+    // Resolves true once the server has refused the screening and the player has
+    // halted. Two reports in flight can both be refused: the player halts once.
     const send = (playing, opts) => {
-      if (stopped) return;
-      api
-        .post(`/api/screenings/${screening.screeningId}/heartbeat`, { position: position(), playing }, opts)
-        .catch((err) => {
-          if (err.status === 404 || err.status === 409) {
+      if (stopped) return Promise.resolve(true);
+      return api.post(`/api/screenings/${screening.screeningId}/heartbeat`, { position: position(), playing }, opts).then(
+        () => false,
+        (err) => {
+          if (err.status !== 404 && err.status !== 409) return false;
+          if (!stopped) {
             stopped = true;
             halt(err.code || 'error');
           }
-        });
+          return true;
+        },
+      );
     };
+    reportNow.current = () => send(false);
     const timer = setInterval(() => {
       if (!video.paused && !video.ended) send(true);
     }, HEARTBEAT_MS);
@@ -444,6 +471,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     video.addEventListener('pause', onPause);
     window.addEventListener('pagehide', onHide);
     return () => {
+      reportNow.current = null;
       clearInterval(timer);
       onHide();
       stopped = true;

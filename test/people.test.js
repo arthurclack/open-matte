@@ -1,15 +1,17 @@
 // People, setup and recovery links, passkey sign-in and sign-out, and the admin's
-// People pages: milestone 2, slice 1. Written from docs/milestone-2.md ("Slice 1",
-// "Setup and recovery links", "Signing in", "Sessions", "Access rules"), not from
-// the implementation. Slice 1 grants no film access: a signed-in person plays only
-// what their browser could already play.
+// People pages: milestone 2, slice 1. Written from docs/history/milestone-2.md
+// ("Slice 1", "Setup and recovery links", "Signing in", "Sessions", "Access rules"),
+// not from the implementation. Slice 1 grants no film access: a signed-in person plays
+// only what their browser could already play.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import net from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { softAuthenticator } from './softauth.js';
 
 const { adminBrowser, enroll, makeFilm, newPerson, setupLink, signIn, startServer, tempDir } = await import('./helpers.js');
-const { RESERVED_SLUGS, inspectMediaDir } = await import('../server/scan.js');
+const { inspectMediaDir } = await import('../server/scan.js');
+const { RESERVED_SLUGS } = await import('../server/names.js');
 const { clientKey } = await import('../server/ratelimit.js');
 
 const HOUR = 60 * 60 * 1000;
@@ -420,6 +422,29 @@ describe('setup links', () => {
     assert.equal((await enroll(fresh(), l.token)).status, 200);
   });
 
+  test('a credential id over 1023 bytes is refused without using the link; unknown transports are never kept or sent back', async () => {
+    const p = await newPerson(admin, uniq('Scripted'));
+    const l = await setupLink(admin, p.id);
+    const long = await enroll(fresh(), l.token, { auth: softAuthenticator({ idLength: 1024 }) });
+    assert.equal(long.status, 400, JSON.stringify(long.data));
+    assert.equal(long.data.error, 'passkey-invalid');
+    assert.equal(long.setCookies.length, 0);
+    assert.equal(passkeyCount(p.id), 0);
+    assert.equal((await detail(p.id)).links[0].usedAt, null);
+
+    // The link still works, and only the transports the standard names are kept.
+    const transports = ['internal', { not: 'a transport' }, 'x'.repeat(40_000), 'hybrid', 'internal'];
+    const r = await enroll(fresh(), l.token, { over: { transports } });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    const stored = srv.db.prepare('SELECT transports FROM passkeys WHERE person_id = ?').get(p.id).transports;
+    assert.deepEqual(JSON.parse(stored), ['internal', 'hybrid']);
+    // A later link for this person sends the passkey back with those only.
+    const op = await fresh().post('/api/enroll/options', { token: (await recoveryLink(p.id)).token });
+    assert.equal(op.status, 200, JSON.stringify(op.data));
+    assert.deepEqual(op.data.options.excludeCredentials, [{ id: r.auth.id, type: 'public-key', transports: ['internal', 'hybrid'] }]);
+    assert.equal((await signIn(fresh(), r.auth)).status, 200);
+  });
+
   test('a ceremony belongs to its link and its purpose, is taken once, and a fourth replaces the oldest', async () => {
     const p = await newPerson(admin, uniq('Bound'));
     const q = await newPerson(admin, uniq('Other'));
@@ -458,7 +483,7 @@ describe('setup links', () => {
     assert.equal(passkeyCount(p.id), 0);
   });
 
-  test('ticketId is refused before slice 2', async () => {
+  test('a link can carry only a ticket for this person: a ticket for anyone is refused', async () => {
     const p = await newPerson(admin, uniq('Ticketless'));
     const ticket = await newTicket();
     const r = await admin.post(`/api/admin/people/${p.id}/links`, { ticketId: ticket.id });
@@ -1172,6 +1197,48 @@ describe('boundaries', () => {
     }
   });
 
+  // Another host under the same parent domain can set om_session or om_admin for
+  // the whole domain (Domain=), and its path decides whether the browser sends it
+  // before or after the cinema's own. Neither way round may it choose the session.
+  test('a second, different session or admin cookie is used neither way round, /media included', async () => {
+    const { p, b } = await enrolled();
+    const { b: m } = await enrolled({ name: uniq('Mallory') });
+    await opened(b, await newTicket());
+    await play(b);
+    const sam = `om_session=${b.jar.get('om_session')}`;
+    const mallory = `om_session=${m.jar.get('om_session')}`;
+    const send = (url, cookie) => fetch(srv.base + url, { headers: { cookie } });
+    const personWith = async (cookie) => (await (await send('/api/me', cookie)).json()).person;
+    assert.deepEqual(await personWith(sam), { name: p.name });
+    assert.equal((await send(SEGMENT, sam)).status, 200);
+    for (const cookie of [`${sam}; ${mallory}`, `${mallory}; ${sam}`, `${sam}; om_session=`, `om_session=; ${sam}`]) {
+      assert.equal(await personWith(cookie), null, cookie);
+      assert.equal((await send(SEGMENT, cookie)).status, 403, cookie);
+    }
+    // In two Cookie header lines, which the server joins into one. Written by hand:
+    // Node's own client would join them before sending.
+    const { hostname, port } = new URL(srv.base);
+    const twoHeaders = await new Promise((resolve, reject) => {
+      let raw = '';
+      net.connect({ host: hostname, port: Number(port) }, function () {
+        this.end(`GET /api/me HTTP/1.1\r\nHost: ${hostname}\r\nCookie: ${mallory}\r\nCookie: ${sam}\r\nConnection: close\r\n\r\n`);
+      })
+        .on('data', (d) => (raw += d))
+        .on('end', () => resolve(raw))
+        .on('error', reject);
+    });
+    assert.match(twoHeaders, /^HTTP\/1\.1 200/);
+    assert.equal(JSON.parse(twoHeaders.slice(twoHeaders.indexOf('\r\n\r\n') + 4)).person, null);
+    // The same cookie twice (a proxy repeating the header) is still one cookie.
+    assert.deepEqual(await personWith(`${sam}; ${sam}`), { name: p.name });
+
+    const adminCookie = `om_admin=${admin.jar.get('om_admin')}`;
+    assert.equal((await send('/api/admin/people', adminCookie)).status, 200);
+    for (const cookie of [`${adminCookie}; om_admin=planted`, `om_admin=planted; ${adminCookie}`]) {
+      assert.equal((await send('/api/admin/people', cookie)).status, 401, cookie);
+    }
+  });
+
   test('/api/me and the sign-in answers expose no user handles, credential ids, notes or other people', async () => {
     const { p: q } = await enrolled({ name: uniq('Quentin'), note: 'never shown' });
     const { p, b, auth } = await enrolled({ name: uniq('Pat'), note: 'rude about Nolan' });
@@ -1374,13 +1441,17 @@ describe('rate limits (default limits)', () => {
     assert.notEqual(clientKey('203.0.113.9'), clientKey('203.0.113.10'));
   });
 
-  test('enrolment: 20 tries per client in 15 minutes', async () => {
+  test('enrolment: 20 tries per client in 15 minutes, options and finish together', async () => {
     const c = from('203.0.113.7');
     for (let i = 0; i < 20; i++) assert.equal((await c.post('/api/enroll/options', { token: 'nope' })).status, 404, String(i));
     const r = await c.post('/api/enroll/options', { token: 'nope' });
     assert.equal(r.status, 429);
     assert.equal(r.data.error, 'too-many-requests');
     assert.ok(Number(r.headers.get('retry-after')) > 0);
+    // One pool for both steps, not 20 of each.
+    const finish = await c.post('/api/enroll/finish', { token: 'nope' });
+    assert.equal(finish.status, 429);
+    assert.equal(finish.data.error, 'too-many-requests');
     assert.equal((await from('203.0.113.8').post('/api/enroll/options', { token: 'nope' })).status, 404, 'another client is unaffected');
   });
 

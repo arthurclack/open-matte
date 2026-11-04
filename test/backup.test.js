@@ -157,3 +157,88 @@ test('two backups asked for at once share one run', async () => {
   assert.equal(x.name, y.name);
   assert.equal(fs.readdirSync(backupDir).filter((f) => f.endsWith('.db')).length, 1);
 });
+
+test("a second backup on the same day, or that night's daily one, doesn't replace the one you made before an update", () => {
+  const at = (iso) => Date.parse(iso);
+  const dailies = ['2026-11-01T04:00:00Z', '2026-11-02T04:00:00Z', '2026-11-03T04:00:00Z'].map((d) => name(at(d)));
+  const beforeUpdate = name(at('2026-11-03T15:30:12Z')); // Back up now, then update A
+  const beforeHotfix = name(at('2026-11-03T16:05:00Z')); // Back up now, then hotfix B
+  const all = [...dailies, beforeUpdate, beforeHotfix];
+  const keep = { keepDays: 14, keepMonths: 12 };
+  assert.deepEqual(backupsToDelete(all, { ...keep, now: at('2026-11-03T16:05:00Z') }), [], 'all made in the last three days');
+  const nextDaily = name(at('2026-11-04T04:00:00Z'));
+  assert.deepEqual(backupsToDelete([...all, nextDaily], { ...keep, now: at('2026-11-04T04:00:00Z') }), [], "the night's daily one");
+  // Three days on, only the newest of that day is kept (and the month's first).
+  const later = ['2026-11-05T04:00:00Z', '2026-11-06T04:00:00Z', '2026-11-07T04:00:00Z'].map((d) => name(at(d)));
+  const doomed = backupsToDelete([...all, nextDaily, ...later], { ...keep, now: at('2026-11-07T04:00:00Z') });
+  assert.deepEqual(doomed.sort(), [dailies[2], beforeUpdate].sort());
+
+  // Fewer days kept than three: every backup of those days, and no more.
+  const one = { keepDays: 1, keepMonths: 0 };
+  assert.deepEqual(backupsToDelete([dailies[2], beforeUpdate, beforeHotfix], { ...one, now: at('2026-11-04T03:59:00Z') }), []);
+  const a = backupsToDelete([dailies[2], beforeUpdate, beforeHotfix, nextDaily], { ...one, now: at('2026-11-04T16:05:00Z') });
+  assert.deepEqual(a.sort(), [dailies[2], beforeUpdate, beforeHotfix].sort());
+});
+
+test('the newest backup is never deleted, whatever is kept', () => {
+  const names = ['2026-10-01T04:00:00Z', '2026-11-02T04:00:00Z', '2026-11-03T04:00:00Z'].map((d) => name(Date.parse(d)));
+  const doomed = backupsToDelete(names, { keepDays: 0, keepMonths: 0, now: Date.parse('2026-11-20T04:00:00Z') });
+  assert.deepEqual(doomed.sort(), names.slice(0, 2).sort());
+});
+
+test('a backup deletes the old ones the rules no longer keep, and nothing else in the folder', async () => {
+  const backupDir = tempDir();
+  const now = Date.parse('2026-11-04T04:00:30Z');
+  // A daily backup at 04:00 on each of the 40 days before.
+  const daily = (i) => name(Date.parse('2026-11-03T04:00:00Z') - i * DAY);
+  const old = Array.from({ length: 40 }, (_, i) => daily(i));
+  for (const n of [...old, 'notes.txt', 'open-matte.db']) fs.writeFileSync(path.join(backupDir, n), 'old');
+  const b = createBackups({ db: openDb(':memory:'), dataDir: tempDir(), backupDir, keepDays: 14, keepMonths: 12, now: () => now });
+  const made = await b.run();
+  assert.equal(made.name, 'open-matte-2026-11-04-040030.db');
+  // Today's, the newest of each of the 13 days before, and the first of September and October.
+  const kept = [made.name, ...Array.from({ length: 13 }, (_, i) => daily(i)), daily(39), name(Date.parse('2026-10-01T04:00:00Z'))];
+  assert.equal(daily(39), 'open-matte-2026-09-25-040000.db');
+  assert.deepEqual(fs.readdirSync(backupDir).sort(), [...kept, 'notes.txt', 'open-matte.db'].sort());
+});
+
+test('the daily backup starts a minute after the server, then runs once a day after the set hour', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  let clock = Date.parse('2026-11-04T03:00:00Z');
+  const b = createBackups({ db: openDb(':memory:'), dataDir: tempDir(), backupDir: tempDir(), hour: 4, now: () => clock });
+  const files = () => b.list().map((x) => x.name);
+  await b.start();
+  t.mock.timers.tick(59 * 1000);
+  assert.equal(b.status().running, false, 'not in the first minute');
+  t.mock.timers.tick(1000);
+  assert.equal(b.status().running, true, 'none yet: one a minute after the start');
+  await b.run(); // waits for the one already running
+  assert.deepEqual(files(), ['open-matte-2026-11-04-030000.db']);
+
+  clock = Date.parse('2026-11-04T03:50:00Z');
+  t.mock.timers.tick(15 * 60 * 1000);
+  assert.equal(b.status().running, false, 'before the hour, with a backup from today');
+  clock = Date.parse('2026-11-04T04:05:00Z');
+  t.mock.timers.tick(15 * 60 * 1000);
+  assert.equal(b.status().running, true, 'the daily one, at the first check after 04:00');
+  await b.run();
+  clock = Date.parse('2026-11-04T04:20:00Z');
+  t.mock.timers.tick(15 * 60 * 1000);
+  assert.equal(b.status().running, false, 'only once that day');
+  assert.deepEqual(files(), ['open-matte-2026-11-04-040500.db', 'open-matte-2026-11-04-030000.db']);
+});
+
+test('starting clears what a backup stopped halfway left behind, and only that', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const dataDir = tempDir();
+  const backupDir = tempDir();
+  const write = (dir, names) => names.forEach((n) => fs.writeFileSync(path.join(dir, n), 'a copy of the database'));
+  const keptData = ['open-matte.db', '.backup-notes', '.backup-1-1793678400000.db.txt'];
+  const keptBackups = ['open-matte-2026-11-03-040012.db', '.open-matte-2026-11-03.db.partial'];
+  write(dataDir, [...keptData, '.backup-1-1793678400000.db', '.backup-4242-1793678400000.db']);
+  write(backupDir, [...keptBackups, '.open-matte-2026-11-04-040003.db.partial']);
+  const b = createBackups({ db: openDb(':memory:'), dataDir, backupDir });
+  await b.start();
+  assert.deepEqual(fs.readdirSync(dataDir).sort(), keptData.sort());
+  assert.deepEqual(fs.readdirSync(backupDir).sort(), keptBackups.sort());
+});

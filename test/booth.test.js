@@ -1,5 +1,5 @@
-// The projection booth: milestone 3, slice 4. Written from docs/milestone-3.md and the
-// slice 4 spec, not from the implementation. One admin request answering what needs
+// The projection booth: milestone 3, slice 4. Written from docs/history/milestone-3.md
+// (slice 4), not from the implementation. One admin request answering what needs
 // attention (links nobody has used, tickets close to their start-by date, media
 // requests the server refused) and whether the server is well, each check saying what
 // it checked. Refusals are kept in memory only, with nothing that identifies anyone.
@@ -15,6 +15,7 @@ import { softAuthenticator } from './softauth.js';
 delete process.env.BACKUP_COPY_DIR;
 const { adminBrowser, browser, enroll, makeFilm, newPerson, playbackFiles, setupLink, startServer, tempDir } = await import('./helpers.js');
 const { MIGRATIONS } = await import('../server/db.js');
+const { createRefusals } = await import('../server/routes/media.js');
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -154,7 +155,7 @@ describe('the projection booth', () => {
     assert.deepEqual(listed.map((t) => ({ ...pick(t, ['id', 'label', 'startBy']), film: pick(t.film, ['id', 'title']), person: t.person && pick(t.person, ['id', 'name']) })).sort(byId), expected.sort(byId));
   });
 
-  test('refused media requests: counted by reason, the last ten shown, and nothing that identifies anyone', async () => {
+  test('refused media requests: counted by reason, repeats sharing a row, the latest shown, and nothing that identifies anyone', async () => {
     const ticket = await issue({ label: 'Refusals' });
     const holder = fresh();
     await holder.post('/api/tickets/open', { code: ticket.code });
@@ -195,17 +196,27 @@ describe('the projection booth', () => {
     for (const re of [NO_COOKIE, STALE, NO_SCREENING]) assert.equal(grew(re), asked.filter((a) => a[4] === re).length, String(re));
     assert.equal(Object.values(refusals.byReason).reduce((a, b) => a + b, 0), refusals.total);
 
-    // The last ten: none of the two artwork requests from the start.
-    assert.equal(refusals.recent.length, 10);
-    const lastTen = asked.slice(-10);
-    const key = (kind, client, reason) => `${kind} | ${client} | ${reason}`;
-    const clientOf = (ua) => (ua === UA.player ? 'Apple media player (iPhone)' : 'Safari on iPhone');
+    // One row for each kind of refusal (the same reason, kind of file and client),
+    // newest first, counting its repeats: the two poster requests, the stale browser's
+    // two segments and the holder's two are one row each.
+    const key = (kind, ua, re) => `${kind} | ${ua === UA.player ? 'Apple media player (iPhone)' : 'Safari on iPhone'} | ${re}`;
+    const rows = [];
+    for (const [, , kind, ua, re] of asked) {
+      const k = key(kind, ua, re);
+      const i = rows.findIndex((r) => r.k === k);
+      const row = i < 0 ? { k, count: 0 } : rows.splice(i, 1)[0];
+      row.count++;
+      rows.unshift(row);
+    }
+    assert.equal(rows.length, 9);
+    const reasonOf = (reason) => [NO_COOKIE, STALE, NO_SCREENING].find((re) => re.test(reason));
     assert.deepEqual(
-      refusals.recent.map((r) => [r.kind, r.client, r.reason]).map(([kind, client, reason]) => `${kind} | ${client} | ${[NO_COOKIE, STALE, NO_SCREENING].find((re) => re.test(reason))}`).sort(),
-      lastTen.map(([, , kind, ua, re]) => key(kind, clientOf(ua), re)).sort(),
+      refusals.recent.slice(0, rows.length).map((r) => ({ k: `${r.kind} | ${r.client} | ${reasonOf(r.reason)}`, count: r.count })),
+      rows,
     );
+    assert.ok(refusals.recent.length <= 10, 'the latest ten at most');
     for (const r of refusals.recent) {
-      for (const k of Object.keys(r)) assert.ok(['at', 'status', 'reason', 'kind', 'film', 'client'].includes(k), `unexpected field ${k}`);
+      for (const k of Object.keys(r)) assert.ok(['at', 'status', 'reason', 'kind', 'film', 'client', 'count'].includes(k), `unexpected field ${k}`);
       assert.equal(r.status, 403);
       assert.equal(r.film, 'arrival');
       assert.ok(r.at >= start.attention.refusals.since && r.at <= Date.now());
@@ -215,6 +226,45 @@ describe('the projection booth', () => {
     for (const secret of [IP, '127.0.0.1', token, sha256(token), stale.jar.get('om_session'), ticket.code, 'Refusals', '/media/', 'hls/', 'seg_', '.m3u8', '.vtt', 'poster.jpg', 'bytes=', UA.safari, UA.player, 'Mozilla']) {
       assert.ok(!json.includes(secret), `the refusals mention ${secret}`);
     }
+  });
+
+  test("requests with no session, however many and however varied, can't push a viewer's refusal out of the latest ten", async () => {
+    const ticket = await issue({ label: 'Crowded out' });
+    const holder = fresh();
+    await holder.post('/api/tickets/open', { code: ticket.code });
+    const segment = '/media/arrival/hls/v_h264_720/seg_2.m4s';
+    const get = (b, url, ua) => b.send('GET', url, undefined, { headers: { 'user-agent': ua } });
+    assert.equal((await get(holder, segment, UA.safari)).status, 403);
+    const start = await booth();
+
+    // A script tries every kind of file, as a dozen different browsers, again and
+    // again: with no cookie, then with one it made up.
+    const agents = ['curl/8.7.1', UA.safari, UA.player, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/141.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (X11; Linux x86_64; rv:144.0) Gecko/20100101 Firefox/144.0', 'Mozilla/5.0 (Linux; Android 15) Chrome/141.0.0.0 Mobile Safari/537.36'];
+    const files = [...playbackFiles('arrival'), '/media/arrival/poster.jpg', '/media/arrival/guessed.m3u8'];
+    const STRANGERS = ['no session cookie', 'session expired or unknown'];
+    const counted = (r) => STRANGERS.reduce((n, reason) => n + (r.byReason[reason] ?? 0), 0);
+    let sent = 0;
+    for (const cookie of [null, 'om_session=made-up']) {
+      for (const ua of agents) {
+        for (const url of files) {
+          const r = await fresh().send('GET', url, undefined, { headers: { 'user-agent': ua, ...(cookie && { cookie }) } });
+          assert.equal(r.status, 403, url);
+          sent++;
+        }
+      }
+    }
+    const { refusals } = (await booth()).attention;
+    // Every one counted...
+    assert.equal(refusals.total, start.attention.refusals.total + sent);
+    assert.equal(counted(refusals) - counted(start.attention.refusals), sent);
+    assert.ok(refusals.byReason['session expired or unknown'] > 0, 'the made-up cookie is told apart');
+    // ...but only a few rows of them, and the holder's refusal is still there, counted once.
+    const theirs = refusals.recent.filter((r) => STRANGERS.includes(r.reason));
+    assert.ok(theirs.length <= 5, `${theirs.length} rows of requests with no session`);
+    const mine = refusals.recent.filter((r) => /no screening/.test(r.reason) && r.client === 'Safari on iPhone' && r.kind === 'segment');
+    assert.equal(mine.length, 1, JSON.stringify(refusals.recent));
+    assert.ok(theirs.some((r) => r.count > 1), 'their repeats share rows');
   });
 
   test('the backups: whether on, the newest file written, and the last error; no copy configured without BACKUP_COPY_DIR', async () => {
@@ -306,5 +356,54 @@ describe('when things are wrong', () => {
     } finally {
       await srv.close();
     }
+  });
+});
+
+describe('the refusals the booth keeps (createRefusals)', () => {
+  let clock = 1000;
+  const now = () => clock++;
+  const refusal = (over = {}) => ({ status: 403, reason: 'no screening held by this browser', kind: 'segment', film: 'arrival', client: 'Safari on iPhone', ...over });
+  const NO_COOKIE = 'no session cookie';
+
+  test('a repeat adds to its row and moves it to the top; anything different is a row of its own', () => {
+    const r = createRefusals({ now });
+    r.add(refusal());
+    r.add(refusal({ kind: 'playlist' }));
+    r.add(refusal({ film: 'heat' }));
+    r.add(refusal({ client: 'Chrome on Mac' }));
+    r.add(refusal({ status: 404, reason: 'file missing from the film folder' }));
+    r.add(refusal());
+    const { total, byReason, recent } = r.view();
+    assert.equal(total, 6);
+    assert.deepEqual(byReason, { 'no screening held by this browser': 5, 'file missing from the film folder': 1 });
+    assert.equal(recent.length, 5);
+    assert.deepEqual(recent[0], { ...refusal(), at: clock - 1, count: 2 });
+    assert.deepEqual(recent.slice(1).map((x) => x.count), [1, 1, 1, 1]);
+    // The view is a copy: what the booth sends doesn't change under it.
+    r.add(refusal());
+    assert.equal(recent[0].count, 2);
+  });
+
+  test('requests from strangers, with no live session, keep to their own few rows', () => {
+    const r = createRefusals({ keep: 10, strangers: 3, now });
+    r.add(refusal());
+    // No cookie, or one that names no session: whatever the reason, a stranger's.
+    const reasons = [NO_COOKIE, 'session expired or unknown'];
+    for (let i = 0; i < 40; i++) r.add(refusal({ reason: reasons[i % 2], client: `Browser ${i % 8}`, kind: ['playlist', 'segment', 'artwork'][i % 3], stranger: true }));
+    const { total, byReason, recent } = r.view();
+    assert.equal(total, 41);
+    assert.equal(byReason[NO_COOKIE] + byReason['session expired or unknown'], 40);
+    assert.equal(recent.filter((x) => reasons.includes(x.reason)).length, 3);
+    assert.deepEqual(recent.at(-1), { ...refusal(), at: recent.at(-1).at, count: 1 }, 'the viewer’s refusal is still there');
+    assert.equal(recent.length, 4);
+    assert.ok(recent.every((x) => !('stranger' in x)), 'the booth is sent the rows as they were');
+  });
+
+  test('the latest rows, newest first, up to keep', () => {
+    const r = createRefusals({ keep: 3, now });
+    for (const film of ['a', 'b', 'c', 'd']) r.add(refusal({ film }));
+    assert.deepEqual(r.view().recent.map((x) => x.film), ['d', 'c', 'b']);
+    assert.deepEqual(r.view(2).recent.map((x) => x.film), ['d', 'c']);
+    assert.equal(r.view().total, 4);
   });
 });

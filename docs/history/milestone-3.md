@@ -3,8 +3,13 @@
 The plan for milestone 3, agreed on 3 November 2026. It starts from the tip of
 `milestone-2` (commit 69f18b5, 306 tests passing), while milestone 2's own device checks
 carry on alongside ([device-checks.md](device-checks.md#to-close-milestone-2)). As each
-slice ships, its box in [roadmap.md](roadmap.md) gets ticked and what it built moves
-into the docs that describe the app.
+slice is deployed, its box in [roadmap.md](../roadmap.md) gets ticked and what it built
+moves into the docs that describe the app.
+
+**Status, 4 November:** all six slices are merged. Slices 1 to 4 are deployed; slices 5
+and 6 aren't yet, and neither are the fixes from a review before the release. Still to
+do: the device rows of slice 5, the rehearsal of slice 6, closing milestone 2, the
+merge into `main`, and the v1.0.0 tag and release.
 
 ## What it's for
 
@@ -14,7 +19,7 @@ player that remembers their language, behaves on the lock screen, and can say wh
 went wrong when it doesn't play. Viewing data is kept only as long as it's useful.
 Then it's tagged v1.0.0.
 
-Nothing here changes who can watch what. Every rule in [access.md](access.md) stays as
+Nothing here changes who can watch what. Every rule in [access.md](../access.md) stays as
 it is.
 
 ## Decisions (3 November)
@@ -37,7 +42,7 @@ it is.
 
 Our own call, within that: a ticket **only one person can use** previews as the cinema,
 not the film. A browser that isn't signed in as that person learns neither the film nor
-the name ([access.md](access.md#two-kinds-of-ticket)), and a preview fetcher is such a
+the name ([access.md](../access.md#two-kinds-of-ticket)), and a preview fetcher is such a
 browser.
 
 ### Media Session and Playback help (3 November, as slice 3 started)
@@ -52,7 +57,10 @@ page, and are cleared when the player halts or closes, so a screening that has s
 (taken over on another device, say) never leaves a Play button behind that would try
 to restart it. The player's message offers help only when playback itself went wrong
 (an error, a refusal, a browser that can't play the film), not when the ticket has
-ended or another device has taken over.
+ended or another device has taken over. A playlist or segment the server refuses
+usually means one of those, so the player first asks the server why, with a progress
+report. It says playback was refused only when the server gives no other reason: it
+still answers for this browser, it can't be reached, or it's your admin preview.
 
 ### Audio and subtitles (3 November, as slice 2 started)
 
@@ -204,7 +212,7 @@ title in it.
   back, nor reopens a "start by" deadline: with tickets in every state, a clean-up
   with tiny windows, run far in the future, leaves each one reading the same.
 - access.md's **What is recorded** gains how long each thing is kept
-  ([How long it's kept](access.md#how-long-its-kept)).
+  ([How long it's kept](../access.md#how-long-its-kept)).
 - **The projection booth**: **Status** in the admin, a page headed Projection booth,
   answering what needs attention and whether the server is well, and a one-line
   summary at the top of the Films page when something needs attention (nothing when
@@ -239,10 +247,10 @@ on the live server.
 
 The checks moved from milestone 2 and milestone 1's open ones, in
 [device-checks.md](device-checks.md#for-milestone-3): a TV's own browser, desktop
-Firefox, Chrome's hls.js playback on Mac and Windows, a non-HDR screen, keyboard only
-in Mac Safari, and Android playback on mobile data. Each runs with slices 2 and 3
-deployed, so it also tests remembered choices, Media Session and the help panel, and
-a failure comes with a copied summary.
+Firefox, Chrome's hls.js playback on Mac and Windows, a non-HDR screen and keyboard
+only in Mac Safari. Android, playback on mobile data included, stays with milestone 2's
+checks. Each runs with slices 2 and 3 deployed, so it also tests remembered choices,
+Media Session and the help panel, and a failure comes with a copied summary.
 
 Alongside the devices, **browser tests with Playwright** (a development tool only, never
 shipped to viewers): the main journeys run in Chromium, Firefox and WebKit on every
@@ -352,6 +360,12 @@ journeys pass in all three browsers.
   `v1.0.0` tagged, and a GitHub release whose notes come from the changelog. Each of
   these is a push to a public repository, so each waits for your go-ahead.
 
+**Built (3 November)**: the README, [installing.md](../installing.md), the updating,
+backup, restore, rolling back, moving and removing parts of
+[deploying.md](../deploying.md), `CHANGELOG.md`, `SECURITY.md`, the version in the admin
+and the licence notices. Merged, not yet deployed. Still to do: the rehearsal, then
+closing milestone 2, the merge into `main`, the tag and the release.
+
 **Done when** the rehearsal runs from an empty server to a played ticket with nothing
 but the docs, and v1.0.0 is on GitHub.
 
@@ -362,4 +376,4 @@ but the docs, and v1.0.0 is on GitHub.
 - The player's own controls overlay, a light theme, colours beyond the accent and the
   background.
 - Remembering choices on the server, per person.
-- Everything under Later and Ideas in [roadmap.md](roadmap.md).
+- Everything under Later and Ideas in [roadmap.md](../roadmap.md).

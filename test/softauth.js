@@ -31,12 +31,13 @@ function authData({ rpId, flags, counter, attested }) {
 }
 
 // One passkey. Options let tests forge every field the server must check.
-export function softAuthenticator({ origin = 'http://localhost:5173', rpId = 'localhost', synced = true, alg = -7 } = {}) {
+// idLength: the credential id's length in bytes (the standard allows up to 1023).
+export function softAuthenticator({ origin = 'http://localhost:5173', rpId = 'localhost', synced = true, alg = -7, idLength = 16 } = {}) {
   const { publicKey, privateKey } =
     alg === -8 ? crypto.generateKeyPairSync('ed25519')
     : alg === -257 ? crypto.generateKeyPairSync('rsa', { modulusLength: 2048 })
     : crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
-  const id = crypto.randomBytes(16);
+  const id = crypto.randomBytes(idLength);
   let counter = 0;
   let userHandle = null;
   const jwk = publicKey.export({ format: 'jwk' });
@@ -59,7 +60,7 @@ export function softAuthenticator({ origin = 'http://localhost:5173', rpId = 'lo
       const ad = authData({ rpId: over.rpId ?? rpId, flags: (over.flags ?? baseFlags) | FLAGS.at, counter, attested });
       const attestationObject = cbor(new Map([['fmt', 'none'], ['attStmt', new Map()], ['authData', ad]]));
       return { id: b64u(id), rawId: b64u(id), type: 'public-key', clientExtensionResults: {}, authenticatorAttachment: 'platform',
-        response: { clientDataJSON: b64u(clientDataJSON), attestationObject: b64u(attestationObject), transports: ['internal', 'hybrid'] } };
+        response: { clientDataJSON: b64u(clientDataJSON), attestationObject: b64u(attestationObject), transports: over.transports ?? ['internal', 'hybrid'] } };
     },
     // navigator.credentials.get() -> AuthenticationResponseJSON
     get(options, over = {}) {

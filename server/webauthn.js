@@ -12,6 +12,15 @@ export const ALGS = [-7, -8, -257];
 const TIMEOUT = 5 * 60 * 1000;
 const DEV_ORIGIN = /^http:\/\/localhost(:\d{1,5})?$/;
 
+// The standard says to refuse a longer credential id, and the library doesn't.
+const MAX_CREDENTIAL_ID_BYTES = 1023;
+// The transports a browser can report: the standard's, and Chrome's older "cable".
+// The browser's list is only a hint for excludeCredentials, and the library passes
+// it on unchecked, so anything else is dropped rather than kept and sent back with
+// every later link for that person.
+const TRANSPORTS = new Set(['ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-card', 'usb']);
+const knownTransports = (list) => (Array.isArray(list) ? [...new Set(list.filter((t) => TRANSPORTS.has(t)))] : null);
+
 // Why a response was refused. The message goes to the server log, never to the
 // browser; `reason` is set when the caller should record it ('counter').
 export class PasskeyError extends Error {
@@ -120,11 +129,13 @@ export async function verifyRegistration(rp, credential, challenge) {
       supportedAlgorithmIDs: ALGS,
     }),
   );
+  if (Buffer.from(info.credential.id, 'base64url').length > MAX_CREDENTIAL_ID_BYTES) throw new PasskeyError('credential id is too long');
   return {
     credentialId: info.credential.id,
     publicKey: info.credential.publicKey,
     counter: info.credential.counter,
-    transports: info.credential.transports ?? credential?.response?.transports ?? null,
+    // The library's copy is the browser's response.transports, as it was sent.
+    transports: knownTransports(info.credential.transports),
     deviceType: info.credentialDeviceType,
     backedUp: info.credentialBackedUp,
     aaguid: info.aaguid,
@@ -153,10 +164,10 @@ export async function verifySignIn(rp, credential, challenge, passkey) {
   return { newCounter: info.newCounter, backedUp: info.credentialBackedUp };
 }
 
+// Filtered again on the way out, for passkeys stored before the filter above.
 function transports(passkey) {
   try {
-    const t = JSON.parse(passkey.transports || '[]');
-    return Array.isArray(t) ? t : undefined;
+    return knownTransports(JSON.parse(passkey.transports || '[]')) ?? undefined;
   } catch {
     return undefined;
   }

@@ -36,6 +36,8 @@ export const api = {
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 const dateTimeFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+// With the year as well, for a time that may be in another year, such as a deadline that has passed.
+const dateTimeYearFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 // With the weekday, for things that happen within a week or so: "Tue 29 Oct", "Tue 29 Oct, 21:00".
 const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -43,6 +45,7 @@ const dayTimeFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: '
 
 export const formatDate = (ms) => (ms ? dateFmt.format(new Date(ms)) : '');
 export const formatDateTime = (ms) => (ms ? dateTimeFmt.format(new Date(ms)) : '');
+export const formatDateTimeYear = (ms) => (ms ? dateTimeYearFmt.format(new Date(ms)) : '');
 export const formatDay = (ms) => (ms ? dayFmt.format(new Date(ms)) : '');
 export const formatDayTime = (ms) => (ms ? dayTimeFmt.format(new Date(ms)) : '');
 

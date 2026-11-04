@@ -1,9 +1,9 @@
 # Milestone 2: people and passkeys
 
 The plan for milestone 2, agreed on 26 October 2026. It starts from commit b28a56d
-(82 tests passing). [access.md](access.md) describes what is built; this describes
+(82 tests passing). [access.md](../access.md) describes what is built; this describes
 what will be. As each slice ships, its rules move into access.md and its box in
-[roadmap.md](roadmap.md) gets ticked.
+[roadmap.md](../roadmap.md) gets ticked.
 
 **Status, 1 November:** slices 1 to 5 are built and deployed (slice 4 before slice 3,
 so films shown to members are migration 5 and keeping is 6), and so are slice 6's
@@ -70,9 +70,9 @@ These need no decision from you, but you can overrule any of them.
 | Recovery | Yours only, as two actions. **Add a sign-in method** keeps existing passkeys. **Reset after loss** removes them and signs the person out everywhere *when you create the link*. | A lost device is cut off at once. Nothing works from a name. |
 | Setup and recovery links | A 256-bit token in the address fragment (`/enroll#…`), stored as SHA-256, shown once. Setup links last 1 hour to 7 days (default 3 days); recovery links 1 hour or 1 day (default 1 hour). One live link per person. Only creating a passkey uses one up. | The fragment never reaches the server, Caddy's logs or a link-preview fetcher. Recovery links are the most attractive to steal, so they're the shortest. |
 | Signing in | Always a new session row and cookie; the old one is revoked in the same transaction. Link tickets and a held screening move across only from an anonymous session or one belonging to the same person. | No session fixation. |
-| Signing out | Revokes the session, so the browser also forgets the link tickets it opened. The confirmation names them. | Safe on shared devices; the links still work. |
+| Signing out | Revokes the session, so the browser also forgets the link tickets it opened. The confirmation names them. | The next person at a shared device isn't signed in and holds none of those tickets; the links still work. The browser's own history still lists every link opened there, so a borrowed computer is safer with a private window. |
 | A person's session | The same 90 days (`VIEWER_SESSION_DAYS`). | Revocation already takes effect on the next request. |
-| People are disabled, not deleted | No delete in milestone 2; the foreign keys refuse one. Ids use `AUTOINCREMENT` so they are never reused. | Erasure belongs with milestone 3's retention controls. A reused id would hand one person's passkeys, sessions and tickets to the next. |
+| People are disabled, not deleted | No delete in milestone 2; the foreign keys refuse one. Ids use `AUTOINCREMENT` so they are never reused. | Erasure is later work ([roadmap.md](../roadmap.md#later)); milestone 3's retention never deletes people. A reused id would hand one person's passkeys, sessions and tickets to the next. |
 | Names | `name` is shown to the person and saved in their password manager. `note` is for you only. Names are unique, ignoring case. | A note like "Sam (rude about Nolan)" must never reach a friend's keychain. |
 | Ceremony settings | Discoverable credentials required; user verification `preferred` and not enforced; attestation `none`; no `allowCredentials`; no autofill. | No usernames. Phones and computers verify the user anyway, and requiring it mainly shuts out PIN-less security keys. |
 | Adding a passkey yourself | **Not in milestone 2.** A new device signs in with the phone's QR code, or you send an **Add a sign-in method** link. | With attestation `none`, anyone holding a session cookie could register a key with a script. That would turn a stolen cookie into a permanent way in. |
@@ -381,7 +381,7 @@ const byBest = (viewer, now) => {
   `session_tickets` rows are left as they are: invariant 2 ignores them while the
   ticket belongs to a person, they let a browser that lost the ticket be told why, and
   after a release they give it back to the browsers that had opened the link.
-- **Exports:** `{ ticketStatus, filmAccess, mayStream, startScreening, heartbeat, usableTickets, mayHold, keep, setTicketPerson, logEvent }`.
+- **Exports:** `{ ticketStatus, filmAccess, mayStream, startScreening, heartbeat, usableTickets, canKeep, keep, setTicketPerson, logEvent }`; `mayHold` is used only inside the module.
 
 ### Changes to `server/sessions.js`
 
@@ -459,17 +459,27 @@ verifyRegistration(rp, response, challenge) → verifyRegistrationResponse({
   response, expectedChallenge: challenge, expectedOrigin: rp.originFor(clientOrigin), expectedRPID: rp.id,
   requireUserVerification: false, supportedAlgorithmIDs: ALGS })
 
+// counter: 0, so the library never refuses a counter; see below.
 verifySignIn(rp, response, challenge, passkey) → verifyAuthenticationResponse({
   response, expectedChallenge: challenge, expectedOrigin: rp.originFor(clientOrigin), expectedRPID: rp.id,
   requireUserVerification: false,
-  credential: { id: passkey.credential_id, publicKey: passkey.public_key, counter: passkey.sign_count, transports } })
+  credential: { id: passkey.credential_id, publicKey: passkey.public_key, counter: 0, transports } })
 ```
 
 Two checks of our own, before calling the library: `clientDataJSON.crossOrigin` must
 not be true (the library only checks it when the browser sends `topOrigin`, and Safari
 doesn't), and the response must parse at all. A thrown error and `verified: false` both
-count as failure: the library returns the latter for some bad signatures. It refuses a
-counter that goes backwards on a device-bound key; synced passkeys report 0 and pass.
+count as failure: the library returns the latter for some bad signatures.
+
+After a registration, two more: a credential id over 1023 bytes is refused, as the
+standard says (the library doesn't check), and of the transports the browser sent,
+only the names the standard gives are kept. The same filter applies when stored
+transports go back out in `excludeCredentials`.
+
+After a sign-in's signature checks out, `verifySignIn` checks the counter itself, so a
+refusal is known to be about the counter and never comes from a forged response. On a
+device-bound key a counter that doesn't move on from the stored one is refused; synced
+passkeys report 0 and pass.
 
 Verification is asynchronous, so it runs **before** the IMMEDIATE transaction, and the
 transaction then re-checks everything that could have changed in between.
@@ -551,7 +561,8 @@ StrictMode's second run doesn't see an empty fragment), keeps it in `sessionStor
 this tab, clears the fragment with React Router's `navigate({ hash: '' }, { replace: true })`,
 and sends it to `POST /api/enroll/options`, which sets `opened_at` and uses nothing up. A
 reload in the same tab carries on from `sessionStorage`; that copy is removed once the
-link is used or answers 404 or 410. `/enroll` with no token says "Open the link you were
+link is used or answers 404 or 410, once the page says this device already has a
+passkey, and when the browser signs out. `/enroll` with no token says "Open the link you were
 sent again: it works until a passkey has been created with it." Passkey support doesn't
 need a platform authenticator: a computer without one creates the passkey on a phone
 (QR code) or a security key.
@@ -609,8 +620,8 @@ described above, and injectable for tests.
 
 | Method | Path | Needs | Body | Success | Errors | Limit | Slice |
 |---|---|---|---|---|---|---|---|
-| POST | /api/enroll/options | link token | `{token}` | `{person:{name}, purpose, reset, expiresAt, film\|null, options}` | 404 `link-unknown`; 410 `link-used`/`-expired`/`-cancelled`; 503 | 20 / 15 min | 1 |
-| POST | /api/enroll/finish | token + ceremony | `{token, credential}` | `{person:{name}, slug\|null}`, new cookie | 400 `ceremony-expired`/`passkey-invalid`; 409 `passkey-exists`; 410 | 20 / 15 min | 1 |
+| POST | /api/enroll/options | link token | `{token}` | `{person:{name}, purpose, reset, expiresAt, film\|null, options}` | 404 `link-unknown`; 410 `link-used`/`-expired`/`-cancelled`; 503 | 20 / 15 min, shared with finish | 1 |
+| POST | /api/enroll/finish | token + ceremony | `{token, credential}` | `{person:{name}, slug\|null}`, new cookie | 400 `ceremony-expired`/`passkey-invalid`; 409 `passkey-exists`; 410 | shared with options | 1 |
 | POST | /api/signin/options | – | `{}` | `{options}` | 429 `busy`; 503 | 60 / 10 min | 1 |
 | POST | /api/signin/finish | ceremony | `{credential}` | `{person:{name}, newPasskeys}`, new cookie | 400; 401 `passkey-unknown`/`sign-in-failed`; 403 `account-disabled`; 409 `try-again`; 503 | 30 / 10 min | 1 |
 | POST | /api/signout | a viewer session | `{}` | `{ok}`, cookie cleared | – | – | 1 |
@@ -628,7 +639,7 @@ described above, and injectable for tests.
 | POST | /api/admin/people | `{name, note}` | 201 person; 409 `name-taken` | 1 |
 | GET | /api/admin/people/:id | – | person, passkeys, browsers, links (never the token) | 1 |
 | PATCH | /api/admin/people/:id | `{name?, note?}` | person | 1 |
-| POST | /api/admin/people/:id/links | `{hours, reset, confirmedContact?, ticketId?}` | 201 `{link, expiresAt, purpose}`, only here, once; 400 `confirm-contact`; 400 `bad-hours`; 400 `bad-ticket` (before slice 2, or not a ticket for this person); 409 `person-disabled`; 503 `passkeys-unavailable` | 1 |
+| POST | /api/admin/people/:id/links | `{hours, reset, confirmedContact?, ticketId?}` | 201 `{link, expiresAt, purpose}`, only here, once; 400 `confirm-contact`; 400 `bad-hours`; 400 `bad-ticket` (not this person's ticket, or revoked); 409 `person-disabled`; 503 `passkeys-unavailable` | 1 |
 | POST | /api/admin/people/:id/links/cancel | `{}` | person | 1 |
 | POST | /api/admin/people/:id/sign-out | `{}` | `{signedOut}` | 1 |
 | POST | /api/admin/people/:id/disable, /enable | `{}` | person (disable also revokes sessions and cancels links) | 1 |
@@ -649,14 +660,18 @@ described above, and injectable for tests.
 - **`<PasskeySignIn>`**: one component for SignIn, TicketOpen and the keep panel. It shows
   **Sign in with a passkey**, or, where passkeys can't work, "Open this in Safari or
   Chrome" with **Copy link**. "Can't work" means no `PublicKeyCredential`, or a known
-  in-app browser by user agent (`FBAN|FBAV|Instagram|LinkedInApp|Line/|Snapchat|TikTok|musical_ly|GSA/`,
-  best effort): their web views often expose the API and then fail. It fetches options
+  in-app browser by user agent (`FBAN|FBAV|Instagram|LinkedInApp|Line/|Snapchat|TikTok|musical_ly|GSA/|MicroMessenger|; wv)`,
+  best effort): their web views often expose the API and then fail. Any other browser
+  that refuses a passkey gets the same advice and Copy link under its message, since an
+  unlisted app browser refuses just as a cancelled attempt does. It fetches options
   before the tap and calls the browser inside the click handler, as Safari requires.
   Options are fetched again after `ceremony-expired`, after 4½ minutes, and when the page
   becomes visible with options more than 4 minutes old, since challenges last 5. Errors:
   `NotAllowedError` "Cancelled or timed out. Try again."; `SecurityError` "This address
   can't use passkeys" (also logged: the RP ID is wrong); `ceremony-expired` "That took a
-  little too long. Try again." Enroll uses the same detection, timing and copy.
+  little too long. Try again." Enroll uses the same detection, timing and copy; after a
+  refusal its Copy link rebuilds the whole link from the token it kept, since the
+  fragment has already left the address.
 - **Header:** signed in, **Sam ▾** with Your tickets · Your account (slice 5) · Sign out.
   Anonymous, a quiet **Sign in** link from slice 2. Signing out confirms when the browser
   holds link tickets that aren't in the account: "Sign out of this browser? It also
@@ -915,9 +930,10 @@ after **Back up now**.
 - **A software authenticator** in `test/softauth.js` produces what a browser and passkey
   provider would send, with every field overridable for negative tests (see the appendix).
   The library verifies it like any other response.
-- **Helpers** in `test/helpers.js`: `newPerson`, `setupLink`, `enroll`, `signIn`;
-  `signInAs`, a fast path that inserts a person session for access tests; a copy of the
-  journey's playback file list (`journey.test.js` itself stays untouched).
+- **Helpers** in `test/helpers.js`: `newPerson`, `setupLink`, `enroll`, `signIn`, with
+  every test signing in through the software authenticator (there's no fast path); and
+  `playbackFiles`, a copy of the journey's playback file list, so milestone 2's tests
+  leave `journey.test.js` as it was.
 - **Rate limits** are passed in through `createApp({ limits })`, generous in
   `startServer`, with one test asserting the 429. Otherwise suites that enrol and sign in
   dozens of times from 127.0.0.1 would fail for the wrong reason.
@@ -981,8 +997,9 @@ after **Back up now**.
 ## Not in this milestone
 
 - Self-registration, and people adding or removing their own passkeys.
-- Deleting or erasing people (milestone 3's retention controls; erasure must remove or
-  anonymise their passkeys, sessions, links and events and revoke their tickets in one go).
+- Deleting or erasing people (later work, under Later in [roadmap.md](../roadmap.md#later);
+  milestone 3's retention never deletes people). Erasure must remove or anonymise their
+  passkeys, sessions, links and events and revoke their tickets in one go.
 - Display names edited by the person; passkey provider names (the AAGUID is kept for
   later).
 - Admin passkeys (later: an admin passkey set up from a one-time link printed over SSH,
@@ -996,7 +1013,7 @@ after **Back up now**.
 
 ### What this leaves open for later ideas
 
-None of the ideas in [roadmap.md](roadmap.md) is made harder:
+None of the ideas in [roadmap.md](../roadmap.md) is made harder:
 
 - **Programmes, double bills, screening nights** hang off `people.id` and film ids, and
   follow "listing never grants playback".

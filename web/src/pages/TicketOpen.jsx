@@ -13,7 +13,8 @@ const Page = ({ children }) => (
 const Title = ({ children }) => <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>{children}</h1>;
 
 // /t/<code>: trade the ticket code for a session, then move to the film's
-// clean URL so the code doesn't linger in the address bar or history.
+// clean URL so the code leaves the address bar and this tab's Back and Forward.
+// The browser's own history list still has the link as it was opened.
 // A ticket for one person is different: it needs that person signed in, and its
 // code stays in the address until they are, so "Open in Safari" from an app's
 // built-in browser still carries it. Anyone else learns nothing from it.

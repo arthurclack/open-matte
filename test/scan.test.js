@@ -1,10 +1,12 @@
 // The import contract: film.json validation, per-film errors, and rescans
 // that keep admin edits.
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { makeFilm, tempDir, writeFilmJson } from './helpers.js';
+import { fileURLToPath } from 'node:url';
+import { ADMIN_PASSWORD, makeFilm, tempDir, writeFilmJson } from './helpers.js';
 
 const { openDb } = await import('../server/db.js');
 const { inspectFilm, scanMedia } = await import('../server/scan.js');
@@ -142,6 +144,39 @@ test('rescans follow film.json for untouched fields and keep admin edits', async
   assert.deepEqual((await scanMedia(db, mediaDir)).films[0].conflicts, []);
 });
 
+test('a conflict found by the scan at startup is named in the server log, without its values', async () => {
+  const { mediaDir, dir } = fresh();
+  const dataDir = tempDir();
+  const db = openDb(path.join(dataDir, 'open-matte.db'));
+  await scanMedia(db, mediaDir);
+  db.prepare("UPDATE films SET recommendation = 'My own words.' WHERE slug = 'arrival'").run();
+  db.close();
+  // Changed while the server was down, say just before a deploy.
+  writeFilmJson(dir, { recommendation: 'Changed in the file.' });
+
+  const env = { ...process.env, PORT: '0', DATA_DIR: dataDir, MEDIA_DIR: mediaDir, BACKUP_DIR: 'off', TMDB_API_KEY: '', ADMIN_PASSWORD };
+  delete env.NODE_TEST_CONTEXT;
+  delete env.NODE_ENV;
+  const server = spawn(process.execPath, [fileURLToPath(new URL('../server/index.js', import.meta.url))], { env });
+  let out = '';
+  server.stdout.on('data', (d) => (out += d));
+  server.stderr.on('data', (d) => (out += d));
+  const exited = new Promise((resolve) => server.once('close', resolve));
+  // Stop it once both lines are out (stdout and stderr arrive separately), or
+  // after 10 seconds whatever happened.
+  const giveUp = setTimeout(() => server.kill('SIGKILL'), 10000);
+  const watch = setInterval(() => {
+    if (/Media scan: \d+ film folder/.test(out) && /Media scan: arrival:/.test(out)) server.kill('SIGTERM');
+  }, 50);
+  await exited;
+  clearTimeout(giveUp);
+  clearInterval(watch);
+
+  assert.match(out, /Media scan: 1 film folder/);
+  assert.match(out, /Media scan: arrival: film\.json changed recommendation, which you've edited in the admin, so your version was kept/);
+  assert.ok(!out.includes('My own words.') && !out.includes('Changed in the file.'), 'the values stay out of the log');
+});
+
 test('a film whose folder disappears is marked missing but kept', async () => {
   const { mediaDir, dir } = fresh();
   makeFilm(mediaDir, 'second-film');
@@ -234,4 +269,106 @@ test('a folder that can\'t be read is reported and left as it was, without stopp
   } finally {
     fs.chmodSync(vtt, 0o644);
   }
+});
+
+test('a folder with neither film.json nor a master playlist is skipped, not added as a film', async () => {
+  const { mediaDir, dir } = fresh();
+  // Somewhere to stage uploads.
+  fs.mkdirSync(path.join(mediaDir, 'incoming'));
+  fs.writeFileSync(path.join(mediaDir, 'incoming', 'Some.Film.2019.mkv'), 'half a film');
+  const db = openDb(':memory:');
+  const report = await scanMedia(db, mediaDir);
+  assert.deepEqual(report.films.map((f) => f.slug), ['arrival']);
+  assert.deepEqual(report.skipped.map((s) => s.name), ['incoming']);
+  assert.match(report.skipped[0].reason, /no film\.json or hls\/master\.m3u8/);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM films WHERE slug = 'incoming'").get().n, 0, 'no film row, so nothing to look up on TMDb');
+
+  // A film whose folder has been emptied (an upload starting over, say) is still reported as broken.
+  fs.rmSync(path.join(dir, 'film.json'));
+  fs.rmSync(path.join(dir, 'hls'), { recursive: true });
+  const again = await scanMedia(db, mediaDir);
+  const arrival = again.films.find((f) => f.slug === 'arrival');
+  assert.equal(arrival.status, 'error');
+  assert.match(arrival.errors[0], /film\.json is missing/);
+});
+
+test('a film folder that is a symlink is skipped with a reason', async () => {
+  const { mediaDir, dir } = fresh();
+  const elsewhere = tempDir();
+  makeFilm(elsewhere, 'heat');
+  fs.symlinkSync(path.join(elsewhere, 'heat'), path.join(mediaDir, 'heat'));
+  const db = openDb(':memory:');
+  const report = await scanMedia(db, mediaDir);
+  assert.deepEqual(report.films.map((f) => f.slug), ['arrival']);
+  assert.match(report.skipped.find((s) => s.name === 'heat')?.reason ?? '', /is a symlink\. A film folder must be a real folder/);
+
+  // A film whose folder is replaced by a symlink is marked missing, and says why.
+  fs.renameSync(dir, path.join(elsewhere, 'arrival'));
+  fs.symlinkSync(path.join(elsewhere, 'arrival'), dir);
+  await scanMedia(db, mediaDir);
+  const row = db.prepare("SELECT media_status, scan_report FROM films WHERE slug = 'arrival'").get();
+  assert.equal(row.media_status, 'missing');
+  assert.match(JSON.parse(row.scan_report).errors[0], /can't be used: This is a symlink/);
+});
+
+test('a skipped name is told the whole rule: length and first and last characters too', async () => {
+  const mediaDir = tempDir();
+  for (const slug of ['a'.repeat(64), 'a'.repeat(65), '-arrival', 'arrival-']) makeFilm(mediaDir, slug);
+  const report = await scanMedia(openDb(':memory:'), mediaDir);
+  assert.deepEqual(report.films.map((f) => f.slug), ['a'.repeat(64)]);
+  assert.equal(report.skipped.length, 3);
+  for (const s of report.skipped) assert.match(s.reason, /at most 64 of them, starting and ending with a letter or digit/, s.name);
+});
+
+test('every unknown film.json field is a warning, even one named like a built-in', () => {
+  const { dir } = fresh();
+  writeFilmJson(dir, { constructor: 1, toString: 'x', tittle: 'Arrival' });
+  const r = inspectFilm(dir, 'arrival');
+  for (const key of ['constructor', 'toString', 'tittle']) {
+    assert.ok(r.warnings.includes(`film.json: unknown field "${key}" was ignored`), `${key}: ${r.warnings.join('\n')}`);
+  }
+});
+
+test('a subtitle file that starts with a byte-order mark is still WebVTT', () => {
+  const { dir } = fresh();
+  const bom = String.fromCharCode(0xfeff);
+  fs.writeFileSync(path.join(dir, 'subtitles', 'en.vtt'), `${bom}WEBVTT\n\n00:01.000 --> 00:02.000\nHello\n`);
+  const r = inspectFilm(dir, 'arrival');
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.status, 'ok');
+});
+
+// A Mac's disk ignores letter case and the Unicode form of accents; most Linux
+// disks don't. The scan says so on both, so a folder checked on a Mac doesn't
+// fail later on the server.
+test('a file named in film.json with other letter case or accents is caught on any disk', () => {
+  const { dir } = fresh();
+  fs.renameSync(path.join(dir, 'poster.jpg'), path.join(dir, 'Poster.JPG'));
+  // Accents written the other Unicode way from film.json, as Finder may name a file.
+  const nfc = 'subtitles/français.vtt'.normalize('NFC');
+  fs.renameSync(path.join(dir, 'subtitles', 'en.vtt'), path.join(dir, nfc.normalize('NFD')));
+  writeFilmJson(dir, { subtitles: [{ language: 'fr', file: nfc }] });
+
+  const r = inspectFilm(dir, 'arrival');
+  const caseBlind = fs.existsSync(path.join(dir, 'poster.jpg'));
+  if (caseBlind) {
+    assert.equal(r.status, 'warning', r.errors.join('\n'));
+    assert.ok(r.warnings.some((w) => w.startsWith('poster: "poster.jpg" is "Poster.JPG" on disk')), r.warnings.join('\n'));
+    assert.ok(r.warnings.some((w) => w.startsWith(`subtitles[0].file: "${nfc}" is "${nfc.normalize('NFD')}" on disk`)), r.warnings.join('\n'));
+    assert.ok(!r.warnings.some((w) => /isn't listed/.test(w)), 'the file is listed, however its name is written');
+    assert.equal(r.media.poster, 'Poster.JPG', 'the real name is kept');
+  } else {
+    assert.equal(r.status, 'error');
+    assert.ok(r.errors.some((e) => e.startsWith('poster: "poster.jpg" does not exist; the folder has "Poster.JPG"')), r.errors.join('\n'));
+    assert.ok(r.errors.some((e) => e.startsWith(`subtitles[0].file: "${nfc}" does not exist; the folder has`)), r.errors.join('\n'));
+  }
+});
+
+test('without film.json, the standard poster is found however its name is cased', () => {
+  const { dir } = fresh();
+  fs.rmSync(path.join(dir, 'film.json'));
+  fs.renameSync(path.join(dir, 'poster.jpg'), path.join(dir, 'Poster.JPG'));
+  const r = inspectFilm(dir, 'arrival');
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.media.poster, 'Poster.JPG');
 });

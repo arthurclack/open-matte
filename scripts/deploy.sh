@@ -12,13 +12,32 @@ DIR="${2:-/srv/open-matte}"
 cd "$(dirname "$0")/.."
 
 # Excluded paths are left alone on the server, so deploy/.env survives --delete.
+# A leading / means only at the top of the copy, so a folder called data or media
+# deeper in the code is still sent. *.db keeps databases and backups behind, such
+# as one downloaded into this folder: they hold people's names and ticket links.
 # .agents and skills-lock.json are coding-agent skills installed on this computer;
 # e2e/.cache, test-results and playwright-report are what npm run e2e leaves behind.
+# deploy/Caddyfile is where Caddy's config was before 1.0.0, and a Caddy started
+# then has that file mounted until the step below recreates it. Deleted first, and
+# the deploy stopping before that (a failed build), the old Caddy couldn't start
+# again after a reboot. So for this release it stays on the server; nothing reads
+# it once Caddy runs from deploy/caddy/. (Drop this exclude in the next release.)
 rsync -az --delete \
-  --exclude node_modules --exclude dist --exclude data --exclude media \
+  --exclude node_modules --exclude /dist --exclude /data --exclude /media \
+  --exclude '*.db' --exclude '*.db-*' \
   --exclude .env --exclude deploy/.env --exclude .git --exclude .claude \
   --exclude .agents --exclude skills-lock.json \
   --exclude e2e/.cache --exclude test-results --exclude playwright-report \
+  --exclude /deploy/Caddyfile \
   ./ "$HOST:$DIR/app/"
 
-ssh "$HOST" "cd '$DIR/app/deploy' && docker compose up -d --build && docker compose ps"
+# Caddy reads its Caddyfile only when it starts, and Compose restarts it only when
+# compose.yml or its image changes, so it is told to load the one just sent. A
+# Caddyfile with a mistake is refused, Caddy carries on with the one it had, and
+# the deploy fails. Right after a restart Caddy may take a moment to answer.
+ssh "$HOST" "cd '$DIR/app/deploy' && docker compose up -d --build && \
+  for try in 1 2 3; do \
+    docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile && break; \
+    [ \$try = 3 ] && exit 1; sleep 1; \
+  done && \
+  docker compose ps"

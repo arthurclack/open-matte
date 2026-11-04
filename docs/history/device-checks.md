@@ -17,7 +17,7 @@ table; a check that fails is worth a line about what you saw, and the server log
 
 - **Reach the real address.** Passkeys only work at `https://www.openmatte.dev`
   itself, and the home gateway blocks it. Use mobile data or a phone's hotspot, or the
-  hosts-file line for a computer: see [Testing from home](deploying.md#testing-from-home).
+  hosts-file line for a computer: see [Testing from home](../deploying.md#testing-from-home).
 - **Never test in the browser you use for the admin.** The admin cookie bypasses every
   ticket and person rule (the site shows "Admin preview" when both are present). Use
   another browser, a private window, or sign out of the admin first.
@@ -57,10 +57,11 @@ Do these wherever a group says "the usual checks":
 - Mac Safari: the usual checks. The same passkey should come from iCloud Keychain, with
   Touch ID or your password.
 - **Keeping**, on the Mac: open the **keepable** link (for Hedwig) in a browser that
-  isn't signed in, such as Chrome: it plays with no sign-in. Then open it in a private
-  Safari window, sign in there and press **Keep it**. Hedwig moves from Showing to
-  members to Your tickets on the iPhone, without opening the link, and Chrome is told
-  "This ticket has been kept".
+  isn't signed in, such as Chrome: it plays with no sign-in. Pause it or close the tab
+  there: keeping is refused while another browser is playing the ticket. Then open it
+  in a private Safari window, sign in there and press **Keep it**. Hedwig moves from
+  Showing to members to Your tickets on the iPhone, without opening the link, and
+  Chrome is told "This ticket has been kept".
 
 ### Signing in with the phone's QR code
 

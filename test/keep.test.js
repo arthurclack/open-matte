@@ -1,19 +1,16 @@
-// Keeping a ticket: milestone 2, slice 3. Written from docs/milestone-2.md ("Keeping a
-// ticket", "Changes to server/access.js", "Route changes", "Slice 3"), not from the
-// implementation. No viewer browser here ever holds the admin cookie: the admin's
-// preview bypasses every person rule, so a pass there would prove nothing.
+// Keeping a ticket: milestone 2, slice 3. Written from docs/history/milestone-2.md
+// ("Keeping a ticket", "Changes to server/access.js", "Route changes", "Slice 3"), not
+// from the implementation. No viewer browser here ever holds the admin cookie: the
+// admin's preview bypasses every person rule, so a pass there would prove nothing.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { after, before, describe, test } from 'node:test';
 import { softAuthenticator } from './softauth.js';
 import { adminBrowser, browser, enroll, makeFilm, newPerson, playbackFiles, setupLink, signIn, startServer, tempDir } from './helpers.js';
 
-const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
-
 const mediaDir = tempDir();
 const MASTER = '/media/arrival/hls/master.m3u8';
 const segment = (i) => `/media/arrival/hls/v_h264_720/seg_${i}.m4s`;
-const DAY = 24 * 60 * 60 * 1000;
 
 let srv;
 let admin;
@@ -39,7 +36,6 @@ const fresh = () => browser(srv.base);
 const statuses = (b, urls) => Promise.all(urls.map(async (u) => (await b.get(u)).status));
 const every = (urls, code) => urls.map(() => code);
 const status = async (b, url) => (await b.get(url)).status;
-const hashOf = (b) => sha256(b.jar.get('om_session'));
 const ticketRow = (id) => srv.db.prepare('SELECT * FROM tickets WHERE id = ?').get(id);
 const screeningRow = (id) => srv.db.prepare('SELECT * FROM screenings WHERE id = ?').get(id);
 const me = async (b) => {

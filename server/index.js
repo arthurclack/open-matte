@@ -4,6 +4,11 @@ import { assertConfig, config } from './config.js';
 import { openDb } from './db.js';
 import { scanMedia } from './scan.js';
 
+// Everything the server writes (the database and its journal, backups, posters,
+// the logo) is for this user alone. The database holds ticket links that anyone
+// could use, and people's names, so no other account on the server may read it.
+process.umask(0o077);
+
 assertConfig();
 const db = openDb(path.join(config.dataDir, 'open-matte.db'));
 
@@ -29,6 +34,14 @@ scanMedia(db, config.mediaDir)
       `Media scan: ${report.films.length} film folder(s) (${count('ok')} ok, ${count('warning')} with warnings, ${count('error')} with errors), ` +
         `${report.removed.length} missing, ${report.skipped.length} skipped`,
     );
+    // Nobody sees this scan's report, and a conflict is only reported by the
+    // scan that first finds it, so name each one here. Film and field only:
+    // the values can be long, and the log is no place for them.
+    for (const f of report.films) {
+      for (const c of f.conflicts) {
+        console.warn(`Media scan: ${f.slug}: film.json changed ${c.field}, which you've edited in the admin, so your version was kept`);
+      }
+    }
     // Look up any films that haven't been matched against TMDb yet.
     app.locals.metadata.queueUnmatched();
   })

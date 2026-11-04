@@ -1,6 +1,6 @@
-// The account page: milestone 2, slice 5. Written from docs/milestone-2.md ("Endpoints",
-// "Screens: Account", "Slice 5"), not from the implementation. No viewer browser here
-// holds the admin cookie.
+// The account page: milestone 2, slice 5. Written from docs/history/milestone-2.md
+// ("Endpoints", "Screens: Account", "Slice 5"), not from the implementation. No viewer
+// browser here holds the admin cookie.
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { softAuthenticator } from './softauth.js';

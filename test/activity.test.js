@@ -1,6 +1,6 @@
 // Activity, filtered and paged; the film and person summaries; and the ticket list's
 // last activity once its events have gone: milestone 3, slice 4. Written from
-// docs/milestone-3.md and the slice 4 spec, not from the implementation. Summaries are
+// docs/history/milestone-3.md (slice 4), not from the implementation. Summaries are
 // built from tickets and screenings only, so the clean-up never changes them.
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
@@ -357,5 +357,95 @@ describe('summaries on the film and person pages', () => {
       { heat: filmSummary(await filmPage('heat')), solaris: filmSummary(await filmPage('solaris')), arrival: filmSummary(await filmPage('arrival')), alex: personSummary(await personPage()) },
       before1,
     );
+  });
+});
+
+// ====================================================================== how often
+// docs/access.md, "What is recorded": how many viewing events one viewer makes.
+describe('how often viewing is recorded', () => {
+  const c = cinema();
+  const count = (type, ticketId) => c.srv.db.prepare('SELECT COUNT(*) AS n FROM events WHERE type = ? AND ticket_id = ?').get(type, ticketId).n;
+  const backdate = (type, ticketId, ms) => c.sql('UPDATE events SET at = at - ? WHERE type = ? AND ticket_id = ?', ms, type, ticketId);
+  const page = async (b) => assert.equal((await b.get('/api/films/arrival')).status, 200);
+
+  test('opened: at most once per 30 minutes per browser', async () => {
+    const t = await c.issue();
+    const b = await c.opened(c.fresh(), t);
+    for (let i = 0; i < 3; i++) await page(b);
+    assert.equal(count('opened', t.id), 1, 'three page loads, one event');
+    await page(await c.opened(c.fresh(), t));
+    assert.equal(count('opened', t.id), 2, 'another browser counts on its own');
+    backdate('opened', t.id, 29 * MINUTE);
+    await page(b);
+    assert.equal(count('opened', t.id), 2, 'not after 29 minutes');
+    backdate('opened', t.id, 2 * MINUTE);
+    await page(b);
+    assert.equal(count('opened', t.id), 3, 'again after 30');
+  });
+
+  test('opened: not when the page reads itself again, after Play or once the player stops', async () => {
+    const t = await c.issue();
+    const b = await c.opened(c.fresh(), t);
+    await page(b);
+    // The friend reads the page for 40 minutes, then presses Play.
+    backdate('opened', t.id, 40 * MINUTE);
+    await c.play(b);
+    assert.equal((await b.get('/api/films/arrival?again=1')).status, 200);
+    assert.equal(count('opened', t.id), 1, 'opened once, then played');
+    await page(b);
+    assert.equal(count('opened', t.id), 2, 'loading the page itself still counts');
+  });
+
+  test('heartbeat: progress is logged at most every 5 minutes while playing, and a pause not at all', async () => {
+    const t = await c.issue();
+    const b = await c.opened(c.fresh(), t);
+    const id = await c.play(b);
+    for (const position of [10, 20, 30]) await c.heartbeat(b, id, position);
+    assert.equal(count('heartbeat', t.id), 1, 'three reports, one event');
+    backdate('heartbeat', t.id, 5 * MINUTE);
+    await c.heartbeat(b, id, 31, false);
+    assert.equal(count('heartbeat', t.id), 1, 'a pause is not logged');
+    c.sql("UPDATE events SET at = at + ? WHERE type = 'heartbeat' AND ticket_id = ?", MINUTE, t.id);
+    await c.heartbeat(b, id, 40);
+    assert.equal(count('heartbeat', t.id), 1, 'not after 4 minutes');
+    backdate('heartbeat', t.id, MINUTE);
+    await c.heartbeat(b, id, 50);
+    assert.equal(count('heartbeat', t.id), 2, 'again after 5');
+    // Every report still moves the screening on.
+    assert.equal(c.srv.db.prepare('SELECT position_seconds FROM screenings WHERE id = ?').get(id).position_seconds, 50);
+  });
+
+  test('play: every new screening and every move to another browser, but the same browser again at most every 5 minutes', async () => {
+    const t = await c.issue();
+    const laptop = await c.opened(c.fresh(), t);
+    const tv = await c.opened(c.fresh(), t);
+    const resumed = () =>
+      c.srv.db
+        .prepare("SELECT detail FROM events WHERE type = 'play' AND ticket_id = ? ORDER BY id")
+        .all(t.id)
+        .map((e) => JSON.parse(e.detail).resumed);
+
+    const id = await c.play(laptop);
+    for (let i = 0; i < 3; i++) assert.equal(await c.play(laptop), id);
+    assert.equal(count('play', t.id), 1, 'a refresh or a double click is not another event');
+
+    await c.heartbeat(laptop, id, 20, false);
+    assert.equal(await c.play(tv), id);
+    await c.heartbeat(tv, id, 30, false);
+    assert.equal(await c.play(laptop), id);
+    assert.equal(count('play', t.id), 3, 'moving to another browser and back always is');
+
+    backdate('play', t.id, 4 * MINUTE);
+    await c.play(laptop);
+    assert.equal(count('play', t.id), 3, 'not after 4 minutes');
+    backdate('play', t.id, MINUTE);
+    await c.play(laptop);
+    assert.equal(count('play', t.id), 4, 'again after 5');
+    assert.deepEqual(resumed(), [false, true, true, true]);
+
+    // A new screening, once the last one's window has closed, always is.
+    c.sql('UPDATE screenings SET resumable_until = ? WHERE id = ?', Date.now() - 1, id);
+    assert.notEqual(await c.play(laptop), id);
+    assert.deepEqual(resumed(), [false, true, true, true, false]);
   });
 });

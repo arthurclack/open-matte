@@ -4,9 +4,17 @@ import { api, formatAgo, formatClock, formatDate, formatDateTime } from '../api.
 import { KeepBox, PersonDisabledBadge, ticketKind, ticketMessage } from './Tickets.jsx';
 import { CopyButton, ErrorNote, Progress, TicketBadge, dateInputToMs, describeEvent, msToDateInput, useAction, useLoad } from './ui.jsx';
 
+// Giving a ticket answers with a code when the person can't have it (disabled in
+// another tab since this page loaded, say); everything else it says in words.
+const HOLDER_ERRORS = {
+  'person-not-found': "That person isn't here any more. Reload the page and choose again.",
+  'person-disabled': "They're disabled: enable them on their page before giving them a ticket.",
+};
+const actionError = (e) => (e ? HOLDER_ERRORS[e] || e : null);
+
 export default function TicketDetail() {
   const { id } = useParams();
-  const { data: t, setData, error, reload } = useLoad(() => api.get(`/api/admin/tickets/${id}`), [id]);
+  const { data: t, error, reload } = useLoad(() => api.get(`/api/admin/tickets/${id}`), [id]);
   const events = useLoad(() => api.get(`/api/admin/activity?ticket=${id}&heartbeats=1&limit=300`), [id]);
   const [form, setForm] = useState(null);
   const action = useAction();
@@ -118,7 +126,7 @@ export default function TicketDetail() {
           )}
         </div>
       </div>
-      <ErrorNote error={action.error} />
+      <ErrorNote error={actionError(action.error)} />
 
       {revoked && (
         <div className="notice">
@@ -169,7 +177,9 @@ export default function TicketDetail() {
                 <dt>Open screening</dt>
                 <dd>
                   {t.openScreening.playingNow ? 'Playing now' : 'Paused'}
-                  {t.openScreening.device ? ` on ${t.openScreening.device}` : ''}, resumable until {formatDateTime(t.openScreening.resumableUntil)}
+                  {t.openScreening.device ? ` on ${t.openScreening.device}` : ''}, resumable until{' '}
+                  {/* The server's, never later than the ticket's own expiry. */}
+                  {formatDateTime(t.openScreening.resumableUntil)}
                 </dd>
               </>
             )}
@@ -245,7 +255,7 @@ export default function TicketDetail() {
                     {!s.voidedAt && (
                       <button
                         className="btn small"
-                        onClick={() => post(`screenings/${s.id}/void`, "Give this screening back? It won't count towards the limit, and stays in the history.")}
+                        onClick={() => post(`screenings/${s.id}/void`, "Give this screening back? It won't count towards the limit, and stays in the history. If it's playing, playback stops. The ticket's expiry clock keeps running.")}
                         disabled={action.busy}
                       >
                         Give back

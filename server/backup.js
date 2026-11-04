@@ -10,11 +10,20 @@ import { config } from './config.js';
 // while the server runs), checked with PRAGMA integrity_check, and saved as
 // BACKUP_DIR/open-matte-YYYY-MM-DD-HHMMSS.db (UTC). TMDb artwork and the
 // cinema's logo and icon are mirrored to BACKUP_DIR/artwork and
-// BACKUP_DIR/branding. Kept: the newest backup of each of the last 14 days, and
-// the oldest of each of the last 12 months.
+// BACKUP_DIR/branding. Kept: every backup of the last three days, the newest of
+// each of the last 14 days, and the oldest of each of the last 12 months.
 
 const NAME = /^open-matte-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})\.db$/;
+// What a backup stopped halfway leaves behind: the snapshot in the data folder,
+// and the copy in BACKUP_DIR before it gets its name.
+const SNAPSHOT = /^\.backup-\d+-\d+\.db$/;
+const PARTIAL = /^\.open-matte-\d{4}-\d{2}-\d{2}-\d{6}\.db\.partial$/;
 const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+// Every backup this recent is kept, so the one you make with Back up now before
+// an update is still there if the update goes wrong, even after a second backup
+// that day or the night's daily one.
+const RECENT_DAYS = 3;
 const pad = (n) => String(n).padStart(2, '0');
 
 function backupName(at) {
@@ -53,12 +62,15 @@ export function parseBackupName(name) {
   return { name, day: `${m[1]}-${m[2]}-${m[3]}`, month: `${m[1]}-${m[2]}`, at: Date.UTC(y, mo - 1, d, h, mi, s) };
 }
 
-// Which backups to delete: everything except the newest backup of each of the
-// last `keepDays` days that have one, and the oldest of each of the last
-// `keepMonths` months.
-export function backupsToDelete(names, { keepDays, keepMonths }) {
+// Which backups to delete at `now`: everything except the backups of the last
+// three days (or of the last `keepDays` days, if that's fewer), the newest backup
+// of each of the last `keepDays` days that have one, and the oldest of each of the
+// last `keepMonths` months. The newest backup of all is never deleted.
+export function backupsToDelete(names, { keepDays, keepMonths, now = Date.now() }) {
   const all = names.map(parseBackupName).filter(Boolean).sort((a, b) => b.at - a.at);
-  const keep = new Set();
+  const keep = new Set(all.slice(0, 1).map((b) => b.name));
+  const recent = Math.min(RECENT_DAYS, keepDays) * DAY;
+  for (const b of all) if (now - b.at < recent) keep.add(b.name);
   const days = new Set();
   for (const b of all) {
     if (days.has(b.day)) continue;
@@ -88,7 +100,14 @@ export function createBackups({
   // Folders of files named after their content, so copying only new ones is
   // enough. Files whose names start with a dot are still being written.
   const mirrored = ['artwork', 'branding'];
+  // The snapshot and partial copy of a backup being made, so that clearing
+  // leftovers leaves them alone.
+  const inProgress = new Set();
 
+  // Read synchronously, from the admin's pages and the check every 15 minutes, so
+  // BACKUP_DIR belongs on the server's own disk: a network share that stopped
+  // answering would stop the whole server. Copying the backups to network storage
+  // is the copy timer's job (docs/deploying.md).
   function list() {
     if (!backupDir) return [];
     let names;
@@ -121,20 +140,23 @@ export function createBackups({
       const name = backupName(at);
       await fsp.mkdir(backupDir, { recursive: true });
       // Snapshot into the data folder first: VACUUM INTO is synchronous, and the
-      // data folder is local and fast. The copy to BACKUP_DIR, which may be on
-      // slower storage, then happens without holding up the server.
+      // data folder is local and fast. The copy to BACKUP_DIR then happens
+      // without holding up the server.
       const tmp = path.join(dataDir, `.backup-${process.pid}-${at}.db`);
+      const partial = path.join(backupDir, `.${name}.partial`);
+      inProgress.add(tmp).add(partial);
       try {
         db.exec(`VACUUM INTO '${tmp.replaceAll("'", "''")}'`);
         const check = new DatabaseSync(tmp, { readOnly: true });
         const verdict = check.prepare('PRAGMA integrity_check').get().integrity_check;
         check.close();
         if (verdict !== 'ok') throw new Error(`the copy failed its integrity check (${verdict})`);
-        const partial = path.join(backupDir, `.${name}.partial`);
         await fsp.copyFile(tmp, partial);
         await fsp.rename(partial, path.join(backupDir, name));
       } finally {
         await fsp.rm(tmp, { force: true });
+        inProgress.delete(tmp);
+        inProgress.delete(partial);
       }
       for (const folder of mirrored) {
         const from = path.join(dataDir, folder);
@@ -146,7 +168,7 @@ export function createBackups({
           filter: (src) => !path.basename(src).startsWith('.'),
         });
       }
-      for (const old of backupsToDelete(list().map((b) => b.name), { keepDays, keepMonths })) {
+      for (const old of backupsToDelete(list().map((b) => b.name), { keepDays, keepMonths, now: at })) {
         await fsp.rm(path.join(backupDir, old), { force: true });
       }
       lastError = null;
@@ -173,13 +195,40 @@ export function createBackups({
     return at >= scheduled && latest.at < scheduled;
   }
 
+  // A backup the server was stopped in the middle of (by a deploy at 04:00, say)
+  // leaves a whole copy of the database behind that nothing else would delete:
+  // its snapshot in the data folder, or its copy in BACKUP_DIR still under a
+  // hidden name, which the copy timer would carry off the server as well.
+  async function removeLeftovers() {
+    for (const [dir, leftover] of [
+      [dataDir, SNAPSHOT],
+      [backupDir, PARTIAL],
+    ]) {
+      if (!dir) continue;
+      let names;
+      try {
+        names = await fsp.readdir(dir);
+      } catch {
+        continue; // Not made yet, so nothing is left over in it.
+      }
+      for (const n of names) {
+        const file = path.join(dir, n);
+        if (leftover.test(n) && !inProgress.has(file)) await fsp.rm(file, { force: true });
+      }
+    }
+  }
+
+  // At the server's start: clears what an interrupted backup left, then checks
+  // every 15 minutes whether a backup is due. The promise is for tests.
   function start() {
-    if (!backupDir) return;
+    const cleaned = removeLeftovers().catch((err) => console.error(`Backup clean-up failed: ${err.message}`));
+    if (!backupDir) return cleaned;
     const tick = () => {
       if (due()) run().catch((err) => console.error(`Backup failed: ${err.message}`));
     };
     setTimeout(tick, 60 * 1000).unref();
     setInterval(tick, 15 * 60 * 1000).unref();
+    return cleaned;
   }
 
   function status() {

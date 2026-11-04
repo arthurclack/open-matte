@@ -41,19 +41,35 @@ export function deviceLabel(ua = '') {
   return `${browser} on ${os}`;
 }
 
+// A name sent more than once with different values is left out, so neither value
+// is used. This site sets one cookie of each name, so another one comes from a host
+// under the same parent domain (Domain=), and that host also chooses where it goes
+// in the header: after ours for Path=/, before ours for a longer path such as /api.
+// Taking the first or the last would let it choose the session a browser acts as;
+// leaving both out keeps the browser signed out instead. The same value twice (a
+// proxy repeating the header) is still one cookie. A browser with no cookie from
+// this site sends only theirs, and that host can arrange it: browsers keep only so
+// many cookies per parent domain, and setting enough of its own drops ours. Only
+// __Host- names (planned), or a domain of the cinema's own, rule that out.
 export function parseCookies(header = '') {
   const out = {};
+  const ambiguous = new Set();
   for (const part of header.split(';')) {
     const i = part.indexOf('=');
     if (i < 0) continue;
     const k = part.slice(0, i).trim();
     if (!k) continue;
+    let value;
     try {
-      out[k] = decodeURIComponent(part.slice(i + 1).trim());
+      value = decodeURIComponent(part.slice(i + 1).trim());
     } catch {
       // Ignore malformed cookies rather than failing the request.
+      continue;
     }
+    if (Object.hasOwn(out, k) && out[k] !== value) ambiguous.add(k);
+    else out[k] = value;
   }
+  for (const k of ambiguous) delete out[k];
   return out;
 }
 

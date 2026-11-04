@@ -1,5 +1,5 @@
-// Playback help's summary: milestone 3, slice 3. Written from docs/milestone-3.md and
-// the slice 3 spec, not from the implementation. Copy summary hands a viewer text to
+// Playback help's summary: milestone 3, slice 3. Written from docs/history/milestone-3.md
+// (slice 3), not from the implementation. Copy summary hands a viewer text to
 // paste into a message to the cinema, so it must leave out every address (they hold
 // screening ids, ticket codes and the film's slug), names and the film's title.
 // playbackSummary and scrub are plain functions: no DOM, no React, no hls.js.

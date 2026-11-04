@@ -61,7 +61,7 @@ export default function SignIn() {
   return (
     <div className="narrow" style={{ paddingTop: '15vh' }}>
       <h1 style={{ fontSize: '2rem', marginBottom: '1.2rem' }}>Sign in</h1>
-      <PasskeySignIn onSignedIn={signedIn} />
+      <PasskeySignIn onSignedIn={signedIn} copyLabel="Copy link" />
       <div className="dim" style={{ marginTop: '2rem', fontSize: '0.92rem' }}>
         <p>
           <strong>No account?</strong> Accounts here are set up by {host}. You don't need one to watch: open the ticket link you were sent.

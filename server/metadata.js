@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { filmArtwork, filmMedia } from './films.js';
+import { imageInfo } from './images.js';
 import { META_FIELDS } from './scan.js';
 import { guessTitleYear, looksLikeReleaseName, normalizeTitle } from './titles.js';
 
@@ -19,7 +20,6 @@ export const TMDB_FIELDS = ['title', 'originalTitle', 'year', 'runtimeMinutes', 
 
 const SIZES = { poster: 'w780', backdrop: 'w1280' };
 const THUMBS = { poster: 'w185', backdrop: 'w300' };
-const IMAGE_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const TMDB_IMAGE_PATH = /^\/[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp)$/;
 export const ARTWORK_FILE = /^(poster|backdrop)-[a-f0-9]{12}\.(?:jpg|png|webp)$/;
@@ -42,6 +42,20 @@ const parse = (s) => {
 };
 const yearOf = (date) => (/^\d{4}/.test(date || '') ? Number(date.slice(0, 4)) : null);
 const unique = (xs) => [...new Set(xs)];
+
+// A response body, or null once it passes `max` bytes. Stopping there cancels
+// the rest, so an oversized image is never held in memory whole.
+async function readUpTo(body, max) {
+  if (!body) return Buffer.alloc(0);
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of body) {
+    size += chunk.length;
+    if (size > max) return null;
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
 
 export const filmSources = (film) => parse(film.meta_sources) || {};
 
@@ -159,21 +173,36 @@ export function createMetadata({
     };
   }
 
+  // The image comes from the image host itself (no redirects to anywhere
+  // else), is read no further than the size limit, and is judged by its bytes
+  // rather than by the type the response claims.
   async function downloadImage(slug, kind, tmdbPath) {
     if (!TMDB_IMAGE_PATH.test(tmdbPath || '')) throw new MetadataError('bad-image', 'That image is not one TMDB offers for this film.', 400);
+    const unreachable = () => new MetadataError('unreachable', "Couldn't download the image from TMDB.");
+    const unusable = () => new MetadataError('bad-image', 'TMDB sent something that isn’t a usable image.');
     let res;
     try {
-      res = await fetchImpl(`${imageBase}/${SIZES[kind]}${tmdbPath}`, { signal: AbortSignal.timeout(30000) });
+      res = await fetchImpl(`${imageBase}/${SIZES[kind]}${tmdbPath}`, { redirect: 'error', signal: AbortSignal.timeout(30000) });
     } catch {
-      throw new MetadataError('unreachable', "Couldn't download the image from TMDB.");
+      throw unreachable();
     }
     if (!res.ok) throw new MetadataError('tmdb-error', `TMDB couldn't send the image (${res.status}).`);
-    const ext = IMAGE_TYPES[(res.headers.get('content-type') || '').split(';')[0].trim()];
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (!ext || !buf.length || buf.length > MAX_IMAGE_BYTES) throw new MetadataError('bad-image', 'TMDB sent something that isn’t a usable image.');
+    if (Number(res.headers.get('content-length')) > MAX_IMAGE_BYTES) {
+      res.body?.cancel().catch(() => {});
+      throw unusable();
+    }
+    let buf;
+    try {
+      buf = await readUpTo(res.body, MAX_IMAGE_BYTES);
+    } catch {
+      // A body that stalls past the timeout, or a connection that drops.
+      throw unreachable();
+    }
+    const info = buf && imageInfo(buf);
+    if (!info) throw unusable();
     const dir = path.join(artworkDir, slug);
     fs.mkdirSync(dir, { recursive: true });
-    const name = `${kind}-${crypto.createHash('sha1').update(tmdbPath).digest('hex').slice(0, 12)}.${ext}`;
+    const name = `${kind}-${crypto.createHash('sha1').update(tmdbPath).digest('hex').slice(0, 12)}.${info.ext}`;
     const tmp = path.join(dir, `.${name}.tmp`);
     fs.writeFileSync(tmp, buf);
     fs.renameSync(tmp, path.join(dir, name));
@@ -187,10 +216,11 @@ export function createMetadata({
 
   // Empty fields can be filled. So can a title that is obviously a file name,
   // or one that differs from TMDb's only in punctuation, accents or capitals
-  // ("Paris Texas" from a file name becomes "Paris, Texas").
-  function fillable(key, current, value) {
+  // ("Paris Texas" from a file name becomes "Paris, Texas"). A title you typed
+  // in the admin is yours, whatever it looks like.
+  function fillable(key, current, value, edited) {
     if (current == null || current === '') return true;
-    return key === 'title' && (looksLikeReleaseName(current) || normalizeTitle(current) === normalizeTitle(value));
+    return key === 'title' && !edited && (looksLikeReleaseName(current) || normalizeTitle(current) === normalizeTitle(value));
   }
 
   // Writes TMDb details to a film.
@@ -208,6 +238,9 @@ export function createMetadata({
     // Re-read: the film may have changed while the images downloaded.
     const fresh = filmRow.get(film.id);
     const sources = filmSources(fresh);
+    // Edited in the admin: not what film.json said last, and not TMDb's.
+    const imported = parse(fresh.imported_meta);
+    const edited = (key, column) => imported != null && sources[key] !== 'tmdb' && (imported[key] ?? null) !== (fresh[column] ?? null);
     const sets = [];
     const args = [];
     const changed = [];
@@ -215,10 +248,14 @@ export function createMetadata({
       if (!TMDB_FIELDS.includes(key)) continue;
       const value = d.fields[key];
       const column = META_FIELDS[key].column;
-      if (value == null || (fillOnly && !fillable(key, fresh[column], value))) continue;
+      if (value == null || (fillOnly && !fillable(key, fresh[column], value, edited(key, column)))) continue;
       sets.push(`${column} = ?`);
       args.push(value);
-      sources[key] = 'tmdb';
+      // Taken by hand over what film.json says, it's the admin's choice: an edit,
+      // which Reset to film.json undoes and rescans keep. Filling a field film.json
+      // leaves empty (or matching on import) is TMDb's.
+      if (how === 'manual' && (imported?.[key] ?? '') !== '') delete sources[key];
+      else sources[key] = 'tmdb';
       if (fresh[column] !== value) changed.push(key);
     }
     for (const [kind, file] of Object.entries(downloads)) {
@@ -323,7 +360,6 @@ export function createMetadata({
     details,
     apply,
     resetArtwork,
-    autoIdentify,
     queueUnmatched,
     idle: () => chain,
     artworkPath,

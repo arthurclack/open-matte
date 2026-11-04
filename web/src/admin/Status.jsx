@@ -174,7 +174,10 @@ function Attention({ a }) {
         {refusals.total
           ? `${plural(refusals.total, 'media request')} refused since the server started, ${when(refusals.since)}.`
           : `No media requests refused since the server started, ${when(refusals.since)}.`}{' '}
-        <span className="faint">Kept in memory only, with no addresses, and forgotten on restart. The server's log has every one.</span>
+        <span className="faint">
+          Kept in memory only, with no addresses, and forgotten on restart. The server's log has every one. Repeats share a row, with the time
+          of the last. Requests with no session (no cookie, or one that has expired or was made up) can come from anyone, so they keep to a few rows.
+        </span>
       </p>
       {reasons.length > 0 && (
         <dl className="kv" style={{ marginBottom: '1rem' }}>
@@ -196,6 +199,7 @@ function Attention({ a }) {
               <thead>
                 <tr>
                   <th>Time</th>
+                  <th>Count</th>
                   <th>Status</th>
                   <th>Reason</th>
                   <th>Kind</th>
@@ -207,6 +211,7 @@ function Attention({ a }) {
                 {refusals.recent.map((r, i) => (
                   <tr key={`${r.at}-${i}`}>
                     <td className="nowrap faint" data-label="Time">{formatDateTime(r.at)}</td>
+                    <td data-label="Count">{r.count ?? 1}</td>
                     <td data-label="Status">{r.status}</td>
                     <td className="card-title">{sentence(r.reason)}</td>
                     <td className="nowrap" data-label="Kind">{r.kind}</td>

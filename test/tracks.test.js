@@ -1,10 +1,10 @@
-// Audio and subtitle tracks: milestone 3, slice 2. Written from docs/milestone-3.md and
-// the slice 2 spec, not from the implementation. A film starts in the audio language and
-// the subtitles a viewer chose last time, when it has them, and otherwise as film.json
-// says; a forced track (signs, foreign dialogue) shows by itself while subtitles are Off
-// and its language is the one being heard, and is never listed in the menu; the audio
-// menu names each track's channel layout and audio description. web/src/tracks.js is
-// plain functions: no DOM, no React, no hls.js.
+// Audio and subtitle tracks: milestone 3, slice 2. Written from
+// docs/history/milestone-3.md (slice 2), not from the implementation. A film starts in
+// the audio language and the subtitles a viewer chose last time, when it has them, and
+// otherwise as film.json says; a forced track (signs, foreign dialogue) shows by itself
+// while subtitles are Off and its language is the one being heard, and is never listed
+// in the menu; the audio menu names each track's channel layout and audio description.
+// web/src/tracks.js is plain functions: no DOM, no React, no hls.js.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { describe, test } from 'node:test';

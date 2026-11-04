@@ -14,6 +14,7 @@ import { AdminContext } from './ui.jsx';
 
 export default function AdminApp() {
   const [state, setState] = useState('checking'); // checking | in | out
+  const [signOutError, setSignOutError] = useState(null);
 
   useEffect(() => {
     document.title = 'Admin · Open Matte';
@@ -29,8 +30,17 @@ export default function AdminApp() {
   if (state === 'checking') return null;
   if (state === 'out') return <Login onSignedIn={() => setState('in')} />;
 
+  // The admin only looks signed out once the server has ended the session. If it
+  // never heard, the cookie still works: on a borrowed computer, the next person to
+  // open the admin would be in.
   async function signOut() {
-    await api.post('/api/admin/logout').catch(() => {});
+    setSignOutError(null);
+    try {
+      await api.post('/api/admin/logout');
+    } catch {
+      setSignOutError("Couldn't sign out. Check your connection and try again.");
+      return;
+    }
     setState('out');
   }
 
@@ -57,6 +67,7 @@ export default function AdminApp() {
           </div>
         </nav>
         <main className="admin-main">
+          {signOutError && <div className="notice bad">{signOutError}</div>}
           <Routes>
             {/* The first page starts with what needs attention, if anything does. */}
             <Route
@@ -96,7 +107,15 @@ function Login({ onSignedIn }) {
       await api.post('/api/admin/login', { password });
       onSignedIn();
     } catch (err) {
-      setError(err.status === 429 ? 'Too many attempts. Wait a few minutes and try again.' : 'That password is not right.');
+      // Only a 401 means the password was wrong. Anything else (no connection, or the
+      // server restarting during a deploy) says nothing about the password.
+      setError(
+        err.status === 401
+          ? 'That password is not right.'
+          : err.status === 429
+            ? 'Too many attempts. Wait a few minutes and try again.'
+            : "Couldn't sign in just now. Check your connection and try again in a moment.",
+      );
     } finally {
       setBusy(false);
     }

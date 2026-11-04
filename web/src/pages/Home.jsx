@@ -13,7 +13,9 @@ const NOTICES = {
 export default function Home() {
   const { me, site } = useSite();
   const [params] = useSearchParams();
-  const notice = NOTICES[params.get('notice')];
+  // Only the notices above: a link's ?notice= could name anything, __proto__ included.
+  const key = params.get('notice');
+  const notice = Object.hasOwn(NOTICES, key) ? NOTICES[key] : null;
   if (!me) return null;
 
   const signedIn = Boolean(me.person);

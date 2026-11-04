@@ -1,20 +1,27 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, formatClock, formatDate, formatDateTime, formatRuntime, plural } from '../api.js';
+import { api, formatClock, formatDate, formatDateTime, formatDateTimeYear, formatRuntime, plural } from '../api.js';
+import { lazyPart } from '../ErrorBoundary.jsx';
 import PasskeySignIn, { NewPasskeys } from '../PasskeySignIn.jsx';
 import { supportsPasskeys } from '../passkeys.js';
 import { useSite } from '../site.jsx';
 import { Poster } from './shared.jsx';
 
 // hls.js is large; load it when someone presses Play.
-const Player = lazy(() => import('../Player.jsx'));
+const Player = lazyPart(() => import('../Player.jsx'));
 
+// What Play can be refused with. Anything else (no connection, a server error) gets
+// a message of its own, since nothing on the reloaded page would explain it.
 const PLAY_ERRORS = {
   'playing-elsewhere': 'This screening is playing on another device right now. Pause it there, or give it a minute, then try again.',
+  'too-many-requests': 'Play was pressed too many times from this connection. Wait a few minutes, then try again.',
   'no-ticket': null, // the ticket panel explains these after a reload
   used_up: null,
   expired: null,
   unavailable: null,
+  'not-found': null, // and after these the page itself goes
+  revoked: null,
+  unpublished: null,
 };
 
 export default function Film() {
@@ -27,12 +34,23 @@ export default function Film() {
   // Passkeys added since the one used to sign in here (Sign in and keep it). The
   // server reports them once, so they stay on the page after the offer goes.
   const [newPasskeys, setNewPasskeys] = useState(null);
+  // The player stopped because this browser was signed out (Sign out everywhere, the
+  // admin signing browsers out, the person disabled): the page then says so.
+  const [signedOut, setSignedOut] = useState(false);
+  // The player has stopped for good, for a reason the server gave (the screening
+  // ended, the ticket went): the ticket panel offers Play or Resume again. Stopping
+  // because another device took over offers Watch here instead, in the player.
+  const [stopped, setStopped] = useState(false);
   const theatreRef = useRef(null);
 
+  // `again`: the page reading itself again, after Play or once the player stops,
+  // which isn't someone opening it, so the server doesn't log it as opened.
   const load = useCallback(
-    () =>
+    (again = false) =>
       api
-        .get(`/api/films/${slug}`)
+        // The route gives the slug decoded: encoded again, a link like /..%2Fme
+        // asks for a film called '../me' rather than for /api/me.
+        .get(`/api/films/${encodeURIComponent(slug)}${again ? '?again=1' : ''}`)
         .then(setData)
         .catch((err) => {
           if (err.status === 404) return setData(null);
@@ -46,6 +64,8 @@ export default function Film() {
     setData(undefined);
     setScreening(null);
     setMessage(null);
+    setSignedOut(false);
+    setStopped(false);
     load();
   }, [load]);
 
@@ -53,8 +73,9 @@ export default function Film() {
     if (data?.film?.title && site?.cinemaName) document.title = `${data.film.title} · ${site.cinemaName}`;
   }, [data?.film?.title, site?.cinemaName]);
 
-  // The header's Sign in link isn't offered while the player is open.
-  const playerOpen = Boolean(screening);
+  // The header's Sign in link isn't offered while the player is open. Once the page
+  // no longer shows the film (after a halt), there's no player.
+  const playerOpen = Boolean(screening && data?.film);
   useEffect(() => {
     setPlayerOpen(playerOpen);
     return () => setPlayerOpen(false);
@@ -64,22 +85,34 @@ export default function Film() {
     setMessage(null);
     setStarting(true);
     try {
-      const s = await api.post(`/api/films/${slug}/screenings`);
+      const s = await api.post(`/api/films/${encodeURIComponent(slug)}/screenings`);
       setScreening({ ...s, key: Date.now() });
+      setStopped(false);
       requestAnimationFrame(() => theatreRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      // The ticket panel then tells of the screening just opened, not the one Play would start.
+      load(true);
     } catch (err) {
-      if (err.code in PLAY_ERRORS && PLAY_ERRORS[err.code]) setMessage(PLAY_ERRORS[err.code]);
-      await load();
+      if (!Object.hasOwn(PLAY_ERRORS, err.code)) setMessage("Couldn't start playback. Try again in a moment.");
+      else if (PLAY_ERRORS[err.code]) setMessage(PLAY_ERRORS[err.code]);
+      await load(true);
     } finally {
       setStarting(false);
     }
   }
 
-  // The player stopped because the server refused something: find out why.
-  const onHalt = useCallback(async () => {
-    await load();
+  // Something changed on the server (the ticket was kept, the player was
+  // refused): read the page and the header again.
+  const reload = useCallback(async (code) => {
+    if (code === 'signed-out') setSignedOut(true);
+    await load(true);
     refreshSite();
   }, [load, refreshSite]);
+
+  // The player stopped because the server refused something: find out why.
+  const onHalt = useCallback(async (code) => {
+    setStopped(true);
+    await reload(code);
+  }, [reload]);
 
   if (data === undefined) return message ? <div className="narrow notice bad">{message}</div> : null;
   // This browser opened the ticket's link, and someone has kept it in their account since.
@@ -91,6 +124,23 @@ export default function Film() {
         <Link to="/" className="btn">
           Go to the front page
         </Link>
+      </div>
+    );
+  }
+  // The film is gone from this browser with its session: someone signed it out.
+  if (data === null && signedOut) {
+    return (
+      <div className="narrow" style={{ paddingTop: '15vh' }}>
+        <h1 style={{ fontSize: '2rem', marginBottom: '0.8rem' }}>This browser has been signed out</h1>
+        <p className="dim">Sign in to carry on watching. If you opened the ticket from a link, open the link again.</p>
+        <div className="row" style={{ gap: '0.6rem' }}>
+          <Link to={`/signin?next=${encodeURIComponent(`/${slug}`)}`} className="btn primary">
+            Sign in
+          </Link>
+          <Link to="/" className="btn">
+            Go to the front page
+          </Link>
+        </div>
       </div>
     );
   }
@@ -152,8 +202,8 @@ export default function Film() {
             signedIn={Boolean(me?.person)}
             onPlay={play}
             starting={starting}
-            playing={Boolean(screening)}
-            onKept={onHalt}
+            playing={Boolean(screening) && !stopped}
+            onKept={reload}
             onNewPasskeys={setNewPasskeys}
           />
 
@@ -164,6 +214,8 @@ export default function Film() {
     </article>
   );
 }
+
+const HOUR = 60 * 60 * 1000;
 
 function TicketPanel({ access, film, site, signedIn, onPlay, starting, playing, onKept, onNewPasskeys }) {
   const t = access.ticket;
@@ -206,8 +258,17 @@ function TicketPanel({ access, film, site, signedIn, onPlay, starting, playing, 
       lines.push(`Your screening is open until ${formatDateTime(open.resumableUntil)}. Pick up where you left off, on this device or another.`);
     } else {
       if (t.screeningLimit != null) lines.push(`${plural(t.screeningsLeft, 'screening')} left on this ticket.`);
-      lines.push(`Pressing Play starts a screening. You can pause and come back to it for ${plural(windowHours, 'hour')}.`);
-      if (t.startBy) lines.push(`Start watching by ${formatDate(t.startBy)}.`);
+      // The ticket's expiry wins over the resume window: what it has left, or once
+      // played the days it lasts, may be the shorter.
+      const ticketLeft = t.expiresAt ? t.expiresAt - Date.now() : (t.daysAfterFirstPlay ?? Infinity) * 24 * HOUR;
+      lines.push(
+        ticketLeft < windowHours * HOUR
+          ? 'Pressing Play starts a screening. You can pause and come back to it until the ticket expires.'
+          : `Pressing Play starts a screening. You can pause and come back to it for ${plural(windowHours, 'hour')}.`,
+      );
+      // With its time: the deadline is the end of a day where the admin is, which
+      // may be another day, or another time of day, here.
+      if (t.startBy) lines.push(`Start watching by ${formatDateTime(t.startBy)}.`);
       if (t.daysAfterFirstPlay && !t.firstPlayedAt) lines.push(`Once you start, the ticket lasts ${plural(t.daysAfterFirstPlay, 'day')}.`);
     }
     if (t.expiresAt) lines.push(`The ticket is valid until ${formatDateTime(t.expiresAt)}.`);
@@ -221,7 +282,8 @@ function TicketPanel({ access, film, site, signedIn, onPlay, starting, playing, 
   } else if (t?.state === 'used_up') {
     lines.push(`You've used ${t.screeningLimit === 1 ? 'the screening' : `all ${t.screeningLimit} screenings`} on this ticket. If you'd like another, ask whoever sent it.`);
   } else if (t?.state === 'expired') {
-    lines.push(t.expiresAt ? `This ticket expired on ${formatDate(t.expiresAt)}.` : `This ticket needed to be used by ${formatDate(t.startBy)}.`);
+    // With the year: a deadline that has passed may be last year's.
+    lines.push(t.expiresAt ? `This ticket expired on ${formatDate(t.expiresAt)}.` : `This ticket needed to be used by ${formatDateTimeYear(t.startBy)}.`);
   } else {
     lines.push("This film isn't available right now. Try again later.");
   }

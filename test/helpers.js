@@ -73,12 +73,24 @@ export function writeFilmJson(dir, patch) {
   fs.writeFileSync(file, JSON.stringify(json, null, 2));
 }
 
+// Every folder a test makes goes under one root for this process, removed when the
+// process exits. node --test runs each test file in a process of its own, so a run
+// leaves nothing behind in the system's temp folder, however many servers it starts.
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'open-matte-test-'));
+process.on('exit', () => {
+  try {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  } catch {
+    // A folder a test left unreadable, say: never a reason to change the run's result.
+  }
+});
+
 export function tempDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'open-matte-test-'));
+  return fs.mkdtempSync(path.join(tempRoot, 'dir-'));
 }
 
 // No web build unless a test gives one (`webDist`, a folder with an index.html).
-export async function startServer({ mediaDir, dataDir = tempDir(), webDist, metadataOptions = { envKey: '' }, backupOptions = {}, webauthn, limits }) {
+export async function startServer({ mediaDir, dataDir = tempDir(), webDist, metadataOptions = { envKey: '' }, backupOptions = {}, mediaOptions, webauthn, limits }) {
   const db = openDb(':memory:');
   const app = createApp({
     db,
@@ -86,6 +98,7 @@ export async function startServer({ mediaDir, dataDir = tempDir(), webDist, meta
     dataDir,
     metadataOptions,
     backupOptions: { backupDir: path.join(dataDir, 'backups'), ...backupOptions },
+    mediaOptions,
     webDist: webDist ?? path.join(mediaDir, 'no-web-build'),
     // Passkeys on localhost, as in development, unless a test says otherwise.
     webauthn: webauthn ?? { publicUrl: '', rpId: '', production: false },

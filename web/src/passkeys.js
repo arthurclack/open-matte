@@ -5,8 +5,11 @@ import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // In-app browsers (Facebook, Instagram, LinkedIn, Line, Snapchat, TikTok, the
-// Google app) often expose the passkey API and then fail. Best effort, by user agent.
-const IN_APP_BROWSER = /FBAN|FBAV|Instagram|LinkedInApp|Line\/|Snapchat|TikTok|musical_ly|GSA\//;
+// Google app, WeChat, and the plain web view other Android apps show pages in, which
+// says "; wv)") often expose the passkey API and then fail. Best effort, by user
+// agent. One that isn't listed is offered Copy link once it has refused
+// (anotherBrowserMayHelp).
+const IN_APP_BROWSER = /FBAN|FBAV|Instagram|LinkedInApp|Line\/|Snapchat|TikTok|musical_ly|GSA\/|MicroMessenger|; wv\)/;
 
 export function supportsPasskeys() {
   if (typeof window === 'undefined' || typeof window.PublicKeyCredential !== 'function') return false;
@@ -87,6 +90,15 @@ export function browserProblem(err, { creating = false } = {}) {
   return creating
     ? "Your phone or computer couldn't create a passkey. Try again, or open the link on another phone or computer."
     : "Your phone or computer couldn't use a passkey just now. Try again.";
+}
+
+// Whether to offer Copy link for Safari or Chrome after the browser said no. An app's
+// built-in browser that isn't listed above refuses every time, as a cancelled or
+// timed-out attempt does (NotAllowedError), so any refusal offers it. Not an attempt a
+// newer one replaced, and not an address that can't use passkeys in any browser.
+export function anotherBrowserMayHelp(err) {
+  if (err?.code === 'ERROR_CEREMONY_ABORTED' || err?.name === 'AbortError') return false;
+  return err?.name !== 'SecurityError';
 }
 
 // What to say when the cinema said no. Codes the page handles itself (expired or

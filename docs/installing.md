@@ -50,6 +50,16 @@ colours and logo, and people's names, can change whenever you like.
 addresses. [Passkeys](deploying.md#passkeys) in deploying.md says how to check it once
 the site is running.
 
+Cookies are another matter, whichever `WEBAUTHN_RP_ID` you choose. Any site under
+`example.com` can set cookies that browsers also send to `cinema.example.com`. The
+cinema ignores its session cookie when a browser sends two different ones, so such
+a site can stop someone's browser using the cinema. It can also hand its own session
+to a browser with no cookie from the cinema, and it can make that so, by setting
+more cookies than the browser keeps for `example.com` so the cinema's is dropped.
+Ticket links opened in that browser then work for whoever runs that site too, until
+the browser next signs in. So if other people run sites under `example.com`, give
+the cinema a domain of its own.
+
 ## DNS
 
 Point `DOMAIN` at the server with an **A record** holding the server's IPv4 address.
@@ -158,6 +168,7 @@ own, open the same ports there.
 ```bash
 sudo mkdir -p /srv/open-matte/{app,data,media,backups}
 sudo chown -R "$USER": /srv/open-matte
+chmod 700 /srv/open-matte/data /srv/open-matte/backups
 ```
 
 | Folder | What it holds | The app |
@@ -170,9 +181,16 @@ sudo chown -R "$USER": /srv/open-matte
 Create them before the first start. Docker would create a missing one owned by root,
 and the app couldn't write to it.
 
+The database and its backups hold ticket links that work for whoever reads them, and
+people's names, so `chmod 700` keeps every other account on the server out of `data`
+and `backups`. The app makes its own files there readable by itself only.
+
 If your films live on network storage, mount it at `/srv/open-matte/media`, or
 anywhere else and set `MEDIA_PATH` (below). The app only reads it, and a scan that
-finds it missing or unreadable says so and changes nothing.
+finds it missing or unreadable says so and changes nothing. If the storage stops
+answering, playback stops with an error that players retry, and the rest of the site
+carries on. Mount it `soft`, as CIFS (SMB) does unless told otherwise, not `hard`:
+then a request the storage never answers fails in the end instead of waiting for ever.
 
 ## Getting the code
 
@@ -193,7 +211,8 @@ Git ignores `deploy/.env`, so your settings stay put when you update.
 **With `scripts/deploy.sh`, from your computer.** Use this if you work on the code. It
 copies your working copy, uncommitted changes included, to `/srv/open-matte/app` over
 SSH, leaving `deploy/.env` and the server's films and data alone, then builds and
-starts the app. It needs `rsync` on both ends, and an SSH name that logs in to the
+starts the app. Database files in your copy, such as a backup you downloaded, are
+never sent. It needs `rsync` on both ends, and an SSH name that logs in to the
 server as [your user](#your-user): a `Host` in `~/.ssh/config`, or `user@address`. On
 your computer, in your copy of the code:
 
@@ -228,10 +247,10 @@ nano .env
 | `TMDB_API_KEY` | Optional. A TMDB key, for film details and posters ([metadata.md](metadata.md)). You can paste one in the admin instead; one set here takes precedence. |
 | `DATA_PATH` | Where the database lives on the server. Default `/srv/open-matte/data`. |
 | `MEDIA_PATH` | Where the film folders are. Default `/srv/open-matte/media`. |
-| `BACKUP_PATH` | Where the daily backups go. Default `/srv/open-matte/backups`. |
+| `BACKUP_PATH` | Where the daily backups go, on the server's own disk. Default `/srv/open-matte/backups`. |
 | `BACKUP_HOUR` | Optional. The hour (UTC, 0 to 23) the daily backup runs. Default 4. |
-| `BACKUP_KEEP_DAYS` | Optional. How many days' newest backups to keep. Default 14. |
-| `BACKUP_KEEP_MONTHS` | Optional. How many months' first backups to keep. Default 12. |
+| `BACKUP_KEEP_DAYS` | Optional. How many days' newest backups to keep, at least 1. Default 14. Every backup of the last three days is kept as well. |
+| `BACKUP_KEEP_MONTHS` | Optional. How many months' first backups to keep; 0 keeps none. Default 12. |
 | `BACKUP_COPY_DIR` | Optional, and best left until later: where the off-server copy of the backups appears inside the app's container, so the admin can show it ([deploying.md](deploying.md#keeping-a-copy-off-the-server)). |
 
 `deploy/.env` is read by Docker Compose, which treats `$` as the start of a variable.
@@ -273,6 +292,7 @@ Media scan: 0 film folder(s) (0 ok, 0 with warnings, 0 with errors), 0 missing, 
 | If the log says | Then |
 |---|---|
 | `ADMIN_PASSWORD must be set and at least 12 characters long` | The app stops and Docker keeps restarting it. Set a longer password in `deploy/.env` and run `docker compose up -d`. |
+| A setting's name and what it must be, such as `BACKUP_KEEP_DAYS must be 1 or more` | The same: fix that setting in `deploy/.env` and run `docker compose up -d`. |
 | `Passkeys unavailable:` and a reason | Everything else works. Fix `WEBAUTHN_RP_ID` (or `DOMAIN`) as the reason says, then `docker compose up -d`. |
 | `unable to open database file`, or a minute later `Backup failed:` with `EACCES` | The data or backups folder isn't writable by user 1000, or doesn't exist. Check [The folders](#the-folders). If they belong to another id, `sudo chown -R 1000:1000 /srv/open-matte/data /srv/open-matte/backups` gives them to 1000. Then `docker compose restart app`. |
 
@@ -307,8 +327,9 @@ npm run encode -- ~/Films/Arrival.mkv media/arrival --subs --seconds 60
 ```
 
 It writes `media/arrival` with `hls/`, `subtitles/` and a `film.json`. Add a
-`poster.jpg` to the folder (or let TMDB supply one, if you've set a key), and write
-your recommendation in `film.json`. [encoding.md](encoding.md) has the options.
+`poster.jpg` to the folder and `"poster": "poster.jpg"` to `film.json` (or let TMDB
+supply one, if you've set a key), and write your recommendation in `film.json`.
+[encoding.md](encoding.md) has the options.
 
 **With films you've already encoded.** Put the HLS files in a folder and write its
 `film.json` by hand. Only `schemaVersion`, `title` and `hls` are required, so this is

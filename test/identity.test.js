@@ -1,6 +1,6 @@
 // Tickets for one person, and Your tickets: milestone 2, slice 2. Written from
-// docs/milestone-2.md ("Access rules", "Route changes", "Slice 2", "Testing"), not
-// from the implementation. No viewer browser here ever holds the admin cookie: the
+// docs/history/milestone-2.md ("Access rules", "Route changes", "Slice 2", "Testing"),
+// not from the implementation. No viewer browser here ever holds the admin cookie: the
 // admin's preview bypasses every person rule, so a pass there would prove nothing.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -357,8 +357,9 @@ describe("a session_tickets row for a person's ticket", () => {
         srv.db.prepare('UPDATE screenings SET session_hash = ? WHERE id = ?').run(hash, screeningId);
         const hb = await heartbeat(b, screeningId, { position: 60 });
         assert.equal(hb.status, 404, 'heartbeat');
-        // 410 ticket-kept arrives with slice 3; either way, nothing of the film.
-        await refused(b, 'arrival', { page: [404, 410] });
+        // The row makes it look like a browser that opened the link before the ticket
+        // was given, so the page says it was kept (410), and shows nothing of the film.
+        await refused(b, 'arrival', { page: [410] });
       }
       assert.equal((await adminTicket(t.id)).screenings[0].position, 15, 'their heartbeats changed nothing');
     } finally {
@@ -646,6 +647,51 @@ describe("a browser with a link ticket and the person's own ticket for one film"
     assert.equal(r.resumed, true);
     assert.equal(r.position, 44);
     assert.equal((await adminTicket(own.id)).screeningsUsed, 0);
+  });
+});
+
+// ====================================================================== the best state wins
+// docs/access.md, "Screenings": of several tickets a browser may use for one film,
+// the one in the best state wins, ahead of the oldest and the person's own. The
+// film page, Play and Your tickets all go by it.
+describe('a browser with a usable ticket and one that has ended, for one film', () => {
+  async function goesByTheUsable(b, usable, ended, endedState) {
+    const page = (await b.get('/api/films/arrival')).data.access;
+    assert.equal(page.ticket.state, 'ok', `the page shows the usable ticket, not the ${endedState} one`);
+    assert.equal(page.canPlay, true);
+    assert.deepEqual(
+      (await listed(b)).map((t) => t.ticket.state),
+      ['ok'],
+      'Your tickets lists the film once, by the usable ticket',
+    );
+    const before = (await adminTicket(ended.id)).screeningsUsed;
+    const r = await play(b);
+    assert.equal(r.resumed, false);
+    assert.equal((await adminTicket(usable.id)).screeningsUsed, 1, 'Play uses the usable ticket');
+    assert.equal((await adminTicket(ended.id)).screeningsUsed, before);
+    assert.equal((await adminTicket(ended.id)).state, endedState);
+    assert.deepEqual(await statuses(b, playbackFiles('arrival')), every(playbackFiles('arrival'), 200));
+  }
+
+  test('a link that has expired gives way to a newer one sent to replace it', async () => {
+    const b = fresh();
+    const old = await issue({ label: 'First link', startBy: Date.now() - 1000 });
+    await opened(b, old);
+    assert.equal((await b.get('/api/films/arrival')).data.access.ticket.state, 'expired');
+    const replacement = await issue({ label: 'Second link' });
+    await opened(b, replacement);
+    await goesByTheUsable(b, replacement, old, 'expired');
+  });
+
+  test("the person's own ticket, used up, gives way to a link ticket opened later", async () => {
+    const sam = await member();
+    const own = await forPerson(sam.p, { screeningLimit: 1 });
+    const { screeningId } = await play(sam.phone);
+    srv.db.prepare('UPDATE screenings SET resumable_until = ? WHERE id = ?').run(Date.now() - 1, screeningId);
+    assert.equal((await sam.phone.get('/api/films/arrival')).data.access.ticket.state, 'used_up');
+    const link = await issue({ label: 'Another go' });
+    await opened(sam.phone, link);
+    await goesByTheUsable(sam.phone, link, own, 'used_up');
   });
 });
 

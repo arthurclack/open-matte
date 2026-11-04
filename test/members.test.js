@@ -1,4 +1,4 @@
-// Films shown to members: milestone 2, slice 4. Written from docs/milestone-2.md
+// Films shown to members: milestone 2, slice 4. Written from docs/history/milestone-2.md
 // ("Who can do what", "Changes to server/access.js", "Route changes", "Slice 4"),
 // not from the implementation. No viewer browser here ever holds the admin cookie:
 // the admin's preview shows and plays everything, so a pass there would prove nothing.

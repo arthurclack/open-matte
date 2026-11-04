@@ -1,10 +1,10 @@
-// Licence notices and the version: milestone 3, slice 6. Written from docs/milestone-3.md.
-// The build collects the licence of every package whose code ends up in the bundle into
-// dist/third-party-licenses.txt (vite.config.js), the server sends it as plain text, and
-// the viewer's footer and the admin's Settings link to it. The file starts with Open
-// Matte's own licence and where its source is. Packages that carry others inside their
-// published code (hls.js) have those listed too. The admin's Settings show
-// package.json's version; viewers are told nothing new.
+// Licence notices and the version: milestone 3, slice 6. Written from
+// docs/history/milestone-3.md. The build collects the licence of every package whose
+// code ends up in the bundle into dist/third-party-licenses.txt (vite.config.js), the
+// server sends it as plain text, and the viewer's footer and the admin's Settings link
+// to it. The file starts with Open Matte's own licence and where its source is.
+// Packages that carry others inside their published code (hls.js) have those listed
+// too. The admin's Settings show package.json's version; viewers are told nothing new.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -230,7 +230,7 @@ describe('the build writes the file', { skip }, () => {
 });
 
 // hls.js publishes one file with parts of other packages built into it, so their code
-// is in the Player chunk without any module id of their own. vite.config.js lists them.
+// is in the hls chunk without any module id of their own. vite.config.js lists them.
 describe('packages carried inside another', { skip }, () => {
   const HLS = [`${nm}/hls.js/dist/hls.mjs`];
 

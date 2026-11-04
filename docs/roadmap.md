@@ -1,6 +1,6 @@
 # Roadmap
 
-## Milestone 1: ticketed playback (complete, October 2026)
+## Milestone 1: ticketed playback (complete)
 
 Import one prepared film → publish it → issue a ticket → open it in another
 browser → play and seek → revoke the ticket → confirm further media requests fail.
@@ -8,8 +8,10 @@ browser → play and seek → revoke the ticket → confirm further media reques
 Verified on a live deployment: the journey above end to end, Safari on Mac and
 iPhone (including HDR10 on iPhone, and the fallback when iPhone Safari's own
 player gives up), Chromium-based browsers, and hls.js quality switching between
-HEVC and H.264. Not yet tried: Android, smart TVs and AirPlay, Firefox on
-desktop, and how the tone-mapped SDR renditions look on a non-HDR screen.
+HEVC and H.264. Not tried then: Android, smart TVs and AirPlay, Firefox on
+desktop, and how the tone-mapped SDR renditions look on a non-HDR screen. These
+moved on later: Android and AirPlay to milestone 2's device checks, a TV browser,
+desktop Firefox and a non-HDR screen to milestone 3's.
 
 - [x] Application skeleton, SQLite database on a persistent volume
 - [x] Admin login (password from the environment)
@@ -31,11 +33,12 @@ desktop, and how the tone-mapped SDR renditions look on a non-HDR screen.
 
 ## Milestone 2: people and passkeys
 
-Planned in [milestone-2.md](milestone-2.md) and built in six slices, all deployed by
-27 October 2026. What's left is checking it on real devices
-([device-checks.md](device-checks.md)).
+Planned in [history/milestone-2.md](history/milestone-2.md) and built in six slices,
+all deployed. What's left is checking it on real devices
+([history/device-checks.md](history/device-checks.md)).
 
-- [x] People, passkey setup and sign-in, with `openmatte.dev` as the relying party
+- [x] People, passkey setup and sign-in, with the relying party set once
+  (`WEBAUTHN_RP_ID`)
 - [x] Recovery as an explicit admin action: single-use, short-lived setup and recovery
   links, with Reset after loss to remove old passkeys and sessions
 - [x] Tickets only one person can use, signed in, alongside tickets for anyone with
@@ -46,41 +49,45 @@ Planned in [milestone-2.md](milestone-2.md) and built in six slices, all deploye
 - [x] Films shown to members: listed and readable, never playable without a ticket
 - [x] An account page: passkeys, signed-in browsers, Sign out everywhere
 - [x] Keyboard only (Chromium): Play, pausing, the name menu
-- [x] Signing in and playing on iPhone and Mac Safari (27 October)
-- [ ] Device checks that close the milestone ([device-checks.md](device-checks.md#to-close-milestone-2)):
+- [x] Signing in and playing on iPhone and Mac Safari
+- [ ] Device checks that close the milestone
+  ([history/device-checks.md](history/device-checks.md#to-close-milestone-2)):
   keeping a ticket and signing out on Safari; signing in with the phone's QR code;
   Android; a password manager; WhatsApp and Instagram's browsers; AirPlay and
   Chromecast
-- [x] The bare `openmatte.dev` redirects to `www` (`REDIRECT_FROM`, 27 October)
+- [x] Other names, such as the bare domain, redirect to the cinema's (`REDIRECT_FROM`)
 
 ## Milestone 3: polish and public release
 
-Planned in [milestone-3.md](milestone-3.md) (3 November), in six slices, ending in
-v1.0.0.
+Planned in [history/milestone-3.md](history/milestone-3.md), in six slices, ending in
+v1.0.0. All six slices are merged: slices 5 and 6 built the Playwright journeys, the
+documentation, the changelog and the licence notices. What's left is the device
+checks, the rehearsal on a clean server, closing milestone 2, merging into `main` and
+tagging v1.0.0.
 
-- [ ] Branding: accent and background colours, a logo and a tab icon, from the first
+- [x] Branding: accent and background colours, a logo and a tab icon, from the first
   paint; ticket links that preview their film's poster
-- [ ] Audio and subtitles: remembered choices, forced subtitles, subtitle size and
+- [x] Audio and subtitles: remembered choices, forced subtitles, subtitle size and
   background, the bar and the native menus in agreement
-- [ ] Media Session on the lock screen, and a Playback help panel with a copyable
+- [x] Media Session on the lock screen, and a Playback help panel with a copyable
   summary
-- [ ] Activity filters and summaries, and retention: progress reports for 30 days,
+- [x] Activity filters and summaries, and retention: progress reports for 30 days,
   other events for 12 months, ended browser sessions cleared; a "projection booth" page
   saying what needs attention and whether the server is well
 - [ ] Playback compatibility testing, starting with the checks moved here from
-  milestone 2 on 1 November: a TV browser, desktop Firefox, Chrome's hls.js playback,
-  a non-HDR screen and keyboard only in Safari
-  ([device-checks.md](device-checks.md#for-milestone-3)); the main journeys as
-  Playwright tests in Chromium, Firefox and WebKit
+  milestone 2: a TV browser, desktop Firefox, Chrome's hls.js playback, a non-HDR
+  screen and keyboard only in Safari
+  ([history/device-checks.md](history/device-checks.md#for-milestone-3)); the main
+  journeys as Playwright tests in Chromium, Firefox and WebKit
 - [ ] Installation, update, backup and restore documentation, rehearsed on a clean
   server; a changelog; licence notices for the code sent to browsers; v1.0.0 tagged and
   released on GitHub
 
 ## Milestone 4: curation
 
-Agreed as the next milestone on 3 November, not yet planned in detail. Milestone 1
-delivers the film, milestone 2 remembers the person, milestone 4 makes the recommendation
-personal. Whether it comes before or after the v1.0.0 release is still open.
+Agreed as the next milestone, not yet planned in detail. Milestone 1 delivers the
+film, milestone 2 remembers the person, milestone 4 makes the recommendation personal.
+Whether it comes before or after the v1.0.0 release is still open.
 
 - Programmes: a named, ordered set of films with your introduction, a cover, a note for
   each film, optional suggested dates, draft and published. Shown to every member, or to
@@ -136,6 +143,9 @@ What stays true throughout:
   its folder name, and a benchmark on the server first
 - AV1 renditions
 - Serving media straight from Caddy with forward auth, if Node becomes the bottleneck
+- Deleting or erasing a person: their passkeys, sessions, links and events removed or
+  anonymised and their tickets revoked, in one go. Today you disable someone instead,
+  and milestone 3's retention never deletes people
 
 ## Ideas
 

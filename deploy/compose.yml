@@ -58,7 +58,10 @@ services:
       DOMAIN: ${DOMAIN}
       REDIRECT_FROM: ${REDIRECT_FROM:-}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The folder, not the Caddyfile alone: an update puts a new file in its
+      # place, and a container sees the new one only through its folder. Caddy
+      # reads it when it starts, or when told to reload (scripts/deploy.sh does).
+      - ./caddy:/etc/caddy:ro
       # Caddy's certificates and its account with the certificate authority.
       - caddy_data:/data
       - caddy_config:/config

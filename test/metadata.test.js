@@ -24,6 +24,10 @@ const SEARCH = {
     { id: 1, title: 'Twins', original_title: 'Twins', release_date: '1988-12-09', overview: 'Comedy.', poster_path: '/twins.jpg' },
     { id: 2, title: 'Twins', original_title: 'Twins', release_date: '1988-03-01', overview: 'Another.', poster_path: null },
   ],
+  // As TMDb answers with the metadata language set to French.
+  "charlotte's web": [
+    { id: 10, title: 'Le Petit Monde de Charlotte', original_title: "Charlotte's Web", release_date: '1973-02-22', overview: 'Une araignée.', poster_path: null },
+  ],
 };
 
 const DETAILS = {
@@ -57,7 +61,17 @@ const DETAILS = {
     images: { posters: [{ file_path: '/twins.jpg' }, { file_path: '/twins-alt.jpg' }], backdrops: [] },
     release_dates: { results: [] }, poster_path: '/twins.jpg', backdrop_path: null,
   },
+  10: {
+    id: 10, title: 'Le Petit Monde de Charlotte', original_title: "Charlotte's Web", release_date: '1973-02-22', runtime: 94, overview: 'Une araignée sauve un cochon.',
+    production_countries: [], credits: { crew: [{ job: 'Director', name: 'Charles A. Nichols' }] }, images: { posters: [], backdrops: [] },
+    release_dates: { results: [] }, poster_path: null, backdrop_path: null,
+  },
 };
+
+// A JPEG as far as the server looks (the start of a frame header, 16x16),
+// carrying a label so a test can tell which image it got.
+const JPEG_HEAD = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x10, 0x00, 0x10, 0x01, 0x01, 0x11, 0x00]);
+const fakeJpeg = (label) => Buffer.concat([JPEG_HEAD, Buffer.from(label)]);
 
 // A stand-in for api.themoviedb.org and image.tmdb.org.
 function fakeTmdb() {
@@ -72,7 +86,7 @@ function fakeTmdb() {
     if (url.pathname.startsWith('/t/p/')) {
       const file = url.pathname.split('/').pop();
       res.writeHead(200, { 'content-type': 'image/jpeg' });
-      return res.end(`JPEG ${url.pathname.split('/')[3]} ${file}`);
+      return res.end(fakeJpeg(`JPEG ${url.pathname.split('/')[3]} ${file}`));
     }
     const key = url.searchParams.get('api_key');
     const bearer = (req.headers.authorization || '').replace(/^Bearer /, '');
@@ -111,6 +125,9 @@ before(async () => {
   makeFilm(mediaDir, 'arrival');
   makeFilm(mediaDir, 'twins', { title: 'Twins', year: 1988 });
   makeFilm(mediaDir, 'paris-texas', { title: 'Paris Texas', year: 1984 });
+  // A real title with a word release names use ("Web") in it, found by search and pinned.
+  makeFilm(mediaDir, 'charlottes-web', { title: "Charlotte's Web", year: 1973 });
+  makeFilm(mediaDir, 'charlottes-web-pinned', { title: "Charlotte's Web", year: 1973, tmdbId: 10 });
   srv = await startServer({ mediaDir, dataDir, metadataOptions: { apiBase: `${tmdb.base}/3`, imageBase: `${tmdb.base}/t/p`, envKey: '' } });
   admin = await adminBrowser(srv.base);
 });
@@ -185,7 +202,7 @@ describe('matching on import', () => {
     assert.equal(f.mediaStatus, 'ok', 'no poster in the folder is no longer worth a warning');
     assert.match(f.posterUrl, /^\/artwork\/hedwig\/poster-[a-f0-9]{12}\.jpg$/);
     const file = path.join(dataDir, 'artwork', 'hedwig', f.posterUrl.split('/').pop());
-    assert.equal(fs.readFileSync(file, 'utf8'), 'JPEG w780 hedwig.jpg');
+    assert.deepEqual(fs.readFileSync(file), fakeJpeg('JPEG w780 hedwig.jpg'));
   });
 
   test('matching fills gaps but keeps what film.json said and the folder’s own poster', async () => {
@@ -203,6 +220,19 @@ describe('matching on import', () => {
     assert.equal(f.title, 'Paris, Texas');
     assert.equal(f.country, 'Germany, France');
     assert.equal(f.directors, 'Wim Wenders');
+  });
+
+  test('a real title with "Web" in it is searched for whole, and film.json’s spelling is kept', async () => {
+    const queries = tmdb.requests.filter((u) => u.pathname === '/3/search/movie').map((u) => u.searchParams.get('query'));
+    assert.ok(queries.includes("Charlotte's Web"), JSON.stringify(queries));
+    assert.ok(!queries.includes("Charlotte's"), 'not cut short at "Web" as if it were a file name');
+    for (const slug of ['charlottes-web', 'charlottes-web-pinned']) {
+      const f = await film(slug);
+      assert.equal(f.tmdbStatus.state, 'matched', slug);
+      assert.equal(f.tmdbId, 10, slug);
+      assert.equal(f.title, "Charlotte's Web", `${slug}: TMDb's French title doesn't replace film.json's`);
+      assert.equal(f.directors, 'Charles A. Nichols', `${slug}: empty fields are still filled`);
+    }
   });
 
   test('once TMDb has supplied a poster, scans stop warning that the folder has none', async () => {
@@ -287,6 +317,43 @@ describe('who wins', () => {
     assert.equal(f.tmdbStatus.state, 'matched');
     assert.equal(f.title, 'Something Else Entirely', 'a real title from film.json is kept');
   });
+
+  test('a tmdbId added to film.json later settles a film that needed a choice', async () => {
+    makeFilm(mediaDir, 'twins-again', { title: 'Twins', year: 1988 });
+    await admin.post('/api/admin/scan');
+    await srv.app.locals.metadata.idle();
+    const id = (await admin.get('/api/admin/films')).data.find((x) => x.slug === 'twins-again').id;
+    const get = async () => (await admin.get(`/api/admin/films/${id}`)).data;
+    assert.equal((await get()).tmdbStatus.state, 'needs-choice');
+
+    writeFilmJson(path.join(mediaDir, 'twins-again'), { tmdbId: 1 });
+    await admin.post('/api/admin/scan');
+    await srv.app.locals.metadata.idle();
+    const f = await get();
+    assert.equal(f.tmdbId, 1);
+    assert.equal(f.tmdbStatus.state, 'matched');
+    assert.equal(f.directors, 'Ivan Reitman', 'the pinned film’s details were applied');
+  });
+
+  test('a title you edited before the first lookup is yours, even when TMDb’s differs only in punctuation', async () => {
+    const { createMetadata } = await import('../server/metadata.js');
+    const { createSettings } = await import('../server/settings.js');
+    const { openDb } = await import('../server/db.js');
+    const { scanMedia } = await import('../server/scan.js');
+    const db = openDb(':memory:');
+    const dir = tempDir();
+    makeFilm(dir, 'paris', { title: 'Paris Texas', year: 1984 });
+    await scanMedia(db, dir);
+    // Typed in the admin, before any TMDB key was set.
+    db.prepare("UPDATE films SET title = 'PARIS TEXAS' WHERE slug = 'paris'").run();
+
+    const metadata = createMetadata({ db, settings: createSettings(db), dataDir: tempDir(), apiBase: `${tmdb.base}/3`, imageBase: `${tmdb.base}/t/p`, envKey: GOOD_KEY });
+    await metadata.queueUnmatched();
+    const row = db.prepare("SELECT * FROM films WHERE slug = 'paris'").get();
+    assert.equal(JSON.parse(row.tmdb_status).state, 'matched');
+    assert.equal(row.title, 'PARIS TEXAS');
+    assert.equal(row.directors, 'Wim Wenders', 'empty fields are still filled');
+  });
 });
 
 describe('downloaded artwork is protected like the folder’s', () => {
@@ -303,15 +370,26 @@ describe('downloaded artwork is protected like the folder’s', () => {
     assert.equal(page.film.posterUrl, f.posterUrl);
     const img = await guest.get(f.posterUrl);
     assert.equal(img.status, 200);
-    assert.equal(img.data, 'JPEG w780 hedwig.jpg');
+    assert.ok(img.data.endsWith('JPEG w780 hedwig.jpg'));
     assert.equal((await guest.get('/artwork/hedwig/poster-000000000000.jpg')).status, 404);
     assert.equal((await guest.get('/artwork/hedwig/..%2F..%2Fopen-matte.db')).status, 404);
   });
 
   test('viewers never talk to TMDb: no key or TMDb address in what they receive', async () => {
-    const guestPage = JSON.stringify((await admin.get('/api/films/hedwig')).data);
-    assert.ok(!guestPage.includes(tmdb.base));
-    assert.ok(!guestPage.includes(GOOD_KEY));
+    // A ticket holder's own browser, not the admin's: the admin's preview answers
+    // differently, so a pass there would say nothing about what a viewer gets.
+    const f = await film('hedwig');
+    const ticket = (await admin.post('/api/admin/tickets', { filmId: f.id })).data[0];
+    const guest = browser(srv.base);
+    assert.equal((await guest.post('/api/tickets/open', { code: ticket.code })).status, 200);
+    const page = await guest.get('/api/films/hedwig');
+    assert.equal(page.status, 200);
+    assert.ok(page.data.access.ticket, 'the page is the ticket holder’s');
+    for (const answer of [page, await guest.get('/api/me'), await guest.get('/api/site')]) {
+      const text = JSON.stringify(answer.data);
+      assert.ok(!text.includes(tmdb.base));
+      assert.ok(!text.includes(GOOD_KEY));
+    }
   });
 });
 

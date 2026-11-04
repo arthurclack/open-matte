@@ -1,6 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from './api.js';
+import { ErrorBoundary } from './ErrorBoundary.jsx';
+import { enrollLink } from './enrollLink.js';
 
 const SiteContext = createContext(null);
 
@@ -39,6 +41,8 @@ export function SiteProvider({ children }) {
       } catch {
         return false;
       }
+      // A setup link this tab was keeping goes too (enrollLink.js).
+      enrollLink.forget();
       await refresh();
       if (to != null) navigate(to);
       return true;
@@ -48,9 +52,12 @@ export function SiteProvider({ children }) {
 
   // The page's copy until /api/me answers, and if it can't.
   const site = me?.site ?? embedded;
-  useEffect(() => {
+  // The cinema's name in the tab, on every page. A layout effect runs before the
+  // pages' own effects, so a page that names itself (a film, Your account) still
+  // does, and leaving it puts the cinema's name back.
+  useLayoutEffect(() => {
     if (site?.cinemaName) document.title = site.cinemaName;
-  }, [site?.cinemaName]);
+  }, [site?.cinemaName, pathname]);
 
   return (
     <SiteContext.Provider value={{ me, site, refresh, signOut, setPlayerOpen }}>
@@ -75,7 +82,10 @@ export function SiteProvider({ children }) {
             )}
           </div>
         </header>
-        <main className="site-main">{children}</main>
+        {/* A page that can't be drawn says so below the header, which keeps Sign out. */}
+        <main className="site-main">
+          <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
+        </main>
         <footer className="site-footer">
           <span>{site?.cinemaName}</span>
           <span>

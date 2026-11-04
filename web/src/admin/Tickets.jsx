@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { api, formatAgo, formatDate, plural } from '../api.js';
+import { api, formatAgo, formatDate, formatDayTime, plural } from '../api.js';
 import { CreatedLink, peopleError } from './People.jsx';
 import { CopyButton, ErrorNote, Progress, TicketBadge, dateInputToMs, useAction, useLoad } from './ui.jsx';
 
@@ -374,7 +374,7 @@ function IssuedForPerson({ ticket: t, person, film, onLinkCreated }) {
             <CreatedLink
               created={created}
               name={name}
-              message={`You should watch ${film.title}. Here's your ticket; you'll sign in with your passkey: ${created.link}`}
+              message={`You should watch ${film.title}. Here's your link: open it on your phone or computer to create a passkey, then the film opens. It works once, until ${formatDayTime(created.expiresAt)}. ${created.link}`}
               onDone={() => setCreated('done')}
             />
           ) : (

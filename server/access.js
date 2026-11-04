@@ -11,6 +11,10 @@ export const ACTIVE_MS = 75 * 1000;
 export const FINISHED_AT = 0.92;
 // Heartbeats update the screening every time but are logged as events less often.
 const HEARTBEAT_EVENT_MS = 5 * 60 * 1000;
+// Pressing Play again in the browser that already holds the screening (a refresh,
+// a double click, a script in a loop) is logged at most this often, so presses
+// can't fill the database. Starting a screening or taking one over always is.
+const PLAY_EVENT_MS = 5 * 60 * 1000;
 
 // Best state first, for when one browser holds several tickets to the same film.
 const RANK = { ok: 0, used_up: 1, expired: 2, unavailable: 3, unpublished: 4, revoked: 5 };
@@ -69,7 +73,7 @@ export function createAccess(db, settings) {
     event: db.prepare(`
       INSERT INTO events (at, type, film_id, ticket_id, session_hash, screening_id, position, detail, person_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-    lastScreeningEvent: db.prepare('SELECT at FROM events WHERE screening_id = ? AND type = ? ORDER BY at DESC LIMIT 1'),
+    lastScreeningEvent: db.prepare('SELECT at, session_hash FROM events WHERE screening_id = ? AND type = ? ORDER BY at DESC LIMIT 1'),
     // The browser holding a screening, if it is still a live session: not revoked
     // or expired, and its person (if signed in) still there and enabled.
     holder: db.prepare(`
@@ -78,8 +82,12 @@ export function createAccess(db, settings) {
         AND (s.person_id IS NULL OR (p.id IS NOT NULL AND p.disabled_at IS NULL))`),
   };
 
-  // Only account events (sign-ins, passkeys, links) name a person directly;
-  // viewing events find theirs through the session.
+  // The kinds of event: opened (routes/viewer.js), play, heartbeat and finished while
+  // watching; ticket-kept, ticket-given and ticket-released; and from people.js,
+  // signed-in, signed-out, signed-out-everywhere, sign-in-refused, passkey-added,
+  // passkey-removed, link-created, link-cancelled, person-disabled and person-enabled.
+  // Only account events (sign-ins, passkeys, links) and a ticket kept, given or
+  // released name a person directly; viewing events find theirs through the session.
   function logEvent(type, { filmId = null, ticketId = null, sessionHash = null, screeningId = null, position = null, detail = null, personId = null }, now = Date.now()) {
     q.event.run(now, type, filmId, ticketId, sessionHash, screeningId, position, detail ? JSON.stringify(detail) : null, personId);
   }
@@ -129,7 +137,9 @@ export function createAccess(db, settings) {
     };
   }
 
-  // Who may use a ticket is decided here and in mayHold, nowhere else.
+  // Who may use a ticket once it's been opened is decided here and in mayHold,
+  // nowhere else. Opening a link decides who may take a ticket on in the first place,
+  // by the same rule: /api/tickets/open in routes/viewer.js.
   const ids = (viewer) => ({ session: viewer.id_hash, person: viewer.person_id ?? null });
   const candidates = (viewer, film) => q.forFilm.all({ film: film.id, ...ids(viewer) });
 
@@ -203,7 +213,10 @@ export function createAccess(db, settings) {
           screening = { id };
         }
         screening = q.screening.get(screening.id);
-        logEvent('play', { filmId: film.id, ticketId: ticket.id, sessionHash: viewer.id_hash, screeningId: screening.id, position: screening.position_seconds, detail: { resumed } }, now);
+        const last = resumed ? q.lastScreeningEvent.get(screening.id, 'play') : null;
+        if (!last || last.session_hash !== viewer.id_hash || now - last.at >= PLAY_EVENT_MS) {
+          logEvent('play', { filmId: film.id, ticketId: ticket.id, sessionHash: viewer.id_hash, screeningId: screening.id, position: screening.position_seconds, detail: { resumed } }, now);
+        }
         return { screening, resumed, ticket };
       },
       { immediate: true },
@@ -215,10 +228,15 @@ export function createAccess(db, settings) {
   function heartbeat(viewer, screeningId, { position, playing = true }, now = Date.now()) {
     const s = q.screening.get(screeningId);
     const ticket = s ? q.ticket.get(s.ticket_id) : null;
-    if (!viewer || !s || s.voided_at || !mayHold(viewer, ticket)) return { error: 'not-found' };
+    if (!viewer || !s || !mayHold(viewer, ticket)) return { error: 'not-found' };
     if (s.session_hash !== viewer.id_hash) return { error: 'playing-elsewhere' };
     const status = ticketStatus(ticket, now);
-    if (status.state !== 'ok') return { error: status.state };
+    // A ticket is only used up once none of its screenings is open, so here that
+    // is this screening ending: answered below, like any other screening that ends.
+    if (status.state !== 'ok' && status.state !== 'used_up') return { error: status.state };
+    // Its resume window closed, or it was given back, while the player had it. The
+    // ticket itself may be fine, and Play may start another screening, so the
+    // player says the screening ended rather than that the ticket is used up or gone.
     if (status.open?.id !== s.id) return { error: 'screening-ended' };
 
     const film = q.film.get(s.film_id);
@@ -294,5 +312,5 @@ export function createAccess(db, settings) {
     );
   }
 
-  return { ticketStatus, filmAccess, mayStream, startScreening, heartbeat, usableTickets, mayHold, canKeep, keep, setTicketPerson, logEvent };
+  return { ticketStatus, filmAccess, mayStream, startScreening, heartbeat, usableTickets, canKeep, keep, setTicketPerson, logEvent };
 }

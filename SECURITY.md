@@ -43,6 +43,14 @@ These are known, and [docs/access.md](docs/access.md) says so:
   sent.
 - If the app is down when someone opens a ticket link, Caddy's error log records the
   address, code included.
+- A site on another name under the cinema's parent domain can set cookies the
+  cinema receives. That's enough to stop a browser using the cinema, and to give a
+  browser a session of that site's choosing: browsers keep only so many cookies for
+  one parent domain, so by setting enough of its own, the site can crowd the
+  cinema's cookie out, then set its own in its place. Ticket links opened in that
+  browser then work for whoever runs the site too, until the browser next signs in.
+  Only `__Host-` cookie names (planned) or a domain of the cinema's own rule this
+  out.
 
 Also out of scope: anything that needs the admin password or access to the server
 already; the rest of the server it runs on (the operating system, Docker, DNS, the

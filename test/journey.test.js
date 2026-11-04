@@ -268,8 +268,14 @@ describe('admin protection', () => {
   });
 });
 
-
 test('a revoked ticket shows no open or playing screening in the admin', async () => {
-  const tickets = (await admin.get('/api/admin/tickets')).data;
-  for (const t of tickets.filter((t) => t.state === 'revoked')) assert.equal(t.openScreening, null);
+  // A ticket of its own, played and then revoked, so there is always one to check.
+  const ticket = await newTicket();
+  const b = browser(srv.base);
+  await openTicket(b, ticket);
+  assert.equal((await b.post('/api/films/arrival/screenings')).status, 200);
+  await admin.post(`/api/admin/tickets/${ticket.id}/revoke`);
+  const revoked = (await admin.get('/api/admin/tickets')).data.filter((t) => t.state === 'revoked');
+  assert.ok(revoked.some((t) => t.id === ticket.id), 'the ticket revoked here is listed');
+  for (const t of revoked) assert.equal(t.openScreening, null);
 });

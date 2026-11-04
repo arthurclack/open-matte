@@ -2,32 +2,26 @@ import path from 'node:path';
 import express from 'express';
 import { brandingType } from '../branding.js';
 import { filmArtwork, filmMedia } from '../films.js';
+import { clientKey } from '../ratelimit.js';
 import { faviconSvg } from '../theme.js';
-import { TYPES, folderFile } from './media.js';
+import { TYPES, fileErrorStatus, folderFile, sendBare } from './media.js';
 
 // What anyone may fetch, with no session: the cinema's logo and icon (they're
 // on the sign-in page and in link previews), the tab icon in the cinema's
 // colours, and the poster of a ticket link's preview. None of them reads or
 // writes a session.
-export function publicRoutes({ settings, branding, metadata, mediaDir, previews }) {
+export function publicRoutes({ settings, branding, metadata, mediaDir, previews, share }) {
   const router = express.Router();
 
-  // sendFile's errors as a bare status, mapped as /media maps them: a missing or
-  // hidden file is a 404 that doesn't say why; send's own refusals (a range past
-  // the end, a failed If-Match) keep their 4xx; failing to read the file is a
-  // 500. The error isn't the file, so none of the file's headers go with it: it
-  // is never described, sized or cached as the file (a current logo whose file
-  // has gone must not be a 404 cached for a year).
+  // sendFile's errors as a bare status, mapped as /media maps them (media.js):
+  // never described, sized or cached as the file, so a current logo whose file
+  // has gone is not a 404 cached for a year.
   const sent = (res) => (err) => {
     if (!err || err.code === 'ECONNABORTED' || res.headersSent) return;
-    const s = err.statusCode;
-    const status = s === 403 || s === 404 || err.code === 'ENOENT' ? 404 : s >= 400 && s < 500 ? s : 500;
+    const status = fileErrorStatus(err);
     // A file that is there but can't be read is the server's problem: say so in its log.
     if (status === 500) console.error(err);
-    for (const h of ['Content-Type', 'Content-Length', 'Cache-Control', 'ETag', 'Last-Modified', 'Accept-Ranges']) res.removeHeader(h);
-    // A 416 says how long the file is, as it should; nothing else does.
-    if (status !== 416) res.removeHeader('Content-Range');
-    res.status(status).end();
+    sendBare(res, status);
   };
 
   // Only the current logo and icon. Their names change whenever the image does.
@@ -57,14 +51,26 @@ export function publicRoutes({ settings, branding, metadata, mediaDir, previews 
     // found the way /media finds it.
     const downloaded = metadata.artworkPath(film, filmArtwork(film).poster?.file ?? '');
     const own = filmMedia(film).poster;
-    let found = null;
-    if (downloaded) found = { root: path.dirname(downloaded), file: path.basename(downloaded) };
-    else if (own && film.media_status !== 'missing') found = await folderFile(mediaDir, film, path.posix.normalize(own));
     const type = TYPES[path.extname(downloaded || own || '').toLowerCase()];
-    if (!found?.file || !type?.startsWith('image/')) return res.status(404).end();
-    res.set('Content-Type', type);
-    res.set('Cache-Control', 'public, max-age=600');
-    res.sendFile(found.file, { root: found.root, dotfiles: 'deny' }, sent(res));
+    if (!type?.startsWith('image/')) return res.status(404).end();
+    const headers = { 'Content-Type': type, 'Cache-Control': 'public, max-age=600' };
+    if (downloaded) {
+      res.set(headers);
+      return res.sendFile(path.basename(downloaded), { root: path.dirname(downloaded), dotfiles: 'deny' }, sent(res));
+    }
+    if (!own || film.media_status === 'missing') return res.status(404).end();
+    // The folder's poster is on the films' share, so it takes its place there
+    // like any media request (media.js, createShare): one of the artwork's places,
+    // never a player's, and no more of them for one visitor's address than one
+    // browser may hold, since there's no session to count by. Not finding it is
+    // a 404.
+    await share.send(res, () => folderFile(mediaDir, film, path.posix.normalize(own)).then((f) => (f.status ? { status: 404 } : f)), {
+      client: `address ${clientKey(req.ip)}`,
+      clientName: 'address',
+      artwork: true,
+      headers,
+      failed: ({ status, reason }) => status >= 500 && console.error(`poster ${status}: ${reason}`),
+    });
   });
 
   return router;

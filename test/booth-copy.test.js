@@ -1,5 +1,5 @@
 // The projection booth's off-server copy: milestone 3, slice 4. Written from
-// docs/milestone-3.md and the slice 4 spec, not from the implementation. With
+// docs/history/milestone-3.md (slice 4), not from the implementation. With
 // BACKUP_COPY_DIR set (an environment setting, read when the server starts, so this
 // file has a process of its own), the booth reports the newest open-matte-*.db file
 // there and when it was written, as "Copy seen at", and never writes to the folder.
@@ -45,7 +45,11 @@ before(async () => {
   srv = await startServer({ mediaDir: tempDir() });
   admin = await adminBrowser(srv.base);
 });
-after(() => srv.close());
+after(async () => {
+  await srv.close();
+  // Made before helpers.js (and its temp root) loads, so it's removed here.
+  fs.rmSync(copyDir, { recursive: true, force: true });
+});
 
 test('the newest open-matte-*.db file in BACKUP_COPY_DIR, and its time', async () => {
   const before1 = listing();

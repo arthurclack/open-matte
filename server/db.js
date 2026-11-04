@@ -4,6 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 
 // Timestamps are integer milliseconds since the epoch throughout.
 // Each entry runs once, in order; never edit one that has shipped, add a new one.
+// So the comments inside describe each table as it shipped: events.type, for one,
+// has more kinds now than migration 1 lists (see logEvent in access.js).
 export const MIGRATIONS = [
   `
   CREATE TABLE settings (
@@ -212,9 +214,32 @@ export const MIGRATIONS = [
 
 export function openDb(file) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
-  const db = new DatabaseSync(file);
+  const db = bindsAlike(new DatabaseSync(file));
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   migrate(db);
+  return db;
+}
+
+// Node's SQLite binds values differently from one version to the next. Node 26
+// binds undefined as NULL; Node 24, which the server's image runs, refuses it
+// with an error, and Node 22.13 refuses true and false as well. So a request
+// field left out could pass the tests on a computer with Node 26 and answer 500
+// on the server. Every statement here binds as Node 26 does, on any version:
+// undefined as NULL, true and false as 1 and 0.
+const bindable = (v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v);
+const isParamsObject = (v) => v !== null && typeof v === 'object' && [Object.prototype, null].includes(Object.getPrototypeOf(v));
+const bindables = (args) => args.map((a) => (isParamsObject(a) ? Object.fromEntries(Object.entries(a).map(([k, v]) => [k, bindable(v)])) : bindable(a)));
+
+function bindsAlike(db) {
+  const prepare = db.prepare;
+  db.prepare = (...args) => {
+    const statement = prepare.apply(db, args);
+    for (const method of ['run', 'get', 'all', 'iterate']) {
+      const bind = statement[method];
+      statement[method] = (...values) => bind.apply(statement, bindables(values));
+    }
+    return statement;
+  };
   return db;
 }
 

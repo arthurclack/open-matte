@@ -1,8 +1,9 @@
-// Device labels: enough for the admin to tell devices apart. And admin sessions.
+// Device labels: enough for the admin to tell devices apart. Admin sessions, and
+// reading the session cookies.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { createSessionStore, deviceLabel } = await import('../server/sessions.js');
+const { createSessionStore, deviceLabel, parseCookies } = await import('../server/sessions.js');
 
 test('device labels name the browser and device, including browsers on iPhone', () => {
   const cases = {
@@ -38,5 +39,47 @@ test('a new admin password signs every admin browser out, and no viewer', async 
   const changed = createSessionStore(db, { adminPassword: 'a brand new password' });
   assert.equal(changed.load(browser(), 'admin'), null, 'a new password signs it out');
   assert.ok(changed.load(browser(), 'viewer'), 'the viewer stays signed in');
+  db.close();
+});
+
+// The cinema sets one om_session and one om_admin, so a second value of either was
+// set by another host under the same parent domain, which also chose where in the
+// header it goes. Neither value is used, whichever comes first.
+test('a cookie sent twice with different values is left out, whichever comes first', () => {
+  assert.deepEqual(parseCookies('om_session=ours; om_session=theirs; other=1'), { other: '1' });
+  assert.deepEqual(parseCookies('om_session=theirs; other=1; om_session=ours'), { other: '1' });
+  assert.deepEqual(parseCookies('om_session=ours; om_session='), {}, 'an empty one counts too');
+  assert.deepEqual(parseCookies('om_admin=a; om_session=ours; om_admin=b; om_admin=a'), { om_session: 'ours' });
+  assert.deepEqual(parseCookies('om_session=ours; om_session=ours'), { om_session: 'ours' }, 'the same value twice is one cookie');
+  assert.deepEqual(parseCookies('om_session=ours; om_session=%E0%A4%A'), { om_session: 'ours' }, 'a malformed one is ignored, as before');
+  assert.deepEqual(parseCookies('toString=x; __proto__=y'), { toString: 'x' });
+});
+
+test('two different session cookies sign the browser in as neither, viewer or admin', async () => {
+  const { openDb } = await import('../server/db.js');
+  const db = openDb(':memory:');
+  const store = createSessionStore(db, { adminPassword: 'a password' });
+  const req = { get: () => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Version/26.0 Safari/605.1.15', secure: false };
+  const issue = (kind) => {
+    let cookie;
+    const row = store.create(req, { append: (_, value) => (cookie = value.split(';')[0]) }, kind);
+    return { cookie, row };
+  };
+  const load = (cookies, kind) => store.load({ headers: { cookie: cookies.join('; ') } }, kind);
+  const [ours, theirs] = [issue('viewer'), issue('viewer')];
+  const [admin, otherAdmin] = [issue('admin'), issue('admin')];
+  assert.equal(load([ours.cookie], 'viewer').id_hash, ours.row.id_hash);
+  assert.equal(load([admin.cookie], 'admin').id_hash, admin.row.id_hash);
+  for (const [cookies, kind] of [
+    [[ours.cookie, theirs.cookie], 'viewer'],
+    [[theirs.cookie, ours.cookie], 'viewer'],
+    [[admin.cookie, otherAdmin.cookie], 'admin'],
+    [[otherAdmin.cookie, admin.cookie], 'admin'],
+  ]) {
+    assert.equal(load(cookies, kind), null, cookies.join('; '));
+  }
+  // One of each name is the usual admin's browser, and both are used.
+  assert.ok(load([ours.cookie, admin.cookie], 'viewer'));
+  assert.ok(load([ours.cookie, admin.cookie], 'admin'));
   db.close();
 });

@@ -1,9 +1,10 @@
-// Retention: milestone 3, slice 4. Written from docs/milestone-3.md and the slice 4 spec,
-// not from the implementation. Old events and ended browser sessions are deleted; tickets
-// and screenings never are, so deleting anything never changes what a viewer can do. That
-// rule comes first. createRetention is imported to run a clean-up at a chosen `now` (the
-// admin's Clear now always runs at the real time), and createAccess and createSettings to
-// read each ticket's state at times other than now, as the server would.
+// Retention: milestone 3, slice 4. Written from docs/history/milestone-3.md (slice 4),
+// not from the implementation. Old events and ended browser sessions are deleted;
+// tickets and screenings never are, so deleting anything never changes what a viewer
+// can do. That rule comes first. createRetention is imported to run a clean-up at a
+// chosen `now` (the admin's Clear now always runs at the real time), and createAccess
+// and createSettings to read each ticket's state at times other than now, as the
+// server would.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { after, before, describe, test } from 'node:test';
@@ -58,7 +59,7 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
     assert.equal(r.status, 201, JSON.stringify(r.data));
     return r.data[0];
   }
-  async function opened(b, ticket, slug = 'arrival') {
+  async function opened(b, ticket) {
     const r = await b.post('/api/tickets/open', { code: ticket.code });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     return b;
@@ -221,8 +222,8 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
 
     // Kept by Sam, from a link another browser had opened first.
     t.kept = await issue({ label: 'Kept', claimable: true }, 'solaris');
-    const first = await opened(fresh(), t.kept, 'solaris');
-    await opened(phone, t.kept, 'solaris');
+    const first = await opened(fresh(), t.kept);
+    await opened(phone, t.kept);
     assert.equal((await phone.post('/api/films/solaris/keep')).status, 200);
     await watched(phone, 'solaris', 15);
     seen.push(['kept by Sam', phone, 'solaris'], ['kept: the browser that opened it first', first, 'solaris']);

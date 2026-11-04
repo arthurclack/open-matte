@@ -3,15 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { tx } from './db.js';
+// The rules for folder names and language codes, shared with the encoder.
+import { artworkFile, LANG_RE, slugProblem } from './names.js';
 
 // The import contract: one folder per film in the media directory, described
 // by a film.json. See docs/import-format.md.
 
 export const SCHEMA_VERSION = 1;
-// Film folders become URLs (your-domain/<folder>), so these names are taken.
-export const RESERVED_SLUGS = new Set(['admin', 'api', 'media', 't', 'assets', 'signin', 'enroll', 'account', 'tickets', 'about', 'help']);
-const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
-const LANG_RE = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.avif'];
 
 // ------------------------------------------------------------------ film.json fields
@@ -225,6 +223,36 @@ export function inspectFilm(dir, slug, previous = null) {
     return { slug, status: errors.length ? 'error' : warnings.length ? 'warning' : 'ok', errors, warnings, meta, media, tmdbId };
   };
 
+  // How a path from film.json is spelled on disk, part by part, or null if a
+  // part isn't there even loosely. A Mac's disk finds "Poster.JPG" when asked
+  // for "poster.jpg", and ignores the difference between the two ways Unicode
+  // can write "ç"; most Linux disks, where the server usually runs, match the
+  // bytes exactly. Reading the names from the folder lets the scan tell.
+  const spellings = new Map();
+  const namesIn = (d) => {
+    if (!spellings.has(d)) {
+      try {
+        spellings.set(d, fs.readdirSync(d));
+      } catch {
+        spellings.set(d, []);
+      }
+    }
+    return spellings.get(d);
+  };
+  const fold = (s) => s.normalize('NFC').toLowerCase();
+  function onDisk(relPath) {
+    let at = dir;
+    const parts = [];
+    for (const part of relPath.split('/').filter(Boolean)) {
+      const names = namesIn(at);
+      const name = names.includes(part) ? part : names.find((n) => fold(n) === fold(part));
+      if (name == null) return null;
+      parts.push(name);
+      at = path.join(at, name);
+    }
+    return parts.join('/');
+  }
+
   // A path from film.json: relative, inside the folder, an existing file.
   function filePath(value, field, exts) {
     if (typeof value !== 'string' || !value.trim()) {
@@ -242,15 +270,25 @@ export function inspectFilm(dir, slug, previous = null) {
       return null;
     }
     const abs = path.resolve(dir, norm);
+    const spelled = onDisk(norm);
+    const loosely = spelled != null && spelled !== norm;
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
-      errors.push(`${field}: "${rel}" does not exist`);
+      const hint = loosely ? `; the folder has "${spelled}" (names must match exactly, letter case and accents included)` : '';
+      errors.push(`${field}: "${rel}" does not exist${hint}`);
       return null;
+    }
+    // Found only because this disk ignores the difference. Not an error here,
+    // so a film already showing on a Mac keeps playing, but the same folder
+    // would fail on most servers.
+    if (loosely) {
+      warnings.push(`${field}: "${rel}" is "${spelled}" on disk. This disk ignores the difference, but most servers' disks don't: rename the file or change film.json to match`);
     }
     if (leaves(abs)) {
       errors.push(`${field}: "${rel}" is a symlink to somewhere outside the film folder`);
       return null;
     }
-    return norm;
+    // The real name, so the rest of the scan compares it with the folder's own listing.
+    return loosely ? spelled : norm;
   }
 
   // ---- film.json
@@ -264,14 +302,14 @@ export function inspectFilm(dir, slug, previous = null) {
       return done();
     }
     warnings.push('No film.json: using the folder name as the title and the standard file layout');
-    const found = (names) => names.find((n) => fs.existsSync(path.join(dir, n)));
     const subDir = path.join(dir, 'subtitles');
     json = {
       schemaVersion: SCHEMA_VERSION,
       title: prettify(slug),
       hls: 'hls/master.m3u8',
-      poster: found(IMAGE_EXTS.map((e) => `poster${e}`)),
-      backdrop: found(IMAGE_EXTS.map((e) => `backdrop${e}`)),
+      // Named as the folder names them, so a Mac finds the same files a server would.
+      poster: artworkFile(namesIn(dir), 'poster'),
+      backdrop: artworkFile(namesIn(dir), 'backdrop'),
       subtitles: fs.existsSync(subDir)
         ? fs
             .readdirSync(subDir)
@@ -302,7 +340,8 @@ export function inspectFilm(dir, slug, previous = null) {
     else errors.push("film.json: tmdbId must be a whole number (the number in the film's TMDB address)");
   }
   for (const key of Object.keys(json)) {
-    if (!(key in META_FIELDS) && !MEDIA_KEYS.has(key) && !OTHER_KEYS.has(key)) warnings.push(`film.json: unknown field "${key}" was ignored`);
+    // Own keys only: "constructor" or "toString" in film.json are typos too.
+    if (!Object.hasOwn(META_FIELDS, key) && !MEDIA_KEYS.has(key) && !OTHER_KEYS.has(key)) warnings.push(`film.json: unknown field "${key}" was ignored`);
   }
 
   let meta = {};
@@ -336,7 +375,8 @@ export function inspectFilm(dir, slug, previous = null) {
     }
     const file = filePath(s.file, `${field}.file`, ['.vtt']);
     if (!file) continue;
-    const head = fs.readFileSync(path.resolve(dir, file), 'utf8').slice(0, 16).replace(/^﻿/, '');
+    // A byte-order mark is allowed before WEBVTT, and Windows tools often add one.
+    const head = fs.readFileSync(path.resolve(dir, file), 'utf8').slice(0, 16).replace(/^\uFEFF/, '');
     if (!head.startsWith('WEBVTT')) {
       errors.push(`${field}: ${file} is not a WebVTT file (it must start with WEBVTT)`);
       continue;
@@ -474,19 +514,23 @@ export function inspectMediaDir(mediaDir, previous = {}) {
     return found;
   }
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+    const link = entry.isSymbolicLink();
+    if ((!entry.isDirectory() && !link) || entry.name.startsWith('.')) continue;
     const looksLikeFilm = ['film.json', 'hls/master.m3u8'].some((f) => fs.existsSync(path.join(mediaDir, entry.name, f)));
-    if (!SLUG_RE.test(entry.name) || RESERVED_SLUGS.has(entry.name)) {
+    const problem = slugProblem(entry.name);
+    if (problem) {
       // Other things kept in the media folder (an Archive, say) aren't worth mentioning.
-      if (!looksLikeFilm) continue;
-    }
-    if (!SLUG_RE.test(entry.name)) {
-      found.skipped.push({ name: entry.name, reason: 'Folder names must use lowercase letters, digits and hyphens (they become the URL)' });
-    } else if (RESERVED_SLUGS.has(entry.name)) {
-      found.skipped.push({ name: entry.name, reason: 'This name is reserved for the site itself' });
+      if (looksLikeFilm) found.skipped.push({ name: entry.name, reason: problem });
+    } else if (link) {
+      // A film folder is a real folder, so the media folder is the whole library
+      // and nothing is served from wherever a link happens to lead.
+      found.skipped.push({ name: entry.name, reason: 'This is a symlink. A film folder must be a real folder in the media folder (symlinks are only followed inside one)' });
     } else {
       try {
-        found.results.push(inspectFilm(path.join(mediaDir, entry.name), entry.name, previous[entry.name]));
+        const r = inspectFilm(path.join(mediaDir, entry.name), entry.name, previous[entry.name]);
+        // Neither film.json nor a master playlist: applyScan decides, since only
+        // it knows whether this folder was a film before.
+        found.results.push(looksLikeFilm ? r : { ...r, notFilm: true });
       } catch (err) {
         // One unreadable folder (permissions, a flaky network drive) mustn't stop
         // the scan. The film is reported and left as it was.
@@ -543,7 +587,7 @@ async function runScan(db, mediaDir) {
 }
 
 export function applyScan(db, found, scannedAt = Date.now()) {
-  const report = { films: [], removed: [], skipped: found.skipped, unavailable: found.unavailable, scannedAt };
+  const report = { films: [], removed: [], skipped: [...found.skipped], unavailable: found.unavailable, scannedAt };
   const existing = new Map(db.prepare('SELECT * FROM films').all().map((f) => [f.slug, f]));
   if (report.unavailable) return report;
   // An empty folder where films used to be is far more likely to be storage
@@ -553,7 +597,17 @@ export function applyScan(db, found, scannedAt = Date.now()) {
     report.unavailable = 'The media folder is empty. If your films are on network storage, it may not be mounted right now. Nothing was marked missing.';
     return report;
   }
-  const results = found.results;
+  // A folder with neither film.json nor a master playlist (somewhere to stage
+  // uploads, say, or a film whose upload has only just begun) doesn't become a
+  // film. One that was a film already is reported as broken.
+  const results = [];
+  for (const r of found.results) {
+    if (r.notFilm && !existing.has(r.slug)) {
+      report.skipped.push({ name: r.slug, reason: "There's no film.json or hls/master.m3u8 in it, so it isn't treated as a film" });
+    } else {
+      results.push(r);
+    }
+  }
 
   const now = report.scannedAt;
 
@@ -611,8 +665,10 @@ export function applyScan(db, found, scannedAt = Date.now()) {
           sets.push('imported_meta = ?', 'meta_sources = ?');
           args.push(JSON.stringify(r.meta), JSON.stringify(sources));
         }
-        // A tmdbId in film.json pins the match, unless one has been chosen already.
-        if (r.tmdbId && !row.tmdb_id) sets.push('tmdb_id = ?'), args.push(r.tmdbId);
+        // A tmdbId in film.json pins the match, unless one has been chosen
+        // already. A film the lookup couldn't decide on (or found nothing for)
+        // is looked up again, so the pin is applied.
+        if (r.tmdbId && !row.tmdb_id) sets.push('tmdb_id = ?', 'tmdb_status = NULL'), args.push(r.tmdbId);
         if (entry.updated.length) sets.push('updated_at = ?'), args.push(now);
         db.prepare(`UPDATE films SET ${sets.join(', ')} WHERE id = ?`).run(...args, row.id);
         entry.title = entry.updated.includes('title') ? r.meta.title : row.title;
@@ -624,8 +680,11 @@ export function applyScan(db, found, scannedAt = Date.now()) {
     for (const [slug, row] of existing) {
       if (seen.has(slug)) continue;
       if (row.media_status !== 'missing') {
+        // The folder may still be there, as a symlink say, but unusable.
+        const skip = report.skipped.find((s) => s.name === slug);
+        const why = skip ? `The film folder can't be used: ${skip.reason}` : 'The film folder no longer exists';
         db.prepare(`UPDATE films SET media_status = 'missing', scan_report = ?, scanned_at = ? WHERE id = ?`).run(
-          JSON.stringify({ errors: ['The film folder no longer exists'], warnings: [] }), now, row.id,
+          JSON.stringify({ errors: [why], warnings: [] }), now, row.id,
         );
       }
       report.removed.push({ slug, title: row.title, published: Boolean(row.published) });

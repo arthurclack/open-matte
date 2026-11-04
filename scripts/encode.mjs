@@ -26,6 +26,8 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { artworkFile, LANG_RE, slugProblem } from '../server/names.js';
 import { guessTitleYear, looksLikeReleaseName } from '../server/titles.js';
 
 const SEGMENT_SECONDS = 6;
@@ -101,39 +103,47 @@ function hdrMetadata(input) {
 }
 
 // ------------------------------------------------------------------ plan
+// These throw for a bad option; main reports it and stops.
 
-function defaultLadder(height, hdr) {
-  if (height >= 2000) return hdr ? '2160:hevc:hdr,1080:hevc:hdr,1080:hevc,1080:h264,720:h264' : '2160:hevc,1080:hevc,1080:h264,720:h264';
-  if (height >= 1000) return hdr ? '1080:hevc:hdr,1080:hevc,1080:h264,720:h264' : '1080:hevc,1080:h264,720:h264';
-  if (height >= 700) return '720:hevc,720:h264,480:h264';
+// Sources are classed by the 16:9 frame they fill, which is the shape of the
+// rungs' boxes: a scope film cropped to 1920x800 is 1080p, not 720p, and keeps
+// its full width.
+export function defaultLadder({ width, height }, hdr) {
+  const h = Math.max(height, Math.round((width * 9) / 16));
+  if (h >= 2000) return hdr ? '2160:hevc:hdr,1080:hevc:hdr,1080:hevc,1080:h264,720:h264' : '2160:hevc,1080:hevc,1080:h264,720:h264';
+  if (h >= 1000) return hdr ? '1080:hevc:hdr,1080:hevc,1080:h264,720:h264' : '1080:hevc,1080:h264,720:h264';
+  if (h >= 700) return '720:hevc,720:h264,480:h264';
   return '480:h264';
 }
 
-function parseLadder(spec, sourceHdr) {
+export function parseLadder(spec, sourceHdr) {
   return spec.split(',').map((item) => {
     const [h, codec, flag] = item.trim().split(':');
     const key = `${codec}:${h}`;
-    if (!RUNGS[key]) die(`Unsupported rendition "${item}". Known: ${Object.keys(RUNGS).map((k) => k.split(':').reverse().join(':')).join(', ')}`);
+    if (!RUNGS[key]) throw new Error(`Unsupported rendition "${item}". Known: ${Object.keys(RUNGS).map((k) => k.split(':').reverse().join(':')).join(', ')}`);
     const hdr = flag === 'hdr';
-    if (hdr && codec !== 'hevc') die(`HDR renditions must be HEVC ("${item}")`);
-    if (hdr && !sourceHdr) die(`"${item}" asks for HDR but the source is SDR`);
+    if (hdr && codec !== 'hevc') throw new Error(`HDR renditions must be HEVC ("${item}")`);
+    if (hdr && !sourceHdr) throw new Error(`"${item}" asks for HDR but the source is SDR`);
     return { codec, height: Number(h), hdr, ...RUNGS[key], dir: `v_${codec}_${h}${hdr ? '_hdr' : ''}` };
   });
 }
 
-function parseAudio(spec, audioStreams) {
+// A language and name end up in folder names and in the master playlist, so
+// only real language codes are used, and names can't break the playlist line.
+export function parseAudio(spec, audioStreams) {
   if (!audioStreams.length) return [];
-  const first = bcp47(audioStreams[0].tags?.language);
+  const first = streamLanguage(audioStreams[0]);
   // Default: stereo for everyone, plus a 5.1 option when the source has surround.
   const items = spec
-    ? spec.split(',')
-    : [`0:${first}:${languageName(first)}`, ...(audioStreams[0].channels >= 6 ? [`0:${first}:Surround:surround`] : [])];
-  return items.map((item, i) => {
-    const [idx, lang = 'und', name = languageName(lang), kind = ''] = item.split(':');
+    ? spec.split(',').map((item) => item.split(':'))
+    : [['0', first, languageName(first)], ...(audioStreams[0].channels >= 6 ? [['0', first, 'Surround', 'surround']] : [])];
+  return items.map(([idx, lang = 'und', name = languageName(lang), kind = ''], i) => {
+    if (!LANG_RE.test(lang)) throw new Error(`Audio language "${lang}" isn't a language code such as "en" or "pt-BR"`);
+    if (/["\p{Cc}]/u.test(name)) throw new Error(`Audio name "${name}" can't contain double quotes or control characters`);
     const stream = audioStreams[Number(idx)];
-    if (!stream) die(`Audio stream ${idx} does not exist (the source has ${audioStreams.length})`);
+    if (!stream) throw new Error(`Audio stream ${idx} does not exist (the source has ${audioStreams.length})`);
     const surround = kind === 'surround';
-    if (surround && stream.channels < 6) die(`Audio stream ${idx} has ${stream.channels} channels, not surround`);
+    if (surround && stream.channels < 6) throw new Error(`Audio stream ${idx} has ${stream.channels} channels, not surround`);
     return { index: Number(idx), lang, name, ad: kind === 'ad', surround, default: i === 0, dir: `a_${lang}_${i}` };
   });
 }
@@ -146,6 +156,8 @@ const ISO639_2 = {
   zho: 'zh', chi: 'zh', tha: 'th', vie: 'vi', ind: 'id', hun: 'hu', ron: 'ro', rum: 'ro', cat: 'ca', gle: 'ga',
 };
 const bcp47 = (code) => (code ? ISO639_2[code.toLowerCase()] || code.toLowerCase() : 'und');
+// The container's tag, if it's a two- or three-letter code; a source file can say anything.
+const streamLanguage = (stream) => (/^[a-z]{2,3}$/i.test(stream.tags?.language || '') ? bcp47(stream.tags.language) : 'und');
 
 function languageName(code) {
   if (!code || code === 'und') return 'Original';
@@ -302,16 +314,33 @@ function writeMaster({ outDir, videos, audios, fps }) {
   fs.writeFileSync(path.join(outDir, HLS_DIR, 'master.m3u8'), `${lines.join('\n')}\n`);
 }
 
+// The film.json already in the folder, or null. main reads it before encoding
+// too, so a typo in it stops the script at once rather than after the encode.
+export function readFilmJson(outDir) {
+  const jsonPath = path.join(outDir, 'film.json');
+  if (!fs.existsSync(jsonPath)) return null;
+  let json;
+  try {
+    json = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+  } catch (err) {
+    throw new Error(`${jsonPath} is not valid JSON (${err.message}). Fix it, or move it out of the way, and run this again.`);
+  }
+  if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error(`${jsonPath} must contain a JSON object`);
+  return json;
+}
+
 // Creates film.json, or updates only its media fields if you've already written one.
-function writeFilmJson({ outDir, title, year, subtitles, replaceSubtitles }) {
+export function writeFilmJson({ outDir, title, year, subtitles, replaceSubtitles }) {
   const jsonPath = path.join(outDir, 'film.json');
   const slug = path.basename(outDir);
-  const existing = fs.existsSync(jsonPath) ? JSON.parse(fs.readFileSync(jsonPath, 'utf8')) : null;
+  const existing = readFilmJson(outDir);
   const film = existing || { schemaVersion: 1, slug, title, year, directors: null, synopsis: null, recommendation: null };
   film.hls = `${HLS_DIR}/master.m3u8`;
   if (replaceSubtitles || !existing) film.subtitles = subtitles;
-  for (const [key, base] of [['poster', 'poster'], ['backdrop', 'backdrop']]) {
-    const found = ['jpg', 'jpeg', 'png', 'webp', 'avif'].map((e) => `${base}.${e}`).find((f) => fs.existsSync(path.join(outDir, f)));
+  // As the folder spells them: the server's disk is usually exact about letter case.
+  const names = fs.readdirSync(outDir);
+  for (const key of ['poster', 'backdrop']) {
+    const found = artworkFile(names, key);
     if (found && !film[key]) film[key] = found;
   }
   fs.writeFileSync(jsonPath, `${JSON.stringify(film, null, 2)}\n`);
@@ -319,84 +348,126 @@ function writeFilmJson({ outDir, title, year, subtitles, replaceSubtitles }) {
 
 // ------------------------------------------------------------------ main
 
-const opts = parseArgs(process.argv.slice(2));
-if (opts.help || opts.positional.length !== 2) {
-  console.log(fs.readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(1, 26).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
-  process.exit(opts.help ? 0 : 1);
+// The comment at the top of this file, without its comment marks.
+function usage() {
+  const lines = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1);
+  const end = lines.findIndex((l) => !l.startsWith('//'));
+  return lines.slice(0, end).map((l) => l.replace(/^\/\/ ?/, '')).join('\n');
 }
-const [input, outDir] = opts.positional.map((p) => path.resolve(p));
-if (!fs.existsSync(input)) die(`${input} does not exist`);
 
-const probe = ffprobe(['-show_streams', '-show_format', input]);
-const videoStream = probe.streams.find((s) => s.codec_type === 'video' && !s.disposition?.attached_pic);
-if (!videoStream) die('The source has no video stream');
-const audioStreams = probe.streams.filter((s) => s.codec_type === 'audio');
-const subStreams = probe.streams.filter((s) => s.codec_type === 'subtitle');
-
-const source = { ...videoStream, hdr: ['smpte2084', 'arib-std-b67'].includes(videoStream.color_transfer) };
-const videos = parseLadder(opts.ladder || defaultLadder(videoStream.height, source.hdr), source.hdr);
-const audios = parseAudio(opts.audio, audioStreams);
-
-let tonemapFilter = null;
-let hdrParams = [];
-if (source.hdr) {
-  if (opts.hw && videos.some((v) => v.hdr)) die('--hw cannot produce HDR renditions; drop --hw or the :hdr rungs');
-  if (videos.some((v) => !v.hdr)) {
-    if (!hasFilter('zscale')) {
-      die('This is an HDR source and SDR versions need tone mapping, which needs an ffmpeg built with zimg (the zscale filter). Homebrew\'s ffmpeg lacks it; use a static build from https://ffmpeg.org/download.html or the homebrew-ffmpeg tap.');
-    }
-    tonemapFilter = 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p';
+function main(argv) {
+  const opts = parseArgs(argv);
+  if (opts.help || opts.positional.length !== 2) {
+    console.log(usage());
+    process.exit(opts.help ? 0 : 1);
   }
-  hdrParams = hdrMetadata(input);
-}
+  const [input, outDir] = opts.positional.map((p) => path.resolve(p));
+  if (!fs.existsSync(input)) die(`${input} does not exist`);
+  // Both checked before an encode that can take hours: the folder's name
+  // becomes the film's address, and a broken film.json would only fail at the end.
+  const problem = slugProblem(path.basename(outDir));
+  if (problem) die(`"${path.basename(outDir)}" can't be a film folder's name. ${problem}.`);
+  try {
+    readFilmJson(outDir);
+  } catch (err) {
+    die(err.message);
+  }
 
-console.log(`Source: ${videoStream.width}x${videoStream.height} ${videoStream.codec_name}${source.hdr ? ` HDR (${videoStream.color_transfer})` : ''}, ${audioStreams.length} audio, ${subStreams.length} subtitle stream(s)`);
-console.log(`Video: ${videos.map((v) => `${v.height}p ${v.codec}${v.hdr ? ' HDR' : ''}`).join(', ')}`);
-console.log(`Audio: ${audios.map((a) => `${a.name} (${a.lang}${a.surround ? ', 5.1' : ''}${a.ad ? ', AD' : ''})`).join(', ') || 'none'}`);
+  const probe = ffprobe(['-show_streams', '-show_format', input]);
+  const videoStream = probe.streams.find((s) => s.codec_type === 'video' && !s.disposition?.attached_pic);
+  if (!videoStream) die('The source has no video stream');
+  const audioStreams = probe.streams.filter((s) => s.codec_type === 'audio');
+  const subStreams = probe.streams.filter((s) => s.codec_type === 'subtitle');
 
-fs.mkdirSync(path.join(outDir, HLS_DIR), { recursive: true });
-for (const r of videos) {
-  fs.mkdirSync(path.join(outDir, HLS_DIR, r.dir), { recursive: true });
-  run(videoCommand({ input, outDir, r, source, opts, hdrParams, tonemapFilter }), opts.dryRun);
-}
-for (const a of audios) {
-  fs.mkdirSync(path.join(outDir, HLS_DIR, a.dir), { recursive: true });
-  run(audioCommand({ input, outDir, a, opts }), opts.dryRun);
-}
+  const source = { ...videoStream, hdr: ['smpte2084', 'arib-std-b67'].includes(videoStream.color_transfer) };
+  let videos;
+  let audios;
+  try {
+    videos = parseLadder(opts.ladder || defaultLadder(videoStream, source.hdr), source.hdr);
+    audios = parseAudio(opts.audio, audioStreams);
+  } catch (err) {
+    die(err.message);
+  }
+  if (!videos.some((v) => v.codec === 'h264')) {
+    // The scan says so too, but only once the encode is done.
+    console.warn('Warning: this ladder has no H.264 rendition. HEVC playback depends on the browser, operating system and hardware, so some viewers won\'t be able to play the film.');
+  }
 
-const subtitles = [];
-if (opts.subs) {
-  const TEXT_SUBS = new Set(['subrip', 'ass', 'ssa', 'mov_text', 'webvtt', 'text']);
-  fs.mkdirSync(path.join(outDir, 'subtitles'), { recursive: true });
-  const used = new Set();
-  subStreams.forEach((s, i) => {
-    if (!TEXT_SUBS.has(s.codec_name)) {
-      console.warn(`Skipping subtitle stream ${i} (${s.codec_name}): image subtitles need OCR first.`);
-      return;
+  let tonemapFilter = null;
+  let hdrParams = [];
+  if (source.hdr) {
+    if (opts.hw && videos.some((v) => v.hdr)) die('--hw cannot produce HDR renditions; drop --hw or the :hdr rungs');
+    if (videos.some((v) => !v.hdr)) {
+      if (!hasFilter('zscale')) {
+        die('This is an HDR source and SDR versions need tone mapping, which needs an ffmpeg built with zimg (the zscale filter). Homebrew\'s ffmpeg lacks it; use a static build from https://ffmpeg.org/download.html or the homebrew-ffmpeg tap.');
+      }
+      tonemapFilter = 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p';
     }
-    const language = /^[a-z]{2,3}$/i.test(s.tags?.language || '') ? bcp47(s.tags.language) : 'und';
-    const forced = Boolean(s.disposition?.forced);
-    const sdh = Boolean(s.disposition?.hearing_impaired);
-    let name = `${language}${forced ? '.forced' : ''}${sdh ? '.sdh' : ''}`;
-    while (used.has(name)) name += '.alt';
-    used.add(name);
-    const file = `subtitles/${name}.vtt`;
-    const args = ['-hide_banner', '-y', '-i', input, '-map', `0:s:${i}`, '-c:s', 'webvtt', path.join(outDir, file)];
-    if (opts.seconds) args.splice(4, 0, '-t', String(opts.seconds));
-    run(args, opts.dryRun);
-    const label = `${languageName(language)}${forced ? ' (forced)' : ''}${sdh ? ' (SDH)' : ''}`;
-    subtitles.push({ language, label, file, ...(forced ? { forced: true } : {}) });
-  });
+    hdrParams = hdrMetadata(input);
+  }
+
+  console.log(`Source: ${videoStream.width}x${videoStream.height} ${videoStream.codec_name}${source.hdr ? ` HDR (${videoStream.color_transfer})` : ''}, ${audioStreams.length} audio, ${subStreams.length} subtitle stream(s)`);
+  console.log(`Video: ${videos.map((v) => `${v.height}p ${v.codec}${v.hdr ? ' HDR' : ''}`).join(', ')}`);
+  console.log(`Audio: ${audios.map((a) => `${a.name} (${a.lang}${a.surround ? ', 5.1' : ''}${a.ad ? ', AD' : ''})`).join(', ') || 'none'}`);
+
+  fs.mkdirSync(path.join(outDir, HLS_DIR), { recursive: true });
+  for (const r of videos) {
+    fs.mkdirSync(path.join(outDir, HLS_DIR, r.dir), { recursive: true });
+    run(videoCommand({ input, outDir, r, source, opts, hdrParams, tonemapFilter }), opts.dryRun);
+  }
+  for (const a of audios) {
+    fs.mkdirSync(path.join(outDir, HLS_DIR, a.dir), { recursive: true });
+    run(audioCommand({ input, outDir, a, opts }), opts.dryRun);
+  }
+
+  const subtitles = [];
+  if (opts.subs) {
+    const TEXT_SUBS = new Set(['subrip', 'ass', 'ssa', 'mov_text', 'webvtt', 'text']);
+    fs.mkdirSync(path.join(outDir, 'subtitles'), { recursive: true });
+    const used = new Set();
+    subStreams.forEach((s, i) => {
+      if (!TEXT_SUBS.has(s.codec_name)) {
+        console.warn(`Skipping subtitle stream ${i} (${s.codec_name}): image subtitles need OCR first.`);
+        return;
+      }
+      const language = streamLanguage(s);
+      const forced = Boolean(s.disposition?.forced);
+      const sdh = Boolean(s.disposition?.hearing_impaired);
+      let name = `${language}${forced ? '.forced' : ''}${sdh ? '.sdh' : ''}`;
+      while (used.has(name)) name += '.alt';
+      used.add(name);
+      const file = `subtitles/${name}.vtt`;
+      const args = ['-hide_banner', '-y', '-i', input, '-map', `0:s:${i}`, '-c:s', 'webvtt', path.join(outDir, file)];
+      if (opts.seconds) args.splice(4, 0, '-t', String(opts.seconds));
+      run(args, opts.dryRun);
+      const label = `${languageName(language)}${forced ? ' (forced)' : ''}${sdh ? ' (SDH)' : ''}`;
+      subtitles.push({ language, label, file, ...(forced ? { forced: true } : {}) });
+    });
+  }
+
+  if (!opts.dryRun) {
+    writeMaster({ outDir, videos, audios, fps: ratio(videoStream.r_frame_rate) || 24 });
+    // "Hedwig.and.the.Angry.Inch.2001.1080p.BluRay…" becomes "Hedwig and the Angry Inch" (2001).
+    // The server can then match it on TMDb and fill in the rest.
+    const fromName = guessTitleYear(path.basename(input));
+    const tagTitle = probe.format.tags?.title;
+    const title = tagTitle && !looksLikeReleaseName(tagTitle) ? tagTitle : fromName.title;
+    try {
+      writeFilmJson({ outDir, title, year: fromName.year, subtitles, replaceSubtitles: opts.subs });
+    } catch (err) {
+      die(err.message); // film.json was broken while the encode ran
+    }
+    console.log(`\nDone: ${path.join(outDir, HLS_DIR, 'master.m3u8')}`);
+    console.log('Add a poster, fill in film.json, then rsync the folder to the server\'s media directory.');
+  }
 }
 
-if (!opts.dryRun) {
-  writeMaster({ outDir, videos, audios, fps: ratio(videoStream.r_frame_rate) || 24 });
-  // "Hedwig.and.the.Angry.Inch.2001.1080p.BluRay…" becomes "Hedwig and the Angry Inch" (2001).
-  // The server can then match it on TMDb and fill in the rest.
-  const fromName = guessTitleYear(path.basename(input));
-  const tagTitle = probe.format.tags?.title;
-  const title = tagTitle && !looksLikeReleaseName(tagTitle) ? tagTitle : fromName.title;
-  writeFilmJson({ outDir, title, year: fromName.year, subtitles, replaceSubtitles: opts.subs });
-  console.log(`\nDone: ${path.join(outDir, HLS_DIR, 'master.m3u8')}`);
-  console.log('Add a poster, fill in film.json, then rsync the folder to the server\'s media directory.');
-}
+// Only when run as a script, so the tests can import the planning functions.
+const runAsScript = (() => {
+  try {
+    return fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+})();
+if (runAsScript) main(process.argv.slice(2));

@@ -1,6 +1,6 @@
-// Branding: milestone 3, slice 1. Written from docs/milestone-3.md (the Branding
-// decisions and slice 1), the slice 1 spec and the fixes that followed its review,
-// not from the implementation.
+// Branding: milestone 3, slice 1. Written from docs/history/milestone-3.md (the Branding
+// decisions and slice 1) and the fixes that followed its review, not from the
+// implementation.
 // Contrast is worked out here (WCAG 2), not taken from theme.js, so the checks are
 // checked rather than repeated. Link previews are fetched the way a messaging app's
 // server fetches them: no cookies, no scripts, and nothing it reads is written down.
@@ -985,8 +985,12 @@ describe('uploading a logo and a tab icon', () => {
     const logo = await uploaded('logo', pngImage(120, 40));
     const forged = { file: 'icon-0123456789abcdef.png', width: 64, height: 64 };
     fs.writeFileSync(path.join(brandingDir, forged.file), pngImage(64, 64));
-    const r = await admin.patch('/api/admin/settings', { logo: null, icon: forged });
-    assert.equal(r.status, 200, JSON.stringify(r.data));
+    // Refused, not quietly ignored: only the upload routes set them.
+    for (const patch of [{ logo: null }, { icon: forged }]) {
+      const r = await admin.patch('/api/admin/settings', patch);
+      assert.equal(r.status, 400, JSON.stringify(r.data));
+    }
+    const r = await admin.get('/api/admin/settings');
     assert.deepEqual(r.data.logo, logo);
     assert.equal(r.data.icon, null);
     assert.equal((await fetchFile(`/branding/${forged.file}`)).status, 404);

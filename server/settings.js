@@ -64,20 +64,25 @@ export function createSettings(db) {
   const insertNew = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   const remove = db.prepare('DELETE FROM settings WHERE key = ?');
 
+  // Object.hasOwn rather than `in` throughout: `in` also finds what every object
+  // inherits, so names like toString or constructor would pass as settings.
   function get() {
     const out = { ...DEFAULT_SETTINGS };
-    for (const { key, value } of all.all()) if (key in DEFAULT_SETTINGS) out[key] = JSON.parse(value);
+    for (const { key, value } of all.all()) if (Object.hasOwn(DEFAULT_SETTINGS, key)) out[key] = JSON.parse(value);
     return out;
   }
 
-  // Throws for the first invalid value, before anything is written. New colours
-  // are checked with the other one as it would be after the save, and the
-  // message says what's wrong with them.
+  // Throws for the first unknown key or invalid value, before anything is
+  // written. A key that isn't a setting is refused rather than ignored, so a typo
+  // shows up at once. The logo and the icon aren't in RULES: only their upload
+  // routes set them. New colours are checked with the other one as it would be
+  // after the save, and the message says what's wrong with them.
   function validate(patch) {
     for (const [key, value] of Object.entries(patch)) {
-      if (key in RULES && !RULES[key](value)) throw Object.assign(new Error(`Invalid value for ${key}`), { status: 400 });
+      if (!Object.hasOwn(RULES, key)) throw Object.assign(new Error(`Not a setting you can change here: ${key.slice(0, 80)}`), { status: 400 });
+      if (!RULES[key](value)) throw Object.assign(new Error(`Invalid value for ${key}`), { status: 400 });
     }
-    if ('accentColor' in patch || 'backgroundColor' in patch) {
+    if (Object.hasOwn(patch, 'accentColor') || Object.hasOwn(patch, 'backgroundColor')) {
       const [problem] = check({ ...get(), ...patch });
       if (problem) throw Object.assign(new Error(problem), { status: 400 });
     }
@@ -85,9 +90,7 @@ export function createSettings(db) {
 
   function update(patch) {
     validate(patch);
-    for (const [key, value] of Object.entries(patch)) {
-      if (key in RULES) upsert.run(key, JSON.stringify(tidy(key, value)));
-    }
+    for (const [key, value] of Object.entries(patch)) upsert.run(key, JSON.stringify(tidy(key, value)));
     return get();
   }
 

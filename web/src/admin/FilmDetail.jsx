@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, formatAgo, formatBytes, formatClock, plural } from '../api.js';
 import FilmInfo from './FilmInfo.jsx';
+import { editedHere, fromTmdb } from './filmEdits.js';
 import { IssueTicket, TicketTable } from './Tickets.jsx';
 import { ErrorNote, MediaBadge, useAction, useLoad } from './ui.jsx';
 
@@ -38,11 +39,10 @@ export default function FilmDetail() {
   if (!film || !form) return null;
 
   const dirty = ALL_FIELDS.some((k) => String(form[k] ?? '') !== String(film[k] ?? '')) || String(form.sortOrder) !== String(film.sortOrder);
-  const differs = (k) => film.importedMeta && String(film[k] ?? '') !== String(film.importedMeta[k] ?? '');
-  const fromTmdb = (k) => film.metaSources?.[k] === 'tmdb';
-  const anyEdited = ALL_FIELDS.some(differs);
+  // Reset to film.json is offered only when there is an edit to undo: what TMDB filled in isn't one.
+  const anyEdited = ALL_FIELDS.some((k) => editedHere(film, k));
   const badge = (k) =>
-    fromTmdb(k) ? <span className="edited">from TMDB</span> : differs(k) ? <span className="edited">edited here</span> : null;
+    fromTmdb(film, k) ? <span className="edited">from TMDB</span> : editedHere(film, k) ? <span className="edited">edited here</span> : null;
   const broken = film.mediaStatus === 'error' || film.mediaStatus === 'missing';
 
   async function save(e) {
@@ -70,7 +70,7 @@ export default function FilmDetail() {
   }
 
   async function resetMetadata() {
-    if (!window.confirm('Replace your edits with the values from film.json?')) return;
+    if (!window.confirm('Replace your edits with the values from film.json? What TMDB filled in stays as it is.')) return;
     const r = await action.run(() => api.post(`/api/admin/films/${film.id}/reset-metadata`));
     if (r) setData(r);
   }

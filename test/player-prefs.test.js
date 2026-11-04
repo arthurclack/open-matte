@@ -1,10 +1,10 @@
-// Remembered player choices: milestone 3, slice 2. Written from docs/milestone-3.md and
-// the slice 2 spec, not from the implementation. The audio language, the subtitle
-// language (or Off), and the subtitles' size and background stay in the viewer's
-// browser, under one localStorage key, and are never sent anywhere. What is kept is
-// language codes, never a track's label, a film's title or slug, an address or an id.
-// Storage that fails (a private window, blocked site data, a full quota) means nothing
-// is remembered, never an error.
+// Remembered player choices: milestone 3, slice 2. Written from
+// docs/history/milestone-3.md (slice 2), not from the implementation. The audio
+// language, the subtitle language (or Off), and the subtitles' size and background stay
+// in the viewer's browser, under one localStorage key, and are never sent anywhere.
+// What is kept is language codes, never a track's label, a film's title or slug, an
+// address or an id. Storage that fails (a private window, blocked site data, a full
+// quota) means nothing is remembered, never an error.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, describe, test } from 'node:test';

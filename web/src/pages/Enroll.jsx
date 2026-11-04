@@ -1,36 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api, formatDayTime } from '../api.js';
+import { enrollLink } from '../enrollLink.js';
 import { OpenInBrowser } from '../PasskeySignIn.jsx';
-import { browserProblem, createPasskey, serverProblem, supportsPasskeys, useCeremonyOptions } from '../passkeys.js';
+import { anotherBrowserMayHelp, browserProblem, createPasskey, serverProblem, supportsPasskeys, useCeremonyOptions } from '../passkeys.js';
 import { useSite } from '../site.jsx';
-
-// The token lives in the address fragment, which never reaches the server. Once read,
-// it is kept for this tab only, so a reload carries on after the fragment is cleared.
-const KEY = 'om_enroll';
-const stored = {
-  get: () => {
-    try {
-      return sessionStorage.getItem(KEY);
-    } catch {
-      return null;
-    }
-  },
-  set: (v) => {
-    try {
-      sessionStorage.setItem(KEY, v);
-    } catch {
-      // Private browsing: a reload will need the link again.
-    }
-  },
-  clear: () => {
-    try {
-      sessionStorage.removeItem(KEY);
-    } catch {
-      // Nothing was kept.
-    }
-  },
-};
 
 // Links that will never work again: the copy kept for this tab goes.
 const DEAD_LINKS = {
@@ -47,7 +21,8 @@ const Page = ({ children }) => (
 );
 const Title = ({ children }) => <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>{children}</h1>;
 
-// /enroll#<token>: create a passkey from a setup or recovery link.
+// /enroll#<token>: create a passkey from a setup or recovery link. The token is in the
+// fragment, which never reaches the server; once read, this tab keeps it (enrollLink.js).
 export default function Enroll() {
   const navigate = useNavigate();
   const { hash } = useLocation();
@@ -67,10 +42,10 @@ export default function Enroll() {
       return;
     }
     if (fromHash) {
-      stored.set(fromHash);
+      enrollLink.set(fromHash);
       navigate({ hash: '' }, { replace: true });
     }
-    setLink((l) => ({ token: fromHash || stored.get() || null, opened: l.opened + 1, unsupported: false }));
+    setLink((l) => ({ token: fromHash || enrollLink.get() || null, opened: l.opened + 1, unsupported: false }));
   }, [hash, navigate]);
 
   if (link.unsupported) {
@@ -93,20 +68,25 @@ function EnrollLink({ token }) {
   const [done, setDone] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
+  // The browser itself said no: it may be an app's built-in browser that looked as if
+  // it could use passkeys (see OpenInBrowser).
+  const [refusedHere, setRefusedHere] = useState(false);
 
   const fetchOptions = useCallback(() => api.post('/api/enroll/options', { token }), [token]);
   const ceremony = useCeremonyOptions(fetchOptions, { enabled: Boolean(token) && !deadCode && !done });
   const info = ceremony.data;
   const dead = deadCode || (DEAD_LINKS[ceremony.error?.code] ? ceremony.error.code : null);
 
+  // Nobody here needs the link any more: it's dead, or this device has a passkey already.
   useEffect(() => {
-    if (dead) stored.clear();
-  }, [dead]);
+    if (dead || already) enrollLink.forget();
+  }, [dead, already]);
 
   // Synchronous up to the browser call: Safari only creates passkeys during a tap.
   function create() {
     if (!info?.options || busy) return;
     setMessage(null);
+    setRefusedHere(false);
     setBusy(true);
     let answered = false;
     createPasskey(info.options)
@@ -115,7 +95,7 @@ function EnrollLink({ token }) {
         return api.post('/api/enroll/finish', { token, credential });
       })
       .then((r) => {
-        stored.clear();
+        enrollLink.forget();
         // The link may carry a ticket: then it ends on that film.
         setDone({ ...r, film: r.slug ? info.film : null });
         refresh();
@@ -124,6 +104,7 @@ function EnrollLink({ token }) {
         if (!answered) {
           // This device already holds one of their passkeys; the link stays unused.
           if (err?.code === 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED') return setAlready('device');
+          setRefusedHere(anotherBrowserMayHelp(err));
           return setMessage(browserProblem(err, { creating: true }));
         }
         if (DEAD_LINKS[err.code]) return setDeadCode(err.code);
@@ -225,6 +206,8 @@ function EnrollLink({ token }) {
       <button className="btn primary big" onClick={create} disabled={busy || ceremony.spent}>
         {busy ? 'Creating…' : 'Create a passkey'}
       </button>
+      {/* The fragment has gone from the address, so Copy link puts the whole link back together. */}
+      {refusedHere && <OpenInBrowser refused link={`${window.location.origin}/enroll#${token}`} />}
       <p className="dim" style={{ marginTop: '1.2rem' }}>
         This link works once, until {formatDayTime(info.expiresAt)}. Not {name}? Stop here and let whoever sent it know.
       </p>

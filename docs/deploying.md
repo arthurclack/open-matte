@@ -56,12 +56,17 @@ the new password signs in.
    go back from without a restore.
 2. **Back up.** In the admin, press **Settings → Backups → Back up now**.
 3. **Copy that backup off the server.** **Back up now** writes to the same disk as the
-   database, and the off-server copy (below) only runs once a day. On your computer:
+   database, and the off-server copy (below) only runs once a day. On your computer,
+   into a folder of its own rather than your copy of the code:
 
    ```bash
    ssh my-server 'ls -t /srv/open-matte/backups/*.db | head -1'    # the one you just made
-   scp my-server:/srv/open-matte/backups/open-matte-2026-11-03-153012.db .
+   mkdir -p ~/open-matte-backups
+   scp my-server:/srv/open-matte/backups/open-matte-2026-11-03-153012.db ~/open-matte-backups/
    ```
+
+   The server keeps it as well, for three days at least (unless `BACKUP_KEEP_DAYS` is
+   below 3), however many backups are made after it.
 
 4. **Note the version you run now**, in case you need to go back. **Status** in the
    admin shows it, and so does the foot of **Settings**. With git,
@@ -77,7 +82,14 @@ git fetch --tags
 git checkout v1.1.0
 cd deploy
 docker compose up -d --build
+docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
 ```
+
+Caddy reads `deploy/caddy/Caddyfile` only when it starts, and Compose restarts it
+only when its image or its part of `compose.yml` changes. The last line has it load
+the new one. If the Caddyfile has a mistake, Caddy says so and carries on with the
+one it had. Just after Caddy has been restarted, the reload can fail with
+`connection refused`: wait a moment and run it again.
 
 ### Updating with scripts/deploy.sh
 
@@ -89,8 +101,10 @@ scripts/deploy.sh my-server
 ```
 
 `deploy.sh` copies whatever is checked out, uncommitted changes included, then runs
-`docker compose up -d --build` on the server. The database, films and `deploy/.env`
-are left alone.
+`docker compose up -d --build` on the server and has Caddy reload its Caddyfile, as
+above. If Caddy refuses the Caddyfile, the deploy stops with Caddy's error. The
+database, films and `deploy/.env` are left alone, and so is any database file in your
+copy of the code, such as a backup: those are never sent.
 
 ### After an update
 
@@ -104,6 +118,11 @@ docker compose logs app | grep -E 'Passkeys|Error'
 ```
 
 **Status** in the admin shows the new version and the schema the database is on.
+
+A film page someone left open from before the update can't load the player from
+the new build. If they press Play there, the page says the site may have just been
+updated and offers Reload. The screening that Play started isn't lost: after the
+reload, it shows as Resume.
 
 Each build leaves the previous image behind, unnamed. To remove those:
 
@@ -128,8 +147,8 @@ services:
 
 Git leaves the file alone. With `deploy.sh`, keep it in `deploy/` on your computer:
 the script makes the server's copy of the code match yours, so a file only on the
-server would be deleted. The changelog says when `compose.yml` or the `Caddyfile`
-change, so you can check your additions still fit.
+server would be deleted. The changelog says when `compose.yml` or
+`deploy/caddy/Caddyfile` change, so you can check your additions still fit.
 
 ### Keeping the images up to date
 
@@ -157,8 +176,10 @@ docker run --rm --network none -e NODE_ENV=test \
   -v /srv/open-matte/app/test:/app/test:ro -w /app deploy-app node --test 'test/*.test.js'
 ```
 
-The image has no web app source, so the few tests that read it are reported as
-skipped.
+All should pass: the summary at the end says `fail 0`. The image has no web app
+source, `scripts/` or `deploy/` folder, so the tests that read them are skipped, each
+shown on a line starting `﹣` with the reason. A skipped group's tests aren't in the
+summary's counts, so it shows fewer tests than on your computer.
 
 ## Backups
 
@@ -172,8 +193,9 @@ backed up here: keep your originals and encodes elsewhere.
 **Every day**, between 04:00 and 04:15 UTC, the app saves a consistent copy of the
 database, checks it with SQLite's integrity check, and keeps it in
 `/srv/open-matte/backups` (`BACKUP_PATH`) as `open-matte-YYYY-MM-DD-HHMMSS.db`, named
-by its UTC time. It keeps the newest backup of each of the last 14 days and the
-first of each month for a year. Posters go to `backups/artwork`, and the logo and tab
+by its UTC time. It keeps every backup of the last three days, including those made
+with **Back up now**, then the newest of each of the last 14 days and the first of
+each month for a year. Posters go to `backups/artwork`, and the logo and tab
 icon to `backups/branding`. Those two folders only grow, so an older backup's logo is
 still there to restore. If the server was down at 04:00, a backup runs shortly after it
 starts.
@@ -183,8 +205,14 @@ starts.
 error.
 
 `BACKUP_HOUR`, `BACKUP_KEEP_DAYS` and `BACKUP_KEEP_MONTHS` in `deploy/.env` change the
-timing and how many are kept. In this Docker setup backups are always on: they go
-wherever `BACKUP_PATH` says.
+timing and how many are kept. `BACKUP_KEEP_DAYS` is at least 1: with fewer than three,
+every backup of that many days is kept, not three. A value out of range stops the
+app at start, and its log says which. In this Docker setup backups are always on:
+they go wherever `BACKUP_PATH` says.
+
+Keep `BACKUP_PATH` on the server's own disk. The app reads the folder as it works, and
+a network share that stops answering would stall the whole site. For network
+storage, use the copy below.
 
 **Backups keep what they had.** The app deletes old activity and ended browser
 sessions after a while ([access.md](access.md#how-long-its-kept)), but a backup is the
@@ -192,7 +220,12 @@ database as it was, so it keeps them until the backup itself is deleted: the mon
 backups hold up to a year of events the app has since deleted.
 
 Backups hold people's names, your notes about them and their activity, which are
-personal data. Keep every copy somewhere private.
+personal data, and the codes of tickets for anyone with the link, which work for
+whoever reads them. Keep every copy somewhere private. On the server, the app makes
+its files readable by its own user only, and the data and backups folders should be
+yours alone too ([The folders](installing.md#the-folders)). If
+`ls -ld /srv/open-matte/data /srv/open-matte/backups` shows anything but
+`drwx------` for them, run `chmod 700 /srv/open-matte/data /srv/open-matte/backups`.
 
 **Your settings aren't in the backups.** `deploy/.env`, and
 `deploy/compose.override.yml` if you have one, live only in
@@ -267,7 +300,7 @@ The app checks every backup as it writes it, and keeps none that fails. To check
 copy yourself, on a computer with the `sqlite3` command:
 
 ```bash
-sqlite3 open-matte-2026-11-03-153012.db 'PRAGMA integrity_check; PRAGMA user_version;'
+sqlite3 ~/open-matte-backups/open-matte-2026-11-03-153012.db 'PRAGMA integrity_check; PRAGMA user_version;'
 ```
 
 It prints `ok`, then the backup's schema number. Code opens a database at its own
@@ -280,7 +313,7 @@ locally](../README.md#running-it-locally):
 
 ```bash
 mkdir -p ~/restore-test/data
-cp open-matte-2026-11-03-153012.db ~/restore-test/data/open-matte.db
+cp ~/open-matte-backups/open-matte-2026-11-03-153012.db ~/restore-test/data/open-matte.db
 DATA_DIR=~/restore-test/data MEDIA_DIR=~/restore-test/media npm run dev
 ```
 
@@ -309,7 +342,7 @@ folder to copy, and that `cp` says "No such file or directory". Nothing is wrong
 the backup is no longer on the server, copy yours back first, from your computer:
 
 ```bash
-scp open-matte-2026-11-03-040012.db my-server:/srv/open-matte/backups/
+scp ~/open-matte-backups/open-matte-2026-11-03-040012.db my-server:/srv/open-matte/backups/
 ```
 
 Viewers stay signed in, because their sessions are in the backup too, unless the
@@ -318,15 +351,30 @@ deletes again whatever in the backup is older than you keep records for.
 
 ### After restoring an older backup
 
-**Check People.** The backup knows nothing of what happened since it was made.
-Passkeys you removed since (one by one, or with **Reset after loss**) are back and
-work again; browsers you signed out (with **Sign out everywhere**, **Disable** or a
-reset) are signed in again; someone you disabled is enabled again; and a link
-cancelled or used since then works again until it expires. Remove those passkeys
-again, use **Sign out everywhere** or **Disable** where needed, and cancel any waiting
-link you didn't mean. Passkeys created since the backup are gone from the server, so
-those people can't sign in until you send them a new link. Tickets you issued since
-are gone too, so their links no longer open anything.
+The backup knows nothing of what happened since it was made, at the time in its
+name (UTC). Everything you did after that is undone, so check People and Tickets.
+
+**Check People.** Passkeys you removed since (one by one, or with **Reset after
+loss**) are back and work again; browsers you signed out (with **Sign out
+everywhere**, **Disable** or a reset) are signed in again; someone you disabled is
+enabled again; and a link cancelled or used since then works again until it expires.
+Remove those passkeys again, use **Sign out everywhere** or **Disable** where needed,
+and cancel any waiting link you didn't mean. Passkeys created since the backup are
+gone from the server, so those people can't sign in until you send them a new link.
+
+**Check Tickets.** A ticket you revoked since works again for anyone with its link,
+so revoke it again: if it was revoked because the link got out, this matters most. A
+ticket you gave to someone, or that someone kept, since is for anyone with the link
+again, and the browsers that opened it before have it back: give it to them again.
+Browsers you signed out of a ticket (**Sign out browsers**), and viewers signed out
+with **Sign out every viewer**, are signed in again. A film you unpublished since is
+published again, and one you published since is a draft. Tickets you issued since are
+gone, so their links no longer open anything.
+
+To see what to redo, look at the database as it was before the restore: the backup
+you made with **Back up now** first. Copy it to your computer and open it there, as in
+[Checking a backup](#checking-a-backup): its Tickets list shows which were revoked,
+and who each was for.
 
 **Don't delete people, passkeys or links by hand** (with `sqlite3`, say). Use the admin
 instead: **Remove** for a passkey, **Reset after loss**, **Disable** for a person. They
@@ -381,8 +429,10 @@ before the update:
 4. **Check** that `docker compose logs app` shows no `newer Open Matte` line, and that
    **Status** shows the older version.
 
-Screenings, events, people and tickets written since that backup are lost. When you
-update again, the migrations run again on the restored database.
+Screenings, events, people and tickets written since that backup are lost, and
+whatever you changed since is as it was: check People and Tickets, as [after
+restoring an older backup](#after-restoring-an-older-backup). When you update again,
+the migrations run again on the restored database.
 
 ## Moving to a new server
 
@@ -452,7 +502,7 @@ password, and set `DOMAIN` and `WEBAUTHN_RP_ID` exactly as they were: the databa
 doesn't record them, and a different `WEBAUTHN_RP_ID` leaves every passkey useless.
 If you're not sure of it, a passkey in your own password manager or keychain is listed
 under it. A TMDB key saved in the admin is in the backup; one set in `.env` is not.
-Then check People, as after
+Then check People and Tickets, as after
 [restoring an older backup](#after-restoring-an-older-backup).
 
 ## The projection booth and logs
@@ -460,13 +510,13 @@ Then check People, as after
 **Status** in the admin, the projection booth, answers two questions without a trip to
 the server. **Needs attention**: setup and recovery links still waiting, or expired
 unused in the last 7 days; tickets never played whose start-by date is close or just
-passed; and the media requests the app refused since it started, counted by reason,
-with the latest ten. **The server**: whether the media folder is readable and how many
-film folders the last scan found; the free disk space for the data and the media; the
-newest backup file, the last backup error, and the off-server copy if
-`BACKUP_COPY_DIR` is set; the last clean-up; and the version, Node, SQLite and schema
-versions, and when the app started. When something needs attention, the top of the
-Films page says so.
+passed; and the media requests the app refused or couldn't answer since it started,
+counted by reason, with the latest ten (repeats share a row). **The server**: whether
+the media folder is readable and how many film folders the last scan found; the free
+disk space for the data and the media; the newest backup file, the last backup error,
+and the off-server copy if `BACKUP_COPY_DIR` is set; the last clean-up; and the
+version, Node, SQLite and schema versions, and when the app started. When something
+needs attention, the top of the Films page says so.
 
 Each line says what was checked, such as "Backup file written at 04:03", never that a
 restore would work. Reading it records nothing.
@@ -548,11 +598,13 @@ link fetches the preview itself, so it needs mobile data or the exception.
 
 ## IPv6 and rate limits
 
-Some requests are rate-limited per visitor, to slow down guessing:
+Some requests are rate-limited per visitor, to slow down guessing, or a script
+pressing a button in a loop:
 
 | What | Each visitor may make |
 |---|---|
 | Opening a ticket link | 30 every 10 minutes |
+| Pressing Play (or **Watch here instead**) | 60 every 10 minutes |
 | Keeping a ticket | 30 every 10 minutes |
 | A ticket link's preview, the page and its poster together | 60 every 10 minutes |
 | Setting up a passkey from a setup or recovery link | 20 requests every 15 minutes |
@@ -578,6 +630,21 @@ Depending on your version of Docker, the network may also need an IPv6 subnet of
 own: Docker's IPv6 documentation has the details. Without IPv6 on the network, Docker
 hands Caddy every IPv6 visitor as the network gateway's address, and they all share
 one limit.
+
+If you give the network a subnet, make it a private one, starting `fd` (such as
+`fd12:3456:789a:1::/64`), not one of your server's public addresses. The app believes
+what Caddy says about a visitor only when Caddy reaches it from a private address
+(`TRUST_PROXY`, in [`.env.example`](../.env.example)). From a public one, every
+visitor would look like Caddy, and share one limit, so that one person's wrong admin
+passwords would lock you out. If the network must have a public subnet, tell the app
+that one proxy stands in front of it, in `compose.override.yml`:
+
+```yaml
+services:
+  app:
+    environment:
+      TRUST_PROXY: 1
+```
 
 ## Removing it
 

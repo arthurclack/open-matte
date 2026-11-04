@@ -1,5 +1,5 @@
 // The passkey wrapper (server/webauthn.js) and the challenge store, tested
-// against docs/milestone-2.md: "Passkeys", "Relying party" and "Challenges".
+// against docs/history/milestone-2.md: "Passkeys", "Relying party" and "Challenges".
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { describe, test } from 'node:test';
@@ -135,6 +135,19 @@ describe('ceremony options', () => {
     assert.notEqual(again.challenge, o.challenge);
   });
 
+  test('registration: existing passkeys go back with known transports only, whatever was stored', async () => {
+    const existing = [
+      { credential_id: 'Y3JlZDE', transports: JSON.stringify(['internal', { not: 'a transport' }, 'x'.repeat(40_000), 'usb', 'internal', 7, null]) },
+      { credential_id: 'Y3JlZDI', transports: '{"internal":true}' },
+      { credential_id: 'Y3JlZDM', transports: 'not json' },
+    ];
+    const o = await registrationOptions(DEV, { rpName: 'Open Matte', person: newPerson(), existing });
+    assert.deepEqual(o.excludeCredentials.map((c) => c.id), ['Y3JlZDE', 'Y3JlZDI', 'Y3JlZDM']);
+    assert.deepEqual(o.excludeCredentials[0].transports, ['internal', 'usb']);
+    assert.equal(o.excludeCredentials[1].transports, undefined);
+    assert.equal(o.excludeCredentials[2].transports, undefined);
+  });
+
   test('sign-in: no allowCredentials, user verification preferred, a fresh challenge each time', async () => {
     const a = await signInOptions(DEV);
     const b = await signInOptions(DEV);
@@ -182,6 +195,22 @@ describe('registering and signing in', () => {
     for (let i = 0; i < 4; i++) assert.equal((await signIn(DEV, auth, passkey, { counter: 0 })).newCounter, 0);
   });
 
+  test('only the transports the standard names are kept, once each; the passkey still signs in', async () => {
+    const auth = softAuthenticator();
+    const { reg, passkey } = await register(DEV, auth, {
+      transports: ['internal', { not: 'a transport' }, 'x'.repeat(40_000), 'usb', 'internal', 'smart-card', 7, null, ['hybrid']],
+    });
+    assert.deepEqual(reg.transports, ['internal', 'usb', 'smart-card']);
+    await signIn(DEV, auth, passkey);
+    // A list of nothing known is an empty list; no list at all is none.
+    assert.deepEqual((await register(DEV, softAuthenticator(), { transports: ['carrier pigeon'] })).reg.transports, []);
+    assert.equal((await register(DEV, softAuthenticator(), { transports: 'usb' })).reg.transports, null);
+    const options = await registrationOptions(DEV, { rpName: 'Open Matte', person: newPerson() });
+    const credential = softAuthenticator().create(options);
+    delete credential.response.transports;
+    assert.equal((await verifyRegistration(DEV, credential, options.challenge)).transports, null);
+  });
+
   test('user verification is preferred, not enforced: user presence alone passes', async () => {
     const auth = softAuthenticator({ synced: false });
     const { passkey } = await register(DEV, auth, { flags: UP });
@@ -215,6 +244,16 @@ describe('forged registrations are refused', () => {
   for (const [name, over] of Object.entries(forgeries)) {
     test(name, async () => refusedRegistration(DEV, softAuthenticator(), over));
   }
+
+  // WebAuthn level 3, "Registering a new credential": over 1023 bytes, refuse.
+  test('a credential id longer than 1023 bytes', async () => {
+    await refusedRegistration(DEV, softAuthenticator({ idLength: 1024 }));
+    await refusedRegistration(DEV, softAuthenticator({ idLength: 10_000 }));
+    const auth = softAuthenticator({ idLength: 1023 });
+    const { reg, passkey } = await register(DEV, auth);
+    assert.equal(Buffer.from(reg.credentialId, 'base64url').length, 1023);
+    await signIn(DEV, auth, passkey);
+  });
 
   test('against the production relying party: right rpIdHash, wrong origins', async () => {
     for (const origin of ['https://openmatte.dev', 'https://x.openmatte.dev', 'http://www.openmatte.dev']) {

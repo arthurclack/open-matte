@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, formatAgo, formatDay } from '../api.js';
+import { enrollLink } from '../enrollLink.js';
 import { confirmSignOut, useSite } from '../site.jsx';
 
 const Page = ({ children }) => <div className="narrow account">{children}</div>;
@@ -52,6 +53,8 @@ export default function Account() {
     setError(null);
     try {
       await api.post('/api/account/sign-out-everywhere');
+      // As signing out does (site.jsx).
+      enrollLink.forget();
       await refresh();
       navigate('/');
     } catch {
