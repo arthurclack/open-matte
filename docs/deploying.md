@@ -167,7 +167,7 @@ are the cinema's colours if it rewrites the style that holds them.
 
 ### Keeping the images up to date
 
-The image is built on Node's official `node:24-slim`, and Caddy runs from `caddy:2`.
+The image is built on Node's official `node:26-slim`, and Caddy runs from `caddy:2`.
 Both get security fixes between Open Matte releases. To pick them up:
 
 ```bash

@@ -220,12 +220,12 @@ export function openDb(file) {
   return db;
 }
 
-// Node's SQLite binds values differently from one version to the next. Node 26
-// binds undefined as NULL; Node 24, which the server's image runs, refuses it
-// with an error, and Node 22.13 refuses true and false as well. So a request
-// field left out could pass the tests on a computer with Node 26 and answer 500
-// on the server. Every statement here binds as Node 26 does, on any version:
-// undefined as NULL, true and false as 1 and 0.
+// Node's SQLite binds values differently from one version to the next. Node 26,
+// which the server's image runs, binds undefined as NULL; Node 24 refuses it with
+// an error, and Node 22.13 refuses true and false as well. So a request field left
+// out could pass on one Node and answer 500 on another, such as a computer running
+// the server with an older Node. Every statement here binds as Node 26 does, on any
+// version: undefined as NULL, true and false as 1 and 0.
 const bindable = (v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v);
 const isParamsObject = (v) => v !== null && typeof v === 'object' && [Object.prototype, null].includes(Object.getPrototypeOf(v));
 const bindables = (args) => args.map((a) => (isParamsObject(a) ? Object.fromEntries(Object.entries(a).map(([k, v]) => [k, bindable(v)])) : bindable(a)));

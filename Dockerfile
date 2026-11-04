@@ -1,6 +1,6 @@
 # One container: the Express server, serving the built React app.
 
-FROM node:24-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 # No package's install scripts run (as in .npmrc, which isn't copied in): none needs one.
@@ -9,7 +9,7 @@ COPY vite.config.js ./
 COPY web ./web
 RUN npm run build
 
-FROM node:24-slim
+FROM node:26-slim
 # UV_THREADPOOL_SIZE: the threads Node reads files with (4 unless set). The
 # films may take half of them at most (server/routes/media.js), so a network
 # share that stops answering leaves the other half for the pages and scripts.

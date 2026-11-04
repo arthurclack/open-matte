@@ -8,6 +8,16 @@ A release has an **Upgrading** note when updating to it takes more than copying 
 new code and rebuilding: a backup first, a setting to choose, or a migration you can't
 undo without a restore. Read it before you update.
 
+## Unreleased
+
+### Changed
+
+- **The image runs on Node 26**, the long-term support line since October, in place
+  of Node 24. Updating needs nothing more than the usual rebuild, and going back to
+  1.0.0 needs no restore.
+- Dependabot no longer proposes a new major version of the Node image: moving to the
+  next long-term support line is done by hand.
+
 ## 1.0.0 — 2026-11-04
 
 The first numbered release. It brings together the three milestones built before

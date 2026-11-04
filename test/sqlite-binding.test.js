@@ -1,7 +1,7 @@
 // The server's statements bind the same values on every Node it runs on (db.js).
-// The tests usually run on Node 26, which binds undefined as NULL, while the
-// server's image runs Node 24, which refuses it; Node 22.13 refuses true and false
-// as well. Here SQLite's own methods refuse them too, as on those versions, before
+// Node 26, which the tests and the server's image usually run on, binds undefined
+// as NULL, while Node 24 refuses it, and Node 22.13 refuses true and false as
+// well. Here SQLite's own methods refuse them too, as on those versions, before
 // the server prepares anything.
 import assert from 'node:assert/strict';
 import { DatabaseSync, StatementSync } from 'node:sqlite';

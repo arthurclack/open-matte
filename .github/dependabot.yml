@@ -11,13 +11,19 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
-  # The Dockerfile's node image.
+  # The Dockerfile's node image. Only updates within its major version: moving to
+  # the next long-term support line (an even number, every October) is done by
+  # hand. Odd-numbered majors are never long-term, and the cooldown can even make
+  # Dependabot offer one that has reached its end of life.
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
   # deploy/compose.yml's caddy image.
   - package-ecosystem: docker-compose
     directory: /deploy
