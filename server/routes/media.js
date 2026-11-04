@@ -71,7 +71,9 @@ export function createRefusals({ keep = 50, strangers = 5, now = () => Date.now(
 function logDenied(req, status, reason, { refusals, film, ext, code, who }) {
   const ua = req.get('user-agent') || '';
   const client = /AppleCoreMedia/.test(ua) ? `Apple media player (${deviceLabel(ua).split(' on ')[1]})` : deviceLabel(ua);
-  console.warn(`media ${status}: ${req.path} - ${reason} - ${client}${req.headers.range ? ` - range ${req.headers.range}` : ''}`);
+  // The Range header is the sender's to choose, of any length: only its start is logged.
+  const range = req.headers.range ? ` - range ${req.headers.range.replace(/[^\x20-\x7e]/g, '?').slice(0, 40)}` : '';
+  console.warn(`media ${status}: ${req.path} - ${reason} - ${client}${range}`);
   const kept = status === 500 ? `couldn't read the file${code ? ` (${code})` : ''}` : reason;
   refusals?.add({ status, reason: kept, kind: KINDS[ext] ?? 'other', film: film.slug, client, stranger: !who.viewer && !who.admin });
 }

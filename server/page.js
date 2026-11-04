@@ -2,13 +2,16 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { BRANDING_FILE, brandingType } from './branding.js';
 import { publicOrigin } from './config.js';
+import { styleHash } from './csp.js';
 import { filmArtwork, filmMedia } from './films.js';
 import { palette, themeColor } from './theme.js';
 
 // index.html as the server sends it: the cinema's name, colours and icon, and
 // what the header shows, are written in, so the page never flashes Open Matte's
 // amber or an empty header before the app has loaded, and link previews (which
-// fetch the page but run no scripts) get Open Graph tags.
+// fetch the page but run no scripts) get Open Graph tags. Each page comes with
+// the hashes of the <style> elements written into it, for its
+// Content-Security-Policy (csp.js), which allows those and no others.
 
 const TICKET_CODE = /^[a-z0-9]{4,64}$/;
 // The poster's address: /poster/<ticket id>.<mac>.
@@ -105,9 +108,14 @@ export function createPage({ indexFile, settings, previews, site }) {
 
     const tags = [`<meta name="theme-color" content="${escapeHtml(themeColor(s))}">`];
     const theme = Object.entries(palette(s));
+    const styleHashes = [];
     // After the app's stylesheet, so it wins. Only #rrggbb values and "r, g, b"
-    // triples come out of palette().
-    if (theme.length) tags.push(`<style id="theme">:root{${theme.map(([k, v]) => `${k}:${v}`).join(';')}}</style>`);
+    // triples come out of palette(). The hash is of exactly the text between the tags.
+    // Written even with no colours set (an empty :root{}), so the admin always has a
+    // style sheet the policy allows to put newly saved colours in (Branding.jsx).
+    const css = `:root{${theme.map(([k, v]) => `${k}:${v}`).join(';')}}`;
+    tags.push(`<style id="theme">${css}</style>`);
+    styleHashes.push(styleHash(css));
 
     // The tab icon: the cinema's own, or Open Matte's in the cinema's colours,
     // with a version so browsers notice a change.
@@ -160,7 +168,7 @@ export function createPage({ indexFile, settings, previews, site }) {
     if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, () => `  ${head}\n  </head>`);
     else if (hadTitle) html = html.replace(title, () => `${title}\n    ${head}`);
     else html = html.replace(/^(\s*<!doctype[^>]*>)?/i, (doctype) => `${doctype}${head}`);
-    return html;
+    return { html, styleHashes };
   }
 
   return { render };

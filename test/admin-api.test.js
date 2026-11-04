@@ -11,6 +11,7 @@ import { after, before, describe, test } from 'node:test';
 // Cookies get Secure from the request, as they do behind Caddy.
 process.env.COOKIE_SECURE = 'auto';
 const { ADMIN_PASSWORD, adminBrowser, browser, enroll, makeFilm, newPerson, setupLink, startServer, tempDir, writeFilmJson } = await import('./helpers.js');
+const { ADMIN_KEY_COST } = await import('../server/sessions.js');
 // The admin page's rule for which fields Reset to film.json would change. The web
 // app's source isn't in the server's image, where docs/deploying.md runs the tests
 // on the server's own Node: there the checks of that rule are left out, and the
@@ -23,8 +24,15 @@ const DAY = 24 * HOUR;
 // The admin's session lasts ADMIN_SESSION_HOURS, 12 unless it's set.
 const ADMIN_HOURS = Number(process.env.ADMIN_SESSION_HOURS || 12);
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
-// How the server finds an admin session: its token keyed with the admin password.
-const adminHash = (b) => crypto.createHmac('sha256', ADMIN_PASSWORD).update(b.jar.get('om_admin')).digest('hex');
+// How the server finds an admin session: its token keyed with scrypt of the admin
+// password and the install's salt (sessions.js).
+// The key is slow to make on purpose: once per salt.
+const adminKeys = new Map();
+const adminHash = (b) => {
+  const salt = JSON.parse(srv.db.prepare("SELECT value FROM settings WHERE key = 'secret.adminKeySalt'").get().value);
+  if (!adminKeys.has(salt)) adminKeys.set(salt, crypto.scryptSync(ADMIN_PASSWORD, salt, 32, ADMIN_KEY_COST));
+  return crypto.createHmac('sha256', adminKeys.get(salt)).update(b.jar.get('om_admin')).digest('hex');
+};
 const viewerHash = (b) => sha256(b.jar.get('om_session'));
 
 // ====================================================================== the admin password

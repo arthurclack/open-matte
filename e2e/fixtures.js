@@ -1,6 +1,8 @@
 // What every journey shares: the server's address, the admin API, a guard that
-// fails a test on any uncaught error in any of its pages, and small helpers for
-// the player and the keyboard.
+// fails a test on any uncaught error in any of its pages, or anything the pages'
+// Content-Security-Policy blocked, and small helpers for the player and the keyboard.
+import fs from 'node:fs';
+import path from 'node:path';
 import { test as base, expect } from '@playwright/test';
 import { softAuthenticator } from '../test/softauth.js';
 import { FILMS } from './film.js';
@@ -33,6 +35,27 @@ export const cinemaName = () => env('E2E_CINEMA_NAME');
 // A label no other journey (or browser) will use.
 export const unique = (what, testInfo) => `${what} ${testInfo.project.name} ${Math.random().toString(36).slice(2, 7)}`;
 
+// Runs `fn` while no other journey holds `name`, in any browser: for journeys that
+// change something every browser shares, such as the cinema's colours. The lock is a
+// folder in the run's own folder, which global setup clears for each run.
+export async function exclusively(name, fn) {
+  const lock = path.join(path.dirname(env('E2E_SERVER_LOG')), `${name}.lock`);
+  for (;;) {
+    try {
+      fs.mkdirSync(lock);
+      break;
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    fs.rmSync(lock, { recursive: true, force: true });
+  }
+}
+
 // ------------------------------------------------------------ the admin API
 
 async function call(method, url, body, cookie = env('E2E_ADMIN_COOKIE')) {
@@ -49,6 +72,7 @@ async function call(method, url, body, cookie = env('E2E_ADMIN_COOKIE')) {
 // As the admin, with the session global setup signed in.
 export const admin = {
   post: async (url, body = {}) => (await call('POST', url, body)).data,
+  patch: async (url, body = {}) => (await call('PATCH', url, body)).data,
   // A ticket for anyone with the link, with no screening limit, unless `fields` say
   // otherwise: any of the admin's own fields, such as personId, screeningLimit,
   // startBy or daysAfterFirstPlay.
@@ -133,7 +157,8 @@ async function forgetPasswordsIfFailed(context, testInfo) {
 
 // A person set up and signed in through the API with a software passkey
 // (test/softauth.js), for journeys that need someone signed in but aren't about
-// passkeys: the viewer cookie to put in a browser context.
+// passkeys: the viewer cookie to put in a browser context, and the passkey, to sign
+// in with again.
 export async function signedInPerson(name) {
   const person = await admin.newPerson(name);
   const token = new URL(await admin.setupLink(person.id)).hash.slice(1);
@@ -146,7 +171,7 @@ export async function signedInPerson(name) {
     .find((c) => c.startsWith('om_session='));
   if (!session) throw new Error('enrolling set no session cookie');
   const cookie = { name: 'om_session', value: session.slice('om_session='.length), url: env('E2E_BASE_URL'), httpOnly: true, sameSite: 'Lax' };
-  return { person, cookie };
+  return { person, cookie, auth };
 }
 
 // ------------------------------------------------------------ every page
@@ -190,22 +215,136 @@ function initScript() {
 // are noted on the test rather than failing it.
 const cutOffAsPageWent = (err) => /^Fetch API cannot load .*\/api\/screenings\/\d+\/heartbeat due to access control checks\.$/.test(`${err.name}:${err.message}`);
 
+// Anything a page's Content-Security-Policy blocks (server/csp.js), in any page, popup
+// or frame: something the site needs and the policy refuses, which the tests must find
+// before the owner's friends do. Each browser fires securitypolicyviolation in the page;
+// it's passed on as it happens, since the page may have gone by the end of the test.
+// Browsers also say so in the console, each in its own words, and a message the event
+// missed counts too. No test, playwright.config.js or newContext() call may set
+// bypassCSP, which would switch the policy off: the guard and newContext check.
+//
+// Only what happens while the test runs, until it fails, counts (see watching).
+// Playwright's own screenshots, once a test has failed and as a browser closes (kept
+// if the test fails), add a <style> to the page to hide the caret, and WebKit holds
+// that against the policy.
+function watchPolicy() {
+  // How many <select>s the page has made, for WebKit's reports about its drop-down
+  // menus: React makes the player's before it adds them to the page, and WebKit then
+  // reports them as about the page as a whole.
+  let selectsMade = 0;
+  const create = Document.prototype.createElement;
+  Document.prototype.createElement = function (name, ...rest) {
+    if (String(name).toLowerCase() === 'select') selectsMade++;
+    return create.call(this, name, ...rest);
+  };
+  document.addEventListener('securitypolicyviolation', (e) => {
+    const where = e.sourceFile ? ` at ${e.sourceFile}:${e.lineNumber}` : '';
+    const sample = e.sample ? `: ${e.sample}` : '';
+    // The element it was about: #document when the browser names none, as WebKit does
+    // for an element not yet in the page. Each such report about a style attribute uses
+    // up one <select> the page made.
+    const directive = e.effectiveDirective || e.violatedDirective;
+    const target = e.target?.nodeName ?? null;
+    let madeSelect = false;
+    if (target === '#document' && directive === 'style-src-attr' && selectsMade > 0) {
+      selectsMade--;
+      madeSelect = true;
+    }
+    window.e2eCspViolation?.({
+      directive,
+      blocked: e.blockedURI || 'inline',
+      target,
+      madeSelect,
+      line: `${location.pathname}: ${directive} blocked ${e.blockedURI || 'inline'}${where}${sample}`,
+    });
+  });
+}
+export const CSP_MESSAGE = /Content[- ]Security[- ]Policy/i;
+
+// What a browser does of its own accord that the policy refuses, which changes nothing
+// the cinema shows. Each is set aside as a note on the test, only in that browser,
+// with as many of that browser's console messages about it; the other browsers would
+// still find the same thing done by the site itself.
+const BROWSERS_OWN = [
+  {
+    // WebKit holds the inside of its own drop-down menus against the policy: each
+    // <select> it draws is reported as an inline style attribute refused, though the
+    // page has none, and the menu looks and works just the same. Only a report about a
+    // <select>, or about the page as a whole while a <select> the page made is still to
+    // be added, is set aside: a style attribute on anything else still fails, in WebKit
+    // as in the other browsers.
+    browser: 'webkit',
+    what: "WebKit's drop-down menu",
+    is: ({ directive, blocked, target, madeSelect }) => directive === 'style-src-attr' && blocked === 'inline' && (target === 'SELECT' || madeSelect),
+    message: (text) => text === "Refused to apply a stylesheet because its hash, its nonce, or 'unsafe-inline' does not appear in the style-src directive of the Content Security Policy.",
+  },
+  {
+    // Firefox asks for /favicon.ico for an image or text file opened in a tab of its
+    // own, which has no icon of its own to show.
+    browser: 'firefox',
+    what: "Firefox's search for a tab icon",
+    is: ({ directive, blocked }) => directive === 'img-src' && /\/favicon\.ico$/.test(blocked),
+    message: (text) => /\/favicon\.ico\b.*FaviconLoader/.test(text),
+  },
+];
+
 async function prepare(context, pageErrors) {
+  pageErrors.contexts.push(context);
+  const browser = context.browser()?.browserType().name();
+  const own = BROWSERS_OWN.filter((o) => o.browser === browser);
+  await context.exposeFunction('e2eCspViolation', (violation) => {
+    if (!watching(pageErrors)) return;
+    const kind = own.find((o) => o.is(violation));
+    if (kind) pageErrors.browsersOwn.push({ kind, line: violation.line });
+    else pageErrors.csp.push(violation.line);
+  });
+  await context.addInitScript(watchPolicy);
   await context.addInitScript(initScript);
-  const watch = (page) =>
+  const watch = (page) => {
     page.on('pageerror', (err) => (cutOffAsPageWent(err) ? pageErrors.cutOff : pageErrors).push(`${page.url()}: ${err.message}`));
+    page.on('console', (msg) => {
+      if (!watching(pageErrors) || !CSP_MESSAGE.test(msg.text())) return;
+      pageErrors.cspConsole.push({ kind: own.find((o) => o.message(msg.text())), line: `${new URL(page.url()).pathname}: ${msg.text()}` });
+    });
+  };
   context.pages().forEach(watch);
   context.on('page', watch);
+}
+
+const watching = (pageErrors) => !pageErrors.stopped && pageErrors.testInfo.errors.length === 0;
+
+// The end of the test, before its browsers close: whatever the policy reports after
+// this is Playwright's doing. A round trip to each page, in every browser the test
+// used, first lets through what they reported before.
+async function stopWatching(pageErrors) {
+  if (pageErrors.stopped) return;
+  const pages = pageErrors.contexts.flatMap((context) => context.pages());
+  await Promise.all(pages.map((page) => page.evaluate(() => 0).catch(() => {})));
+  pageErrors.stopped = true;
+}
+
+// What the policy blocked, less what the browsers did of their own accord.
+function blockedByPolicy(pageErrors) {
+  const left = new Map();
+  for (const { kind } of pageErrors.browsersOwn) left.set(kind, (left.get(kind) ?? 0) + 1);
+  const messages = pageErrors.cspConsole.filter(({ kind }) => {
+    if (!kind || !left.get(kind)) return true;
+    left.set(kind, left.get(kind) - 1);
+    return false;
+  });
+  return [...pageErrors.csp, ...messages.map((m) => m.line)];
 }
 
 export const test = base.extend({
   baseURL: async ({}, use) => use(env('E2E_BASE_URL')),
 
-  pageErrors: async ({}, use) => use(Object.assign([], { cutOff: [] })),
+  pageErrors: async ({}, use, testInfo) =>
+    use(Object.assign([], { cutOff: [], csp: [], cspConsole: [], browsersOwn: [], contexts: [], testInfo, stopped: false })),
 
   context: async ({ context, pageErrors }, use, testInfo) => {
     await prepare(context, pageErrors);
     await use(context);
+    await stopWatching(pageErrors);
     await forgetPasswordsIfFailed(context, testInfo);
   },
 
@@ -213,11 +352,13 @@ export const test = base.extend({
   newContext: async ({ browser, pageErrors }, use, testInfo) => {
     const made = [];
     await use(async (options = {}) => {
+      expect(options.bypassCSP, 'bypassCSP switches the policy off').toBeFalsy();
       const context = await browser.newContext({ baseURL: env('E2E_BASE_URL'), viewport: { width: 1280, height: 800 }, ...options });
       made.push(context);
       await prepare(context, pageErrors);
       return context;
     });
+    await stopWatching(pageErrors);
     for (const context of made) {
       await forgetPasswordsIfFailed(context, testInfo);
       await context.close();
@@ -225,14 +366,23 @@ export const test = base.extend({
   },
 
   // Skips everything when global setup couldn't make the films, or a project's
-  // browser isn't installed (playwright.config.js), and fails any test whose pages threw.
+  // browser isn't installed (playwright.config.js), and fails any test whose pages
+  // threw, or had anything blocked by their Content-Security-Policy.
   guard: [
-    async ({ pageErrors }, use, testInfo) => {
+    async ({ pageErrors, bypassCSP }, use, testInfo) => {
       testInfo.skip(Boolean(env('E2E_SKIP')), env('E2E_SKIP'));
       testInfo.skip(Boolean(testInfo.project.metadata.missing), testInfo.project.metadata.missing);
+      // As the test resolves it: from playwright.config.js, test.use or contextOptions.
+      expect(bypassCSP, 'bypassCSP switches the policy off').toBeFalsy();
       await use();
       for (const line of pageErrors.cutOff) testInfo.annotations.push({ type: 'request cut off as the page went', description: line });
+      const notes = new Set(pageErrors.browsersOwn.map(({ kind, line }) => `${kind.what}, held against the policy\n${line}`));
+      for (const note of notes) {
+        const [type, description] = note.split('\n');
+        testInfo.annotations.push({ type, description });
+      }
       expect([...pageErrors], 'uncaught errors in the page').toEqual([]);
+      expect(blockedByPolicy(pageErrors), 'what the Content-Security-Policy blocked').toEqual([]);
     },
     { auto: true },
   ],

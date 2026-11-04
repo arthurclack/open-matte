@@ -36,7 +36,10 @@ public release.
    folder's place, and a film imported from one shows as missing.
 4. **If you changed your copy of `deploy/compose.yml` or the Caddyfile**, carry your
    changes over to the new ones. Both have changed, and the Caddyfile has moved from
-   `deploy/Caddyfile` to `deploy/caddy/Caddyfile`.
+   `deploy/Caddyfile` to `deploy/caddy/Caddyfile`. The pages now have a
+   Content-Security-Policy: if a proxy or CDN sits in front of Caddy, see [Your own
+   changes to the Docker setup](docs/deploying.md#your-own-changes-to-the-docker-setup)
+   so it doesn't add a policy of its own or change the pages.
 5. **Check any `BACKUP_HOUR`, `BACKUP_KEEP_DAYS` or `BACKUP_KEEP_MONTHS` lines in
    `deploy/.env`.** Docker ignored them until now. From this release they apply, and
    the first backup after the update deletes the backups they don't keep. Empty them
@@ -340,6 +343,15 @@ For installers:
 
 ### Security
 
+- Every page sends a Content-Security-Policy: it runs only the app's own scripts, uses
+  only its stylesheets and the cinema's colours, loads from this server only (apart
+  from TMDB's thumbnails in the admin), sends forms only here, and can't be shown in
+  another site's frame. Everything else the server sends may run and load nothing,
+  should it be opened as a page. Browsers report what the policy blocks, and the app
+  writes one short line to its log for it, with no ticket code or query:
+  `docker compose logs app | grep CSP`
+  ([docs/deploying.md](docs/deploying.md#what-browsers-blocked)). If you put another
+  proxy in front of Caddy, don't let it add a policy of its own.
 - Answers from `/api` are never cached, and a page brought back with Back reloads. So
   after someone signs out on a shared computer, Back shows the signed-out page, not
   their account, the admin or ticket links.
@@ -370,6 +382,12 @@ For installers:
   it.
 - `scripts/deploy.sh` never sends a database file (`*.db`) from your copy of the code,
   such as a backup you downloaded, and the image build leaves them out too.
+- The key admin sessions are stored under is now made from `ADMIN_PASSWORD` with
+  scrypt, at OWASP's cost, and a random salt kept in the database. So with a copy of
+  the database and an admin cookie, each guess at the password is slow. A long random
+  `ADMIN_PASSWORD` (`openssl rand -base64 24`) is still the best defence. The key is
+  made once, at startup; a sign-in attempt is checked without it. Updating signs the
+  admin out once.
 - `npm install` runs no package's install scripts (`.npmrc`, and the same in the
   Dockerfile), and the running image has no package manager: no `npm`, `npx`,
   `yarn` or `corepack`. Dependabot proposes

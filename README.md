@@ -95,8 +95,10 @@ installed.
 To work on the web app with hot reload, run `npm run dev:web` alongside and use
 http://localhost:5173. Vite serves the page itself there, without what the server on
 :3000 writes into it: the page has Open Matte's own colours and tab icon rather than
-the cinema's, no link-preview tags, and a header that waits for `/api/me` before
-showing the cinema's name and logo.
+the cinema's, no link-preview tags, a header that waits for `/api/me` before
+showing the cinema's name and logo, and no Content-Security-Policy, which only the
+server on :3000 sends. Check anything new against it there, or with `npm run e2e`,
+before you deploy.
 
 Use `localhost`, not `127.0.0.1`: passkeys belong to a domain, and browsers won't use
 them on an IP address. Locally they need no setting; on a server, see
@@ -116,8 +118,10 @@ databases, so they don't need `npm run dev` and never touch `data/` or `media/`.
 
 `npm run e2e` needs ffmpeg (it makes two eight-second test films) and, for its `chrome`
 project, Google Chrome (without it those journeys skip); the first time, `npx playwright
-install chromium firefox webkit`. It starts its own server with its own data and a
-password made for the run, and never touches `data/` or `media/`.
+install chromium firefox webkit`. It starts its own server with its own data, a
+password made for the run and a stand-in for TMDB, and never touches `data/` or
+`media/`. A journey fails if any of its pages throws an error, or has anything blocked
+by the pages' Content-Security-Policy.
 
 ## Layout
 

@@ -8,6 +8,7 @@ import { createBooth } from './booth.js';
 import { IMAGE_TYPES, createBranding } from './branding.js';
 import { createCeremonies } from './ceremonies.js';
 import { config } from './config.js';
+import { LOCKED_POLICY, REPORT_PATH, createCspReports, originOf, pagePolicy, readReports } from './csp.js';
 import { createMetadata } from './metadata.js';
 import { createPage, createTicketPreviews } from './page.js';
 import { createPeople } from './people.js';
@@ -18,7 +19,7 @@ import { adminRoutes } from './routes/admin.js';
 import { createRefusals, createShare, mediaRoutes, shareLimits } from './routes/media.js';
 import { publicRoutes } from './routes/public.js';
 import { viewerRoutes } from './routes/viewer.js';
-import { createSessionStore } from './sessions.js';
+import { createSessionStore, deviceLabel } from './sessions.js';
 import { createSettings } from './settings.js';
 import { relyingParty } from './webauthn.js';
 
@@ -80,10 +81,48 @@ export function createApp({
   app.use((req, res, next) => {
     // Nothing here needs a Referer, and from /t/<code> it would carry the ticket code.
     res.set('Referrer-Policy', 'no-referrer');
+    // frame-ancestors says the same in the policy; this is for browsers too old for that.
     res.set('X-Frame-Options', 'DENY');
     res.set('X-Content-Type-Options', 'nosniff');
+    // Nothing at all, for anything that isn't a page: sendPage gives pages their own (csp.js).
+    res.set('Content-Security-Policy', LOCKED_POLICY);
     next();
   });
+
+  // Where browsers report what a page's policy blocked (csp.js), into the server log
+  // and nowhere else. Ahead of the /api rules below, which it couldn't meet: browsers
+  // send these as application/csp-report or application/reports+json, not JSON, and
+  // may mark them as sent from anywhere. That's safe because this does nothing but
+  // write a short line to the log, and this one path, for POST, is all it covers:
+  // anything else under /api, this path's other methods included, meets the rules as
+  // before. Anyone can send these, so they're small, limited per visitor's address,
+  // limited again in how many lines they write to the log (csp.js), and never read
+  // back to anyone.
+  const cspReports = createCspReports();
+  const REPORT_TYPES = ['application/csp-report', 'application/reports+json', 'application/json'];
+  app.post(
+    REPORT_PATH,
+    limit({ windowMs: 10 * 60 * 1000, max: 100 }),
+    (req, res, next) => {
+      res.set('Cache-Control', 'no-store');
+      if (!req.is(REPORT_TYPES)) return res.status(415).end();
+      next();
+    },
+    express.raw({ type: () => true, limit: '8kb' }),
+    (req, res) => {
+      // Anything wrong with what was sent is a 400, never a crash.
+      try {
+        const body = JSON.parse(Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '');
+        const browser = deviceLabel(req.get('user-agent') || '');
+        for (const report of readReports(body)) cspReports.add(report, browser);
+      } catch {
+        return res.status(400).end();
+      }
+      res.status(204).end();
+    },
+    // A body over the limit, or one the parser couldn't read.
+    (err, req, res, next) => res.status(err.type === 'entity.too.large' ? 413 : 400).end(),
+  );
 
   // Mutating API calls must be JSON, and browsers mustn't be sending them from
   // another site (Sec-Fetch-Site). Together with SameSite=Lax cookies this stops
@@ -120,10 +159,18 @@ export function createApp({
   const indexFile = path.join(webDist, 'index.html');
   if (fs.existsSync(indexFile)) {
     const page = createPage({ indexFile, settings, previews, site });
+    const tmdbImages = [originOf(metadata.imageBase)].filter(Boolean);
     const sendPage = (req, res) => {
       // A ticket link's page may name its film: no shared caches.
       res.set('Cache-Control', req.path.startsWith('/t/') ? 'private, no-cache' : 'no-cache');
-      res.type('html').send(page.render(req));
+      const { html, styleHashes } = page.render(req);
+      // Only the admin's pages show TMDB's thumbnails (Find details), straight from
+      // TMDB's image server; the viewers' pages load images from here alone. A page
+      // keeps the policy it was loaded with, so the app loads the admin as a page of
+      // its own, never from a viewer's page (SignIn.jsx).
+      const imageOrigins = /^\/admin(\/|$)/i.test(req.path) ? tmdbImages : [];
+      res.set('Content-Security-Policy', pagePolicy({ styleHashes, imageOrigins }));
+      res.type('html').send(html);
     };
     // Ahead of the static files, which would send it as it is.
     app.get('/index.html', sendPage);

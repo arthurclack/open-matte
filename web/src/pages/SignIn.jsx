@@ -14,6 +14,11 @@ const safeNext = (next) => {
   }
 };
 
+// The admin is loaded as a page of its own, never moved to within a viewer's page: a page
+// keeps the Content-Security-Policy it came with, and only the admin's allows TMDB's
+// thumbnails (server/app.js, sendPage).
+const ownPage = (next) => /^\/admin(\/|$|\?|#)/i.test(next);
+
 // /signin: one button. Nobody signs up here; accounts are made by whoever runs the cinema.
 export default function SignIn() {
   const { me, site, refresh } = useSite();
@@ -22,12 +27,13 @@ export default function SignIn() {
   const next = safeNext(params.get('next'));
   const [result, setResult] = useState(null);
   const host = `whoever runs ${site?.cinemaName || 'this cinema'}`;
+  const go = () => (ownPage(next) ? window.location.replace(next) : navigate(next, { replace: true }));
 
   async function signedIn(r) {
     setResult(r);
     await refresh();
     // Passkeys added since this one was last used are shown once before moving on.
-    if (!r.newPasskeys?.length) navigate(next, { replace: true });
+    if (!r.newPasskeys?.length) go();
   }
 
   if (!me) return null;
@@ -37,7 +43,7 @@ export default function SignIn() {
       <div className="narrow" style={{ paddingTop: '15vh' }}>
         <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Signed in as {result.person.name}</h1>
         <NewPasskeys passkeys={result.newPasskeys} />
-        <button className="btn primary" onClick={() => navigate(next, { replace: true })}>
+        <button className="btn primary" onClick={go}>
           Continue
         </button>
       </div>
@@ -51,7 +57,7 @@ export default function SignIn() {
       <div className="narrow" style={{ paddingTop: '15vh' }}>
         <h1 style={{ fontSize: '2rem', marginBottom: '0.8rem' }}>Signed in</h1>
         <p className="dim">You're signed in as {me.person.name}.</p>
-        <Link to={next} className="btn primary">
+        <Link to={next} reloadDocument={ownPage(next)} className="btn primary">
           Continue
         </Link>
       </div>

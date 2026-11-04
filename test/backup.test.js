@@ -242,3 +242,22 @@ test('starting clears what a backup stopped halfway left behind, and only that',
   assert.deepEqual(fs.readdirSync(dataDir).sort(), keptData.sort());
   assert.deepEqual(fs.readdirSync(backupDir).sort(), keptBackups.sort());
 });
+
+// docs/deploying.md: trying a restore on your computer copies the same folders from
+// the backups as restoring on the server does, so posters and the logo show.
+test('the local restore test in the docs copies what the server restore copies', () => {
+  const doc = fs.readFileSync(new URL('../docs/deploying.md', import.meta.url), 'utf8');
+  const blocks = [...doc.matchAll(/```bash\n([\s\S]*?)```/g)].map((m) => m[1]);
+  const server = blocks.find((b) => b.includes('cp /srv/open-matte/backups/') && b.includes('docker compose start app'));
+  const local = blocks.find((b) => b.includes('~/restore-test/data') && b.includes('npm run dev'));
+  const folders = [...server.matchAll(/^cp -r \/srv\/open-matte\/backups\/(\w+)\/\. \/srv\/open-matte\/data\/\1$/gm)].map((m) => m[1]);
+  assert.deepEqual(folders, ['artwork', 'branding']);
+  for (const folder of folders) assert.match(local, new RegExp(`^cp -r ~/open-matte-backups/${folder} ~/restore-test/data/$`, 'm'), folder);
+  assert.ok(local.indexOf('cp -r') < local.indexOf('npm run dev'), 'copied before the server starts');
+  // Fetched from the server first: the copy made before an update is the .db alone.
+  const fetch = local.split('\n').find((line) => line.startsWith('scp -r '));
+  assert.ok(fetch && local.indexOf(fetch) < local.indexOf('cp -r'), 'the folders are fetched before they are copied');
+  const fetched = fetch.split(' ').slice(2, -1);
+  assert.deepEqual(fetched, folders.map((f) => `my-server:/srv/open-matte/backups/${f}`));
+  assert.equal(fetch.split(' ').at(-1), '~/open-matte-backups/');
+});

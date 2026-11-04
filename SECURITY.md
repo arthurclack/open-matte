@@ -25,6 +25,9 @@ the `main` branch implements them. For example:
   anything but that poster; a clean-up that changes what a viewer can do.
 - Requests from another site or subdomain acting for an admin or a viewer, or script
   run from an uploaded logo or icon, a `film.json`, or details fetched from TMDB.
+- Markup getting into a page from any of those, even where the pages'
+  Content-Security-Policy stops it doing harm; and a page the policy lets load or run
+  something it shouldn't.
 - A single request that does far more harm than its size: one that crashes the
   server, fills its disk, or locks people out.
 - The files in `deploy/` exposing something they shouldn't, used as the docs describe.
@@ -51,6 +54,16 @@ These are known, and [docs/access.md](docs/access.md) says so:
   browser then work for whoever runs the site too, until the browser next signs in.
   Only `__Host-` cookie names (planned) or a domain of the cinema's own rule this
   out.
+- The pages' Content-Security-Policy ([docs/access.md](docs/access.md#secrets-and-sessions))
+  is a second line of defence, not the first: the pages escape what they show, and
+  the policy is there for anything that slips past. It stops a page running scripts
+  that aren't the app's own, loading from other sites and sending forms elsewhere.
+  It can't stop the app's own scripts being misused, a browser extension, or someone
+  who controls the server, and browsers too old to know it ignore it. Markup that got
+  into a page would still show, and could still use what the policy allows: the
+  cinema's own images, stylesheets and requests; and a link or a page redirect in it
+  could still take a viewer to another site, carrying what's in the link with them.
+  A browser's report of something it blocked goes to the server log only.
 
 Also out of scope: anything that needs the admin password or access to the server
 already; the rest of the server it runs on (the operating system, Docker, DNS, the

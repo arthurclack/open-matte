@@ -363,5 +363,7 @@ export function createMetadata({
     queueUnmatched,
     idle: () => chain,
     artworkPath,
+    // Where the thumbnails come from, for the pages' Content-Security-Policy.
+    imageBase,
   };
 }

@@ -3,7 +3,7 @@
 // projection booth (with a media request it saw refused), and Activity filtered
 // by the film and to viewing. Nothing may throw, and nothing may log an error in
 // the console. Every browser.
-import { NO_SNAPSHOTS, admin, expect, film, secondFilm, signInAsAdmin, test, unique } from './fixtures.js';
+import { CSP_MESSAGE, NO_SNAPSHOTS, admin, expect, film, secondFilm, signInAsAdmin, test, unique } from './fixtures.js';
 
 test.use(NO_SNAPSHOTS);
 
@@ -14,7 +14,8 @@ test('the admin signs in, issues a ticket from the film page, and reads Tickets,
     // Before signing in, the admin asks whether it's signed in and is told no:
     // browsers log that refusal themselves.
     const refusedSessionCheck = /Failed to load resource/.test(msg.text()) && msg.location().url.endsWith('/api/admin/session');
-    if (!refusedSessionCheck) consoleErrors.push(`${msg.text()} (${msg.location().url})`);
+    // What the Content-Security-Policy blocked is the guard's to judge (fixtures.js).
+    if (!refusedSessionCheck && !CSP_MESSAGE.test(msg.text())) consoleErrors.push(`${msg.text()} (${msg.location().url})`);
   });
 
   await test.step('sign in through the form', async () => {

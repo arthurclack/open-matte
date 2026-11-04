@@ -69,6 +69,9 @@ export function SiteProvider({ children }) {
             <SiteName site={site} />
           </Link>
           <div className="row" style={{ gap: '0.6rem' }}>
+            {/* An <a>, not a <Link>: the admin is loaded as a page of its own, since a page
+                keeps the Content-Security-Policy it came with and only the admin's allows
+                TMDB's thumbnails (server/app.js, sendPage). */}
             {me?.admin && (
               <a className="btn small" href="/admin">
                 Admin

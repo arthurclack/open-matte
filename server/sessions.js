@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { config } from './config.js';
+import { createSettings } from './settings.js';
 
 export const VIEWER_COOKIE = 'om_session';
 export const ADMIN_COOKIE = 'om_admin';
@@ -90,12 +91,34 @@ export function clearCookie(req, res, name) {
   setCookie(req, res, name, '', 0);
 }
 
+// The admin's key: scrypt of the admin password and a random salt made once for the
+// install and kept in the database, at OWASP's cost for scrypt (N 2^17, r 8, p 1:
+// 128 MiB and about a sixth of a second). Made once, at startup. So each guess at the
+// password, by someone with a copy of the database and an admin cookie, is slow.
+const ADMIN_KEY_BYTES = 32;
+export const ADMIN_KEY_COST = { N: 2 ** 17, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
+
 // adminPassword: tests pass their own; the app uses ADMIN_PASSWORD.
 export function createSessionStore(db, { adminPassword = config.adminPassword } = {}) {
-  // An admin session is found by its token keyed with the admin password, so a new
+  const salt = createSettings(db).ensureSecret('adminKeySalt', () => crypto.randomBytes(16).toString('base64url'));
+  // Once, at startup.
+  const adminKey = crypto.scryptSync(adminPassword, salt, ADMIN_KEY_BYTES, ADMIN_KEY_COST);
+  // An admin session is found by its token keyed with the admin key, so a new
   // ADMIN_PASSWORD (which takes a restart) signs every admin browser out. Without
   // the cookie, what the database holds says nothing about the password.
-  const idHashFor = (kind, token) => (kind === 'admin' ? crypto.createHmac('sha256', adminPassword).update(token).digest('hex') : sha256(token));
+  const idHashFor = (kind, token) => (kind === 'admin' ? crypto.createHmac('sha256', adminKey).update(token).digest('hex') : sha256(token));
+
+  // Whether `given` is the admin password, compared in constant time. Cheap on
+  // purpose: the server holds the password already, so a slow check here would guard
+  // nothing, and scrypt on every attempt would take the threads the films and pages
+  // read files with. The sign-in limit holds back guessing.
+  const digest = (s) => crypto.createHash('sha256').update(s).digest();
+  function adminPasswordMatches(given) {
+    // Only a string can be the password. Anything else is wrong, not a server error.
+    if (typeof given !== 'string') return false;
+    return crypto.timingSafeEqual(digest(given), digest(adminPassword));
+  }
+
   const q = {
     insert: db.prepare(`INSERT INTO sessions (id_hash, kind, device, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`),
     insertSignedIn: db.prepare(`
@@ -177,5 +200,5 @@ export function createSessionStore(db, { adminPassword = config.adminPassword } 
   const revokePersonSessions = (personId, now = Date.now()) => Number(q.revokePerson.run(now, personId).changes);
   const revokePasskeySessions = (passkeyId, now = Date.now()) => Number(q.revokePasskey.run(now, passkeyId).changes);
 
-  return { create, load, revoke, signIn, setViewerCookie, revokePersonSessions, revokePasskeySessions };
+  return { create, load, revoke, signIn, setViewerCookie, revokePersonSessions, revokePasskeySessions, adminPasswordMatches };
 }

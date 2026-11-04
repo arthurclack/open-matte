@@ -236,9 +236,10 @@ function ColorField({ label, value, fallback, onChange, help }) {
 }
 
 // Shows colours on this page before they're saved: the theme's custom properties go on
-// <html>, over the server's <style id="theme"> (the saved colours). That style is switched
-// off meanwhile, so whatever the theme leaves out is Open Matte's own, as the server would
-// write it. Leaving the page, or clear(), puts the saved colours back.
+// <html>, over the server's <style id="theme"> (the saved colours, or what adoptTheme
+// has put in it since). That style is switched off meanwhile, so whatever the theme
+// leaves out is Open Matte's own, as the server would write it. Leaving the page, or
+// clear(), puts the saved colours back.
 function useThemePreview() {
   const shown = useRef([]);
   const clear = useCallback(() => {
@@ -259,7 +260,7 @@ function useThemePreview() {
   return { show, clear };
 }
 
-// Switches the server's <style id="theme"> on or off. A default install has none.
+// Switches the saved colours, the server's <style id="theme">, on or off.
 function savedTheme(on) {
   const sheet = document.getElementById('theme')?.sheet;
   if (sheet) sheet.disabled = !on;
@@ -267,20 +268,19 @@ function savedTheme(on) {
 
 // After a save, this page takes the new colours as the server now writes them, so they
 // stay when the preview goes, on Settings and every other admin page, until a reload.
+// The page's Content-Security-Policy allows only the <style> the server wrote, by a hash
+// of its text, so a new <style>, or new text in that one, would be refused. The colours go
+// in through the CSSOM instead, which the policy doesn't cover, as the rule of the
+// server's style sheet. The server writes one into every page, empty when no colours
+// are set (page.js), so there is always one to use.
 function adoptTheme(theme, backgroundColor) {
   const css = Object.entries(theme)
     .map(([name, value]) => `${name}:${value}`)
     .join(';');
-  let style = document.getElementById('theme');
-  if (!css) {
-    style?.remove();
-  } else {
-    if (!style) {
-      style = document.createElement('style');
-      style.id = 'theme';
-      document.head.append(style);
-    }
-    style.textContent = `:root{${css}}`;
+  const sheet = document.getElementById('theme')?.sheet;
+  if (sheet) {
+    while (sheet.cssRules.length) sheet.deleteRule(0);
+    sheet.insertRule(`:root{${css}}`);
   }
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', backgroundColor);
 }

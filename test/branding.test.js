@@ -596,13 +596,14 @@ async function page(url, b = null) {
   return parsePage(r.data, r.headers);
 }
 
-// The declarations of the page's theme <style>, or null without one.
+// The declarations of the page's theme <style>, or null when it sets none. Every page
+// has one, empty with no colours set, for the admin to put saved colours in.
 function themeOf(html) {
   const styles = [...html.matchAll(/<style id="theme">(.*?)<\/style>/gs)].map((m) => m[1]);
-  if (!styles.length) return null;
   assert.equal(styles.length, 1, 'one theme');
   const m = /^\s*:root\s*\{(.*)\}\s*$/s.exec(styles[0]);
   assert.ok(m, styles[0]);
+  if (!m[1].trim()) return null;
   return Object.fromEntries(
     m[1].split(';').map((d) => d.trim()).filter(Boolean).map((d) => [d.slice(0, d.indexOf(':')).trim(), d.slice(d.indexOf(':') + 1).trim()]),
   );
@@ -1111,7 +1112,7 @@ describe('the page as the server sends it', () => {
       const p = await page(url);
       asCinema(p);
       assert.equal(p.meta['theme-color'], DEFAULTS.backgroundColor, url);
-      assert.doesNotMatch(p.html, /<style/, `${url}: no theme`);
+      assert.deepEqual([...p.html.matchAll(/<style\b[^>]*>.*?<\/style>/gs)].map((m) => m[0]), ['<style id="theme">:root{}</style>'], `${url}: an empty theme`);
       assert.deepEqual(iconLinks(p), [['/favicon.svg', 'image/svg+xml']], url);
       assert.ok(!p.links.some((l) => l.rel === 'apple-touch-icon'), url);
       assert.ok(p.html.indexOf('name="theme-color"') < p.html.indexOf('</head>'), `${url}: in the head`);

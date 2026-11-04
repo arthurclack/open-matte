@@ -544,11 +544,13 @@ export function inspectMediaDir(mediaDir, previous = {}) {
 function inspectInWorker(mediaDir, previous) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./scan-worker.js', import.meta.url), { workerData: { mediaDir, previous } });
-    worker.once('message', resolve);
-    worker.once('error', reject);
-    worker.once('exit', (code) => {
-      if (code !== 0) reject(new Error(`The scan stopped unexpectedly (exit code ${code})`));
+    // Only the tagged result counts: node --watch posts its own messages here too.
+    worker.on('message', (message) => {
+      if (message && typeof message === 'object' && 'scan' in message) resolve(message.scan);
     });
+    worker.once('error', reject);
+    // Once the result is in, a later reject changes nothing.
+    worker.once('exit', (code) => reject(new Error(`The scan stopped unexpectedly (exit code ${code})`)));
   });
 }
 

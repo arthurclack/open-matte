@@ -21,7 +21,7 @@ function tailStart(s) {
   return found.length ? Math.min(...found) : -1;
 }
 
-// "Hedwig.and.the.Angry.Inch.2001.1080p.BluRay.x264.DTS-FGT" → { title: "Hedwig and the Angry Inch", year: 2001 }
+// "Hedwig.and.the.Angry.Inch.2001.1080p.BluRay.x264.DTS-GRP" → { title: "Hedwig and the Angry Inch", year: 2001 }
 // "2001 A Space Odyssey (1968)" → { title: "2001 A Space Odyssey", year: 1968 }
 export function guessTitleYear(name) {
   let s = String(name)

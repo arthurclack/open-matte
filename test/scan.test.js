@@ -372,3 +372,51 @@ test('without film.json, the standard poster is found however its name is cased'
   assert.deepEqual(r.errors, []);
   assert.equal(r.media.poster, 'Poster.JPG');
 });
+
+test('the scan works under node --watch (npm run dev), whose own messages reach the worker too', async () => {
+  const { mediaDir } = fresh();
+  const scriptDir = tempDir();
+  const script = path.join(scriptDir, 'scan.mjs');
+  const scanUrl = new URL('../server/scan.js', import.meta.url).href;
+  const dbUrl = new URL('../server/db.js', import.meta.url).href;
+  fs.writeFileSync(
+    script,
+    [
+      `import { openDb } from ${JSON.stringify(dbUrl)};`,
+      `import { scanMedia } from ${JSON.stringify(scanUrl)};`,
+      'const result = {};',
+      'try {',
+      `  result.missing = await scanMedia(openDb(':memory:'), ${JSON.stringify(path.join(mediaDir, 'nope'))});`,
+      `  result.found = await scanMedia(openDb(':memory:'), ${JSON.stringify(mediaDir)});`,
+      '} catch (err) {',
+      '  result.error = err.message;',
+      '}',
+      "console.log(`RESULT ${JSON.stringify(result)}`);",
+      '',
+    ].join('\n'),
+  );
+
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const watcher = spawn(process.execPath, ['--watch', script], { env });
+  let out = '';
+  watcher.stdout.on('data', (d) => (out += d));
+  watcher.stderr.on('data', (d) => (out += d));
+  const exited = new Promise((resolve) => watcher.once('close', resolve));
+  // The watcher keeps running after the script ends: stop it once the result
+  // is out, or after 10 seconds whatever happened.
+  const giveUp = setTimeout(() => watcher.kill('SIGKILL'), 10000);
+  const watch = setInterval(() => {
+    if (/^RESULT .*$/m.test(out)) watcher.kill('SIGTERM');
+  }, 50);
+  await exited;
+  clearTimeout(giveUp);
+  clearInterval(watch);
+
+  const line = out.match(/^RESULT (.*)$/m);
+  assert.ok(line, out);
+  const result = JSON.parse(line[1]);
+  assert.equal(result.error, undefined);
+  assert.equal(result.missing.unavailable, 'The media folder does not exist');
+  assert.deepEqual(result.found.films.map((f) => [f.slug, f.status]), [['arrival', 'ok']]);
+});

@@ -1,8 +1,7 @@
-import crypto from 'node:crypto';
 import express from 'express';
 import { VERSION } from '../booth.js';
 import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '../branding.js';
-import { config, publicOrigin } from '../config.js';
+import { publicOrigin } from '../config.js';
 import { tx } from '../db.js';
 import { artworkUrl, filmArtwork, filmMedia } from '../films.js';
 import { MetadataError, TMDB_FIELDS } from '../metadata.js';
@@ -13,15 +12,6 @@ import { COLOR, check, palette } from '../theme.js';
 import { guessTitleYear, looksLikeReleaseName } from '../titles.js';
 
 const bad = (message, status = 400) => Object.assign(new Error(message), { status });
-
-function passwordMatches(given) {
-  // Only a string can be the password. Anything else is wrong, not a server error.
-  if (typeof given !== 'string') return false;
-  // Compare digests so the comparison is constant-time whatever the length.
-  const a = crypto.createHash('sha256').update(given).digest();
-  const b = crypto.createHash('sha256').update(config.adminPassword).digest();
-  return crypto.timingSafeEqual(a, b);
-}
 
 const optInt = (v, name, { min = 0, max = 100000 } = {}) => {
   if (v === null || v === undefined || v === '') return null;
@@ -72,7 +62,7 @@ export function adminRoutes(deps) {
 
   // ------------------------------------------------------------ sign-in
   router.post('/api/admin/login', loginLimit, (req, res) => {
-    if (!passwordMatches(req.body?.password)) return res.status(401).json({ error: 'wrong-password' });
+    if (!sessions.adminPasswordMatches(req.body?.password)) return res.status(401).json({ error: 'wrong-password' });
     sessions.create(req, res, 'admin');
     res.json({ ok: true });
   });

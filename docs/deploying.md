@@ -114,8 +114,11 @@ refuses to open it, and going back needs the backup you took
 
 ```bash
 docker compose ps
-docker compose logs app | grep -E 'Passkeys|Error'
+docker compose logs app | grep -E 'Passkeys|CSP|Error'
 ```
+
+A `CSP` line is something a browser blocked: see [What browsers
+blocked](#what-browsers-blocked) for which ones matter.
 
 **Status** in the admin shows the new version and the schema the database is on.
 
@@ -149,6 +152,16 @@ Git leaves the file alone. With `deploy.sh`, keep it in `deploy/` on your comput
 the script makes the server's copy of the code match yours, so a file only on the
 server would be deleted. The changelog says when `compose.yml` or
 `deploy/caddy/Caddyfile` change, so you can check your additions still fit.
+
+The app sets its own security headers, and Caddy adds only HSTS. One of them, the
+Content-Security-Policy, differs from page to page (it names the cinema's colours by
+a hash of them) and is locked down for everything that isn't a page. If you put
+another proxy or a CDN in front, or change the Caddyfile, let the app's headers
+through as they are, and don't add a Content-Security-Policy there: browsers apply
+every policy they're sent, so a second one can only block more, such as the `blob:`
+addresses the player feeds the film through, and playback stops. Don't let it change
+the pages either: a script it adds from elsewhere (analytics, say) is blocked, and so
+are the cinema's colours if it rewrites the style that holds them.
 
 ### Keeping the images up to date
 
@@ -312,15 +325,25 @@ the server, in a copy of the code that you've installed and built as in [Running
 locally](../README.md#running-it-locally):
 
 ```bash
+scp -r my-server:/srv/open-matte/backups/artwork my-server:/srv/open-matte/backups/branding ~/open-matte-backups/
 mkdir -p ~/restore-test/data
 cp ~/open-matte-backups/open-matte-2026-11-03-153012.db ~/restore-test/data/open-matte.db
+cp -r ~/open-matte-backups/artwork ~/restore-test/data/
+cp -r ~/open-matte-backups/branding ~/restore-test/data/
 DATA_DIR=~/restore-test/data MEDIA_DIR=~/restore-test/media npm run dev
 ```
 
-Open `http://localhost:3000/admin` and sign in with the password in your local `.env`.
-Everything but the films is there to look at: their folders aren't, so the scan says
-the media folder doesn't exist, and nothing plays. Delete `~/restore-test` when you've
-finished, since it holds the same personal data as the backup.
+The first line fetches the posters downloaded from TMDB, the logo and the tab icon,
+which the database file doesn't hold. If no poster was ever downloaded, or no logo or
+icon uploaded, there's no folder to copy, and that `scp` and `cp` say "No such file
+or directory". Nothing is wrong. `npm run dev` reads the rest of its settings from
+your local `.env`; the two on the command line win over it.
+
+Open `http://localhost:3000/admin` (or the `PORT` in your `.env`) and sign in with
+the password in your local `.env`. Everything but the films is there to look at: their
+folders aren't, so the scan says the media folder doesn't exist, and nothing plays.
+Delete `~/restore-test` when you've finished, since it holds the same personal data
+as the backup.
 
 ## Restoring
 
@@ -530,11 +553,78 @@ docker compose logs caddy                  # certificates and Caddy's errors
 ```
 
 The app logs its start and its first scan, clean-ups that deleted something, media
-requests and passkeys it refused, and errors. It never logs ticket codes, link tokens,
+requests and passkeys it refused, what browsers blocked under the pages' policy
+([below](#what-browsers-blocked)), and errors. It never logs ticket codes, link tokens,
 cookies or the admin password. Caddy keeps no access log. Its error log can hold a
 ticket link's address if someone opens it while the app is down
 ([access.md](access.md#secrets-and-sessions)). Each container keeps at most 50 MB of
 logs (five files of 10 MB), set in `compose.yml`.
+
+### What browsers blocked
+
+Every page tells the browser what it may load and run: its Content-Security-Policy
+([access.md](access.md#secrets-and-sessions)). When a browser blocks something under
+it, the browser reports it, and the app writes one line to its log and keeps nothing
+else:
+
+```bash
+docker compose logs --since 24h app | grep CSP
+```
+
+```text
+CSP blocked img-src https://tracker.example.com on /arrival (Chrome on Android)
+CSP blocked img-src https://tracker.example.com on /arrival (Chrome on Android): 12 more like it in the minute before
+```
+
+Each line gives the rule that blocked it, what was blocked, the page's path, and the
+browser and device that said so, as your account page names them. The rules:
+`img-src` is images, `media-src` the film itself, `script-src` and `style-src`
+scripts and styles, `connect-src` the app's own requests. A rule's name may end in
+`-elem` (a script or style element) or `-attr` (a script or style written on an
+element: `onclick=` and the like, or `style=`), as in `script-src-elem`,
+`style-src-elem`, `script-src-attr` and `style-src-attr`.
+
+`form-action`, `base-uri` and `frame-ancestors` mean a form or a `<base>` got into a
+page, or another site tried to show the cinema in a frame. Please report any of
+these, and any `script-src-attr` line: the cinema writes no script on an element, so
+it may mean someone found a way to add their own.
+
+Any other name, such as `font-src`, `frame-src`, `worker-src` or `manifest-src`, is
+something the cinema never uses, so it is almost always an extension or other
+software on the visitor's device.
+
+What was blocked is an address's origin only, or a kind: `inline` (a script or style
+written into the page), `eval`, `blob` or `data`. A ticket link's page shows as
+`/t/…`, and no line has a query or a ticket code. The same rule, origin, page and
+browser is logged once a minute at most, then a line says how many more there were.
+
+Look after an update, and when you try the cinema on a device or app it hasn't met
+before: an iPhone, an Android phone, a link opened inside WhatsApp or Instagram,
+AirPlay or a Chromecast. A line for something the site needs is a bug: please report
+it. Two kinds you can leave:
+
+- `style-src-attr inline` from Safari (or any browser on an iPhone or iPad), on a
+  page with a drop-down menu, such as the admin's Settings or a film's player.
+  WebKit, the engine Safari is built on, holds the inside of its own menus against
+  the policy; they look and work just the same. The same line from another browser,
+  or on a page with no drop-down menu, is worth reporting. To be sure, open the page
+  in another browser and see whether the line comes back.
+- Origins that aren't the cinema's, and kinds such as `chrome-extension`: a browser
+  extension, or other software on a visitor's device, trying to add to the page. The
+  policy stopped it.
+
+Anyone can send these reports, so they are limited: each visitor's address may send
+100 in ten minutes, of up to three reports each, and one over 8 KB is refused. The
+log takes at most 30 new lines a minute from everyone together; past that, a line
+says how many reports weren't logged, so someone sending made-up reports can't push
+the rest of the log out:
+
+```text
+CSP: 412 more reports not logged in the minute before
+```
+
+If you see that line, the minute's real reports may be among those counted. Try the
+device again a few minutes later.
 
 ## Passkeys
 

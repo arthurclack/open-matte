@@ -556,10 +556,14 @@ included.
 - Poster addresses for [link previews](#link-previews) are made with a key of 256
   random bits, created once and kept in the database. The key is never sent anywhere.
 - Session cookies are 256 random bits, HttpOnly, SameSite=Lax, and Secure over
-  HTTPS. The database keeps only their SHA-256 hash, keyed with the admin password
-  for the admin's, so a new `ADMIN_PASSWORD` signs every admin browser out. Admin
-  sign-out, session expiry, ticket revocation, signing a person out and signing out
-  every viewer (in Settings) take effect on the server, from the next request.
+  HTTPS. The database keeps only their SHA-256 hash. The admin's hash is keyed with
+  the admin password, run through scrypt at OWASP's cost with a random salt kept in
+  the database. So a new `ADMIN_PASSWORD` signs every admin browser out, and someone
+  with a copy of the database and an admin cookie finds each guess at the password
+  slow. A long random `ADMIN_PASSWORD` (`openssl rand -base64 24`) puts it out of
+  reach. Admin sign-out, session expiry, ticket revocation, signing a person out and
+  signing out every viewer (in Settings) take effect on the server, from the next
+  request.
 - The cinema sets one session cookie in a browser, and one admin cookie. A browser
   that sends two different values for either is treated as having neither. The
   other one can only come from a site on another name under the same parent
@@ -600,6 +604,24 @@ included.
   (`Sec-Fetch-Site: cross-site` or `same-site`). Browsers treat every subdomain of a
   domain as the same site, and passkeys here can belong to the parent domain, so a
   page on another subdomain mustn't be able to act for anyone.
+- Every page sends a Content-Security-Policy, which tells the browser what the page
+  may load and run: only the app's own scripts, from this server; only its own
+  stylesheets, and the cinema's colours the server writes into the page, allowed by
+  their hash; images, the film and the app's requests from this server only, apart
+  from TMDB's thumbnails in the admin's Find details, which come from TMDB's image
+  server (`TMDB_IMAGE_BASE`) and are allowed on the admin's pages alone. Forms may
+  only be sent here, and no other site may show the page in a frame. So if a film's
+  details, a name or anything else ever got markup into a page, the browser would
+  refuse to run it, or to load or send anything from or to another site, except
+  through a link someone follows or a page redirect. Everything else the server sends
+  (the API, films, artwork, the logo, the app's files) may run and load nothing,
+  should it be opened as a page of its own; only the styles a browser gives its own
+  page for an image or a text file are let through. Browsers report what the policy
+  blocks to `/api/csp-report`, which takes reports from any site, as browsers send
+  them, and only writes a line to the server log
+  ([deploying.md](deploying.md#what-browsers-blocked)): the rule, the blocked
+  address's origin, the page's path and the browser's name, never a ticket code or a
+  query.
 - The app never logs ticket codes, link tokens, cookies or the admin password, and
   Caddy keeps no access log. When a passkey is refused, the reason goes to the
   server log, never to the browser. Pages send no Referer, and the page the server

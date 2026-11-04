@@ -48,7 +48,8 @@ const RULES = {
 };
 
 // previewKey signs the addresses of ticket links' preview posters (page.js).
-const SECRETS = new Set(['tmdbApiKey', 'previewKey']);
+// adminKeySalt goes into the admin's key, with ADMIN_PASSWORD (sessions.js).
+const SECRETS = new Set(['tmdbApiKey', 'previewKey', 'adminKeySalt']);
 const FILES = new Set(['logo', 'icon']);
 
 // Colours are stored lower-case, other text without surrounding spaces.
