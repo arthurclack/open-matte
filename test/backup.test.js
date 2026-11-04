@@ -245,8 +245,9 @@ test('starting clears what a backup stopped halfway left behind, and only that',
 
 // docs/deploying.md: trying a restore on your computer copies the same folders from
 // the backups as restoring on the server does, so posters and the logo show.
-test('the local restore test in the docs copies what the server restore copies', () => {
-  const doc = fs.readFileSync(new URL('../docs/deploying.md', import.meta.url), 'utf8');
+const DEPLOYING = new URL('../docs/deploying.md', import.meta.url);
+test('the local restore test in the docs copies what the server restore copies', { skip: !fs.existsSync(DEPLOYING) && 'docs/ is not here (the server image has none)' }, () => {
+  const doc = fs.readFileSync(DEPLOYING, 'utf8');
   const blocks = [...doc.matchAll(/```bash\n([\s\S]*?)```/g)].map((m) => m[1]);
   const server = blocks.find((b) => b.includes('cp /srv/open-matte/backups/') && b.includes('docker compose start app'));
   const local = blocks.find((b) => b.includes('~/restore-test/data') && b.includes('npm run dev'));

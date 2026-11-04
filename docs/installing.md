@@ -14,7 +14,7 @@ server, or on your computer. The paths are the defaults, under `/srv/open-matte`
 
 | | |
 |---|---|
-| A server | Ubuntu 24.04 LTS with a public IPv4 address, and SSH access as a user who can use `sudo`. Docker comes from Ubuntu's own packages below. |
+| A server | Ubuntu 26.04 LTS or 24.04 LTS, on x86_64 or ARM64, with a public IPv4 address, and SSH access as a user who can use `sudo`. Docker comes from Ubuntu's own packages below. |
 | Disk | Room for your films: about 50 GB for a two-hour 4K HDR film with every rendition, 8 to 15 GB for one without a 4K source ([encoding.md](encoding.md#storage)). The films can live on network storage mounted on the server. |
 | A domain | A name you can add DNS records to, such as `cinema.example.com`. |
 | Ports | 80 and 443 (TCP), and 443 (UDP), reachable from the internet. |
@@ -80,7 +80,8 @@ one.
 Point the records straight at the server. If your DNS provider offers to send
 traffic through its own proxy network, leave that off for these names: the app would
 then see the proxy's addresses instead of your visitors', and they'd all share one
-rate limit.
+rate limit. At Cloudflare, set each record's **Proxy status** to **DNS only** (the
+grey cloud), not **Proxied**.
 
 To check, on your computer:
 
@@ -88,14 +89,18 @@ To check, on your computer:
 dig +short cinema.example.com          # prints 203.0.113.10
 ```
 
-On Windows, `nslookup cinema.example.com` does the same. A new record can take a few
-minutes to appear, and a changed one as long as its old TTL.
+On Windows, `nslookup cinema.example.com` does the same. It must print the server's
+own address: any other means the record is wrong, or a proxy is still on for that
+name. A new record can take a few minutes to appear, and a changed one as long as its
+old TTL.
 
 ## The server
 
 ### Software
 
-On the server:
+If Docker is already installed from Docker's own packages, keep it: install only `git`
+and `rsync` (`sudo apt-get install -y git rsync`), and check that
+`docker compose version` prints a Compose version 2. Otherwise, on the server:
 
 ```bash
 sudo apt-get update
@@ -104,8 +109,7 @@ docker compose version                  # prints Compose's version if all is wel
 ```
 
 The server needs nothing else: Node and everything the app uses are inside its
-image. If Docker is already installed from Docker's own packages, keep that instead;
-what matters is that `docker compose` (Compose version 2) works.
+image.
 
 ### Your user
 
@@ -125,15 +129,18 @@ end up owned by whoever runs the commands.
 
 If you log in as root, run `getent passwd 1000` first. If it names a user, give that
 user your SSH key with the last two lines below (its name in place of `cinema`), and
-log in as it. If it prints nothing, add a user, which gets 1000, give it your SSH key,
-and log in as it:
+the `usermod` line too if it can't use `sudo` yet. Then log in as it. If it prints
+nothing, add a user, which gets 1000, give it your SSH key, and log in as it:
 
 ```bash
 adduser cinema
 usermod -aG sudo cinema
 mkdir -p /home/cinema/.ssh && cp /root/.ssh/authorized_keys /home/cinema/.ssh/
-chown -R cinema: /home/cinema/.ssh
+chown -R cinema:cinema /home/cinema/.ssh
 ```
+
+`adduser` asks for the new user's password, which is the one `sudo` asks for later,
+and a few details you can leave empty.
 
 Then let your user run Docker, and log out and back in for it to take effect:
 
@@ -155,8 +162,10 @@ sudo ufw enable
 ```
 
 Allow SSH first, or `ufw enable` locks you out. If SSH listens on another port, allow
-that port instead. Port 80 lets the certificate authority check the name and sends
-visitors on to HTTPS; 443 over UDP carries HTTP/3.
+that port instead. `ufw enable` warns that it may disrupt existing SSH connections and
+asks whether to proceed: answer `y`. It's safe, because SSH is already allowed. Port
+80 lets the certificate authority check the name and sends visitors on to HTTPS; 443
+over UDP carries HTTP/3.
 
 Docker opens the ports it publishes by itself, whatever `ufw` says. Here it publishes
 only 80 and 443, for Caddy. The app's own port, 3000, isn't published: only Caddy
@@ -167,7 +176,7 @@ own, open the same ports there.
 
 ```bash
 sudo mkdir -p /srv/open-matte/{app,data,media,backups}
-sudo chown -R "$USER": /srv/open-matte
+sudo chown -R "$USER:$USER" /srv/open-matte
 chmod 700 /srv/open-matte/data /srv/open-matte/backups
 ```
 
@@ -185,12 +194,70 @@ The database and its backups hold ticket links that work for whoever reads them,
 people's names, so `chmod 700` keeps every other account on the server out of `data`
 and `backups`. The app makes its own files there readable by itself only.
 
-If your films live on network storage, mount it at `/srv/open-matte/media`, or
+### Films on network storage
+
+If your films live on network storage, mount it on the `media` folder made above, or
 anywhere else and set `MEDIA_PATH` (below). The app only reads it, and a scan that
 finds it missing or unreadable says so and changes nothing. If the storage stops
 answering, playback stops with an error that players retry, and the rest of the site
-carries on. Mount it `soft`, as CIFS (SMB) does unless told otherwise, not `hard`:
-then a request the storage never answers fails in the end instead of waiting for ever.
+carries on.
+
+For storage you reach over CIFS (SMB), such as a Hetzner Storage Box or a share on a
+NAS, first install the tools and make a file for the storage's password, readable by
+root only. On the server:
+
+```bash
+sudo apt-get install -y cifs-utils
+sudo install -m 600 /dev/null /etc/open-matte-storage.cred
+sudo nano /etc/open-matte-storage.cred
+```
+
+Put the storage's user name and password in it, on two lines. Write the password as
+it is, with no quotes, even if it has characters such as `#`, `&` or `=` in it:
+
+```text
+username=u123456
+password=the-storage-password
+```
+
+Then add this line to `/etc/fstab` (`sudo nano /etc/fstab`), all on one line:
+
+```text
+//u123456.your-storagebox.de/backup /srv/open-matte/media cifs credentials=/etc/open-matte-storage.cred,uid=1000,gid=1000,file_mode=0644,dir_mode=0755,vers=3.1.1,seal,iocharset=utf8,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=30 0 0
+```
+
+The first part is the share. For other storage, put `//server/share` there, with the
+storage's name or address and the share's name. On a Hetzner Storage Box, the main
+account's share is called `backup`, as in the example, and SMB has to be switched on
+in the box's settings. The options that matter:
+
+| Option | What it does |
+|---|---|
+| `uid=1000,gid=1000` | The files belong to user 1000, so your user can copy films in, and the app can read them. |
+| `seal` | Encrypts the traffic on its way over the network. |
+| `nofail` | The server still starts if the storage doesn't answer. |
+| `x-systemd.automount` | The storage is mounted when something first uses the folder, so start-up doesn't wait for it. |
+
+Whatever the storage, mount it `soft`, not `hard`: then a request the storage never
+answers fails in the end instead of waiting for ever. CIFS mounts `soft` unless told
+otherwise, so the line above needs nothing for it.
+
+Then mount it and check it:
+
+```bash
+sudo systemctl daemon-reload
+sudo mount /srv/open-matte/media
+df -h /srv/open-matte/media             # shows the storage's size, not the server's disk
+touch /srv/open-matte/media/test && rm /srv/open-matte/media/test   # works without sudo
+```
+
+Mount it before the first start. A container goes on seeing what was in the folder
+when it started, so if you mount the storage while the app is running, the app sees
+the empty folder underneath until you run `docker compose restart app` in
+`/srv/open-matte/app/deploy`.
+
+The same storage can hold the off-server copy of the backups, once the cinema is
+running ([Keeping a copy off the server](deploying.md#keeping-a-copy-off-the-server)).
 
 ## Getting the code
 
@@ -249,7 +316,7 @@ nano .env
 | `MEDIA_PATH` | Where the film folders are. Default `/srv/open-matte/media`. |
 | `BACKUP_PATH` | Where the daily backups go, on the server's own disk. Default `/srv/open-matte/backups`. |
 | `BACKUP_HOUR` | Optional. The hour (UTC, 0 to 23) the daily backup runs. Default 4. |
-| `BACKUP_KEEP_DAYS` | Optional. How many days' newest backups to keep, at least 1. Default 14. Every backup of the last three days is kept as well. |
+| `BACKUP_KEEP_DAYS` | Optional. How many days' newest backups to keep, at least 1. Default 14. Every backup of the last three days (or of the last `BACKUP_KEEP_DAYS` days, if that's fewer) is kept as well. |
 | `BACKUP_KEEP_MONTHS` | Optional. How many months' first backups to keep; 0 keeps none. Default 12. |
 | `BACKUP_COPY_DIR` | Optional, and best left until later: where the off-server copy of the backups appears inside the app's container, so the admin can show it ([deploying.md](deploying.md#keeping-a-copy-off-the-server)). |
 
@@ -345,8 +412,10 @@ enough to start with:
 ```
 
 The folder name becomes the film's address (`cinema.example.com/arrival`). Use
-lowercase letters, digits and hyphens. A few names belong to the site itself, such as
-`admin`, `api` and `account`, and a scan skips a folder with one of them.
+lowercase letters, digits and hyphens, at most 64 of them, starting and ending with a
+letter or digit. These names belong to the site itself: `about`, `account`, `admin`,
+`api`, `assets`, `enroll`, `help`, `media`, `signin`, `t` and `tickets`. A scan skips
+a folder with one of them, or with a name that breaks the rules, and says why.
 
 **Copy it to the server.** On your computer:
 
@@ -370,7 +439,8 @@ On the film's page in the admin, under **Tickets**:
 
 Open the link on your phone, or in a private window on your computer, so it isn't
 signed in to the admin, and press Play. A screening starts, and **Activity** in the
-admin shows the ticket opened and played.
+admin shows rows for `Test` reading **Opened the film page** and then **Started a new
+screening**.
 
 That test used the ticket's one screening, so it's spent once the screening's resume
 window (48 hours by default) is over. Issue a fresh ticket for each person you send
@@ -387,14 +457,16 @@ or rewriting your domain: see [Testing from home](deploying.md#testing-from-home
   `curl -s https://cinema.example.com/api/site` answers with the cinema's name.
 - **The log has a `Passkeys:` line** naming your `WEBAUTHN_RP_ID`, not
   `Passkeys unavailable:`.
-- **Status** in the admin (the projection booth) shows the media folder readable with
-  your film's folder in it, the free disk space, a backup file (the first is written
-  about a minute after the first start), and the version running.
+- **Status** in the admin (the projection booth) shows the media folder as
+  **Readable**, with your film's folder among those it counts and the last scan having
+  found the film, the free disk space, a backup file (the first is written about a minute after the first
+  start), and the version running.
 - **A ticket plays** on a phone over mobile data, away from your own network.
-- **Passkeys work.** Under **People**, add yourself as a person, press **Create a
-  setup link** on your page, and open the link on your phone. Create the passkey,
-  then sign out and sign in again with it. Recovery links and how people sign in are
-  in [access.md](access.md#people-and-passkeys).
+- **Passkeys work.** Under **People**, add yourself as a person. On your page, press
+  **Create a setup link**, then **Create link**, then **Copy link** (the link is shown
+  only once), and open the link on your phone. Create the passkey, then sign out and
+  sign in again with it. Recovery links and how people sign in are in
+  [access.md](access.md#people-and-passkeys).
 
 ## What next
 

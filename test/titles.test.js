@@ -42,8 +42,10 @@ test('title comparison ignores case, accents, punctuation and "&"', () => {
   assert.notEqual(normalizeTitle('Twins'), normalizeTitle('Twin'));
 });
 
-// Release names in examples end in a made-up group, never a real one.
-test('example release names name no real release group', () => {
+// Release names in examples end in a made-up group, never a real one. Of these
+// files, only docs/encoding.md can be missing: the server's image has no docs/.
+const ENCODING = new URL('../docs/encoding.md', import.meta.url);
+test('example release names name no real release group', { skip: !fs.existsSync(ENCODING) && 'docs/ is not here (the server image has none)' }, () => {
   const files = ['../server/titles.js', './titles.test.js', '../docs/encoding.md'];
   const groups = files.flatMap((f) => [...fs.readFileSync(new URL(f, import.meta.url), 'utf8').matchAll(/\.(?:x26[45]|DTS|AAC|AC3|HEVC)-([A-Za-z0-9]+)/gi)].map((m) => [f, m[1]]));
   assert.ok(groups.length >= 2, 'the examples are still found');

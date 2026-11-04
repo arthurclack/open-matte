@@ -96,6 +96,7 @@ one it had. Just after Caddy has been restarted, the reload can fail with
 On your computer, check out the release (or your own branch) and deploy it:
 
 ```bash
+git fetch --tags
 git checkout v1.1.0
 scripts/deploy.sh my-server
 ```
@@ -127,7 +128,8 @@ the new build. If they press Play there, the page says the site may have just be
 updated and offers Reload. The screening that Play started isn't lost: after the
 reload, it shows as Resume.
 
-Each build leaves the previous image behind, unnamed. To remove those:
+A build can leave the previous image behind, unnamed, depending on how Docker stores
+its images. To remove any that are left:
 
 ```bash
 docker image prune -f
@@ -190,9 +192,10 @@ docker run --rm --network none -e NODE_ENV=test \
 ```
 
 All should pass: the summary at the end says `fail 0`. The image has no web app
-source, `scripts/` or `deploy/` folder, so the tests that read them are skipped, each
-shown on a line starting `﹣` with the reason. A skipped group's tests aren't in the
-summary's counts, so it shows fewer tests than on your computer.
+source, no `scripts/`, `deploy/` or `docs/` folder, and no `Dockerfile` or `.npmrc`,
+so the tests that read them are skipped, each shown on a line starting `﹣` with the
+reason. A skipped group's tests aren't in the summary's counts, so it shows fewer
+tests than on your computer.
 
 ## Backups
 
@@ -248,10 +251,11 @@ yours alone too ([The folders](installing.md#the-folders)). If
 ### Keeping a copy off the server
 
 Backups on the server protect against mistakes, not against losing the server. Copy
-them somewhere else every day. If the server has network storage mounted (a storage
-box from your hosting provider, or a share on a NAS), the systemd timer in
-`deploy/systemd` does it at 04:30 UTC, after the app's backup. It mirrors the backups
-folder with `rsync`, `artwork` and `branding` included.
+them somewhere else every day. If the server has network storage mounted
+([installing.md](installing.md#films-on-network-storage)), such as a storage box from
+your hosting provider or a share on a NAS, the systemd timer in `deploy/systemd` does
+it at 04:30 UTC, after the app's backup. It mirrors the backups folder with `rsync`,
+`artwork` and `branding` included.
 
 As shipped, it assumes the storage is mounted as the media folder, and copies into a
 hidden folder there, `.open-matte-backups` (the leading dot keeps it out of the film
@@ -541,8 +545,9 @@ and the off-server copy if `BACKUP_COPY_DIR` is set; the last clean-up; and the
 version, Node, SQLite and schema versions, and when the app started. When something
 needs attention, the top of the Films page says so.
 
-Each line says what was checked, such as "Backup file written at 04:03", never that a
-restore would work. Reading it records nothing.
+Each line says what was checked, such as "Backup file written at 4 Nov, 04:03" (in
+the browser's own time zone and date format), never that a restore would work.
+Reading it records nothing.
 
 The logs, on the server:
 
@@ -749,11 +754,13 @@ docker compose down --volumes --rmi all
 ```
 
 That removes both containers, their network, Caddy's volumes (its certificates and
-settings) and the two images. Docker's build cache can go too, if nothing else on the
-server uses Docker; `docker image ls` shows any image left:
+settings) and the two images. Unnamed images left from earlier builds can go too, and
+Docker's build cache if nothing else on the server uses Docker; `docker image ls`
+shows any image left:
 
 ```bash
-docker builder prune --all --force
+docker image prune -f                  # unnamed images left from earlier builds
+docker builder prune --all --force     # the build cache, if nothing else uses Docker
 ```
 
 If you set up the off-server copy, remove its timer:
@@ -768,13 +775,18 @@ Then delete the folders. `data` and `backups` hold personal data: people's names
 notes and their activity.
 
 If network storage is mounted under `/srv/open-matte`, such as the media folder,
-unmount it first, and remove its line from `/etc/fstab` (or wherever you set up the
-mount) so it isn't mounted again at the next start. Otherwise the `rm` would delete
-what's on the storage too: the films and the off-server copy.
+remove its line from `/etc/fstab` (or wherever you set up the mount) so it isn't
+mounted again at the next start, run `sudo systemctl daemon-reload`, and unmount it.
+Otherwise the `rm` would delete what's on the storage too: the films and the
+off-server copy. With `x-systemd.automount`, as in
+[Films on network storage](installing.md#films-on-network-storage), the folder is
+listed twice, as `autofs` and under it as `cifs`, and unmounting only the `cifs` one
+leaves it to be mounted again as soon as anything looks in. Unmount until `mount`
+lists nothing there:
 
 ```bash
 mount | grep /srv/open-matte               # anything mounted in there
-sudo umount /srv/open-matte/media          # and each other one listed
+sudo umount /srv/open-matte/media          # once for each line listed, autofs too
 sudo rm -rf --one-file-system /srv/open-matte
 ```
 

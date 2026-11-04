@@ -159,8 +159,9 @@ describe('the policy on pages', () => {
     }
   });
 
-  test('the guide to the log names every rule the policy sets, and says which to report', () => {
-    const doc = fs.readFileSync(new URL('../docs/deploying.md', import.meta.url), 'utf8');
+  const DEPLOYING = new URL('../docs/deploying.md', import.meta.url);
+  test('the guide to the log names every rule the policy sets, and says which to report', { skip: !fs.existsSync(DEPLOYING) && 'docs/ is not here (the server image has none)' }, () => {
+    const doc = fs.readFileSync(DEPLOYING, 'utf8');
     const section = doc.slice(doc.indexOf('### What browsers blocked'), doc.indexOf('\n## ', doc.indexOf('### What browsers blocked')));
     const set = pagePolicy()
       .split('; ')
