@@ -32,7 +32,7 @@ test('a passkey set up from a link signs in, keeps a ticket, and shows on the ac
     // The token leaves the address as soon as it's read.
     await expect(page).toHaveURL((url) => url.pathname === '/enroll' && url.hash === '');
     await page.getByRole('button', { name: 'Create a passkey' }).click();
-    await expect(page.getByRole('heading', { name: `You're in, ${name}` })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your membership card is ready' })).toBeVisible();
     expect(await credentials()).toHaveLength(1);
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(menu).toBeVisible();

@@ -79,6 +79,8 @@ describe('the policy on pages', () => {
           'img-src': ADMIN_PAGES.includes(url) ? ["'self'", 'https://images.example.test'] : ["'self'"],
           'media-src': ["'self'", 'blob:', 'data:'],
           'connect-src': ["'self'"],
+          // The membership card's fonts, from web/public/fonts.
+          'font-src': ["'self'"],
           'base-uri': ["'none'"],
           'form-action': ["'self'"],
           'frame-ancestors': ["'none'"],

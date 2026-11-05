@@ -1,4 +1,5 @@
 import express from 'express';
+import { membershipOf } from '../membership.js';
 import { VIEWER_COOKIE, clearCookie } from '../sessions.js';
 
 // Signing in with a passkey, creating one from a setup or recovery link, signing
@@ -7,6 +8,7 @@ import { VIEWER_COOKIE, clearCookie } from '../sessions.js';
 export function accountRoutes({ db, sessions, people, limit }) {
   const router = express.Router();
   const q = {
+    person: db.prepare('SELECT webauthn_user_id, created_at FROM people WHERE id = ?'),
     passkeys: db.prepare(`
       SELECT k.id, k.backed_up, k.created_at, k.added_device, k.last_used_at, l.purpose
       FROM passkeys k LEFT JOIN person_links l ON l.id = k.link_id
@@ -41,7 +43,9 @@ export function accountRoutes({ db, sessions, people, limit }) {
   router.post('/api/enroll/finish', enrollLimit, async (req, res) => {
     const r = await people.enrollFinish(req, req.body?.token, req.body?.credential, current(req));
     sessions.setViewerCookie(req, res, r.token, r.ttl);
-    res.json({ person: r.person, slug: r.slug });
+    // Their membership card, for the page that says it's ready: the browser is signed
+    // in as them now, and nobody else gets this answer.
+    res.json({ person: r.person, slug: r.slug, membership: r.membership });
   });
 
   router.post('/api/signin/options', signInOptionsLimit, async (req, res) => {
@@ -61,15 +65,16 @@ export function accountRoutes({ db, sessions, people, limit }) {
     res.json({ ok: true });
   });
 
-  // The signed-in person's passkeys and the browsers signed in as them. Only ever
-  // their own, and no ids or session hashes: there's nothing to act on here
-  // except signing out.
+  // The signed-in person's membership card, passkeys and the browsers signed in as
+  // them. Only ever their own, and no ids or session hashes: there's nothing to act
+  // on here except signing out.
   router.get('/api/account', (req, res) => {
     const viewer = signedIn(req, res);
     if (!viewer) return;
     const now = Date.now();
     res.json({
       person: { name: viewer.person_name },
+      membership: membershipOf(q.person.get(viewer.person_id)),
       passkeys: q.passkeys.all(viewer.person_id).map((k) => ({
         synced: Boolean(k.backed_up),
         addedAt: k.created_at,

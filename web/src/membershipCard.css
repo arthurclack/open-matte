@@ -1,0 +1,206 @@
+/* The membership card (MembershipCard.jsx): a printed card, ISO ID-1 (85.6 by 54),
+   on cream card stock, in two inks a touch off register. Everything on it is sized
+   in card widths (cqw), so it scales with the card.
+
+   Its three fonts are served by the app itself (web/public/fonts, under the SIL Open
+   Font License; the licences file has them) and are declared only here. A browser
+   downloads a font only for text that uses it, so only pages with a card fetch them. */
+
+@font-face {
+  font-family: 'Fraunces';
+  src: url('/fonts/Fraunces-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Grape Nuts';
+  src: url('/fonts/GrapeNuts-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Courier Prime';
+  src: url('/fonts/CourierPrime-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.mc {
+  /* the stocks and inks; --mc-ink, the shop's, is set on the element */
+  --mc-stock: #e9dfc9;
+  --mc-label-stock: #eceeec;
+  --mc-black: #171513;
+  --mc-ball: #1b2568;
+  /* the shop's own printing: a soft, heavy serif, as small-shop stationery was set c. 1984 */
+  --mc-shop-face: 'Fraunces', Georgia, serif;
+  --mc-type: 'Courier Prime', 'Courier New', monospace;
+  /* the member's name: Grape Nuts, then pen faces a device may have for the scripts it lacks */
+  --mc-hand: 'Grape Nuts', 'LXGW WenKai TC', 'Nanum Pen Script', 'Bradley Hand', 'Segoe Print', cursive;
+  display: grid;
+  justify-items: start;
+  gap: 16px;
+  width: min(100%, 360px);
+}
+/* where the card is what the page is about, as on a wider screen it always is here */
+@media (min-width: 768px) {
+  .mc { width: min(100%, 440px); }
+}
+.mc-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* turning over: both sides in one place; the one facing down is hidden from everyone */
+.mc-stage { display: grid; width: 100%; perspective: 1600px; }
+.mc-face {
+  grid-area: 1 / 1;
+  min-width: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  /* edge-on at about 140 ms, then it settles; a press mid-turn reverses from where it got to */
+  transition: transform 460ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.mc:not(.is-turning) .mc-face[aria-hidden='true'] { visibility: hidden; }
+.mc-ctl { display: flex; flex-wrap: wrap; gap: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .mc-face { transition: none; }
+}
+
+/* ------------------------------------------------------------ paper */
+.mc-card { position: relative; width: 100%; filter: drop-shadow(0 1px 0.8px rgb(0 0 0 / 0.6)); }
+.mc-sheet { position: relative; overflow: hidden; background-color: var(--mc-stock); }
+.mc-card > .mc-sheet { aspect-ratio: 85.6 / 54; container-type: inline-size; color: var(--mc-black); }
+.mc-tone, .mc-grain { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.mc-tone { z-index: 0; }
+.mc-ink { position: relative; z-index: 1; }
+.mc-card > .mc-sheet > .mc-ink { position: absolute; inset: 0; }
+/* the grain lies over the ink too: a thin film of ink takes the paper's texture */
+.mc-grain { z-index: 2; }
+.mc-bar { position: absolute; z-index: 3; }
+
+/* inks: the edges of print, and the second plate a touch off the first. Text has its
+   own variable: WebKit draws these filters at one pixel to a CSS pixel, which on a
+   2x or 3x screen blurs small type, so there text goes without (MembershipCard.jsx). */
+.mc-pr { filter: var(--mc-kpt, none); }
+.mc-plate2 { color: var(--mc-ink); transform: translate(var(--mc-rx, 0px), var(--mc-ry, 0px)); }
+.mc-typed { font-family: var(--mc-type); font-weight: 400; filter: var(--mc-kt, none); }
+.mc-tc { position: relative; top: var(--y, 0); left: var(--x, 0); opacity: var(--o, 1); }
+
+/* ------------------------------------------------------------ the front */
+.mc-front { position: absolute; inset: 5.7cqw 6cqw calc(28% + 4.4cqw) 6.5cqw; display: flex; flex-direction: column; margin: 0; }
+.mc-logo { flex: none; display: block; max-width: 100%; object-fit: contain; object-position: left center; }
+.mc-shop {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  margin: 4.6cqw 0 0;
+  font: 800 9.4cqw/1.04 var(--mc-shop-face);
+  font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 72;
+  letter-spacing: -0.005em;
+  overflow-wrap: anywhere;
+}
+.mc-shop > span { min-width: 0; }
+.mc-front--plain .mc-shop { margin-top: 0; align-items: center; font-size: 11cqw; }
+.mc-front--logo .mc-shop { margin-top: 3.4cqw; }
+.mc-front--logo-only .mc-logo { margin: auto 0; }
+/* rub-down transfer letters, each set by hand */
+.mc-rub { display: inline-block; transform: translateY(var(--y, 0)) rotate(var(--r, 0deg)); margin-right: var(--m, 0); }
+.mc-nw { white-space: nowrap; }
+/* a solid band of the shop's ink across the bottom, "Membership card" knocked out of it
+   to the bare card, and a black keyline above it on the other plate. The ink is its
+   own layer under the words, with the bare card showing through it in specks where
+   the ink missed (drawn on a canvas, MembershipCard.jsx), as solid print does. */
+.mc-band {
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  height: calc(28% + 4px);
+  display: flex;
+  align-items: center;
+  padding: 0 4px 4px calc(6.5cqw + 4px);
+}
+.mc-band-ink, .mc-band-wear { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.mc-band-ink { background: var(--mc-ink); filter: var(--mc-kp, none); }
+.mc-kind {
+  position: relative;
+  flex: none;
+  margin: 0;
+  font: 600 max(14px, 5.4cqw)/1.15 var(--mc-shop-face);
+  font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 24;
+  color: var(--mc-stock);
+}
+.mc-key { position: absolute; left: 0; right: 0; bottom: calc(28% + 1.6cqw); height: max(1px, 0.5cqw); background: var(--mc-black); }
+
+/* ------------------------------------------------------------ the back */
+.mc-field { position: absolute; margin: 0; display: flex; align-items: baseline; gap: 10px; padding-bottom: 4px; }
+/* each field's rule, in the shop's ink, on the second plate */
+.mc-field::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--mc-ink);
+  opacity: 0.85;
+  transform: translate(var(--mc-rx, 0px), var(--mc-ry, 0px));
+}
+.mc-k { font: 500 max(13px, 3.1cqw)/1.2 var(--sans); white-space: nowrap; }
+.mc-name { left: 6%; right: 6%; top: var(--edge, 7%); }
+/* the card's one hand mark: the member's name in the counter's ballpoint, sitting on its
+   rule as a hand does (the baseline a little above it, descenders across it) */
+.mc-name .mc-v {
+  font-family: var(--mc-hand);
+  font-weight: 400;
+  font-size: max(20px, 6.6cqw);
+  line-height: 1.05;
+  font-feature-settings: 'calt' 1, 'liga' 1;
+  color: var(--mc-ball);
+  white-space: nowrap;
+  filter: var(--mc-kb, none);
+  transform: translateY(0.28em);
+}
+.mc-name--wrap .mc-v { white-space: normal; min-width: 0; }
+/* a very long word, carried on to the next line rather than off the card */
+.mc-name--wrap .mc-hw { overflow-wrap: anywhere; }
+/* until its fonts have come, the name about to be written on isn't shown at all */
+.mc-name.is-waiting .mc-v { visibility: hidden; }
+.mc-hw { display: inline-block; transform: translateY(var(--y, 0)) rotate(var(--r, 0deg)) scale(var(--s, 1)); opacity: var(--o, 1); }
+/* Member since, typed by the shop when it made the card */
+.mc-since { left: 6%; width: 36%; top: calc(33% + var(--mid, 0px)); flex-direction: column; align-items: flex-start; gap: 1px; }
+.mc-since .mc-v { font-size: max(16px, 5cqw); line-height: 1.15; color: var(--mc-black); white-space: nowrap; }
+/* the number label: wide enough for its barcode at 2.5:1 in whole pixels (fitCodabar),
+   never under 147px inside its 3px sides, which a 2x screen needs; 46% of a 440px card
+   gives 1x and 1.5x screens their 2.5:1 or 3:1 too */
+.mc-numk { position: absolute; right: 6%; width: max(46%, 153px); padding-left: 1px; top: calc(33% + var(--mid, 0px)); margin: 0; }
+.mc-bar { right: 6%; top: calc(43% + var(--mid, 0px)); width: max(46%, 153px); }
+/* the small print: the smallest and lightest thing on the card, in black */
+.mc-small { position: absolute; left: 6%; right: 6%; bottom: var(--edge, 7%); margin: 0; font: 400 max(12px, 2.75cqw)/1.35 var(--sans); color: var(--mc-black); }
+.mc-small-short, .mc-small--short .mc-small-full { display: none; }
+.mc-small--short .mc-small-short { display: inline; }
+
+/* the number on a stuck-on roll label: its own stock, die-cut corners, its own lean, a
+   light rim and a hair of shadow on one side, digits from a label printer */
+.mc-label { transform: rotate(var(--mc-rot, 0deg)); filter: drop-shadow(0.6px 0.8px 0.4px rgb(30 24 16 / 0.5)); }
+.mc-label > .mc-sheet { background-color: var(--mc-label-stock); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.6), inset 0 0 0 1.6px rgb(60 52 40 / 0.14); }
+/* the sides are narrow: the label's own blank and the card around it carry on the
+   barcode's quiet zone, and the room goes to the bars */
+.mc-label-ink { padding: 6px 3px 4px; text-align: center; color: var(--mc-black); }
+.mc-codabar { display: block; width: 100%; height: var(--bar-h, max(34px, 10cqw)); fill: currentColor; }
+/* once fitted to whole device pixels, the barcode keeps its own width */
+.mc-codabar[data-snap] { margin: 0 auto; }
+.mc-digits { display: block; margin-top: 2px; font-size: max(13px, 4.1cqw); line-height: 1.3; letter-spacing: 0.03em; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------ forced colours
+   High Contrast and the like take the card's colours away: its edge, the rules and
+   the keyline are drawn in the text colour instead, and the number label keeps its own
+   dark bars on light stock, as a scanner needs. */
+@media (forced-colors: active) {
+  .mc-card > .mc-sheet { border: 1px solid CanvasText; }
+  .mc-field::after, .mc-key { forced-color-adjust: none; background: CanvasText; }
+  .mc-label { forced-color-adjust: none; }
+  /* the band's ink is gone, so its pin-holes would show as specks on nothing */
+  .mc-band-wear { display: none; }
+}

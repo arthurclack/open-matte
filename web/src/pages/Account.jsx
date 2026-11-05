@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, formatAgo, formatDay, formatDayTime } from '../api.js';
 import { enrollLink } from '../enrollLink.js';
+import MembershipCard from '../MembershipCard.jsx';
 import { confirmSignOut, useSite } from '../site.jsx';
 
 const Page = ({ children }) => <div className="narrow account">{children}</div>;
 
-// /account: the signed-in person's passkeys and the browsers signed in as them,
-// with Sign out and Sign out everywhere. Adding or removing passkeys is for
+// /account: the signed-in person's membership card, their passkeys and the browsers
+// signed in as them, with Sign out and Sign out everywhere. Adding or removing passkeys is for
 // whoever runs the cinema, so nothing here changes them.
 export default function Account() {
   const { me, site, refresh, signOut } = useSite();
@@ -90,6 +91,13 @@ export default function Account() {
       <h1>{data.person.name}</h1>
       <p className="dim">Your account at {site?.cinemaName || 'this cinema'}. Your tickets are on the front page.</p>
       {error && <div className="notice bad">{error}</div>}
+
+      {data.membership && (
+        <section className="account-card" aria-labelledby="your-card">
+          <h2 id="your-card">Your membership card</h2>
+          <MembershipCard site={site} name={data.person.name} membership={data.membership} />
+        </section>
+      )}
 
       <h2>Passkeys</h2>
       <p className="dim">

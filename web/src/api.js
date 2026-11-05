@@ -70,6 +70,20 @@ export const formatDateTimeYear = (ms) => (ms ? dateTimeYear(ms) : '');
 export const formatDay = (ms) => (ms ? dayFmt.format(new Date(ms)) : '');
 export const formatDayTime = (ms) => (ms ? dayTime(ms) : '');
 
+// "Oct 2026": a month and year, as the membership card prints Member since. The month
+// names are fixed, as on a card typed in English: a browser's own short September can
+// be "Sept". `long` gives "October 2026", for a screen reader. Unlike every other date
+// here, in one time zone for everyone (UTC), not the browser's: it's printed on a card
+// that never changes, and the admin's page and the member's card must agree, even for
+// someone added near midnight at the turn of a month.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+export function formatMonthYear(ms, { long = false } = {}) {
+  if (!ms) return '';
+  const d = new Date(ms);
+  const month = MONTHS[d.getUTCMonth()];
+  return `${long ? month : month.slice(0, 3)} ${d.getUTCFullYear()}`;
+}
+
 export function formatAgo(ms, now = Date.now()) {
   if (!ms) return 'never';
   const s = Math.round((now - ms) / 1000);

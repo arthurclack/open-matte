@@ -8,6 +8,35 @@ A release has an **Upgrading** note when updating to it takes more than copying 
 new code and rebuilding: a backup first, a setting to choose, or a migration you can't
 undo without a restore. Read it before you update.
 
+## Unreleased
+
+### Added
+
+- **A membership card for everyone you add.** The first piece of the new look, shown
+  inside today's pages until the rest is built. It's a printed card that turns over:
+  the front is all yours, with your cinema's name (and logo, if you have one) and
+  "Membership card" knocked out of a solid band of ink; the back has their name in
+  ballpoint, the month and year you added them, typed, their membership number on a
+  stuck-on barcode label, and one line asking whoever finds it to hand it back. It's
+  printed in your accent colour, darkened until it reads on the card; with Open
+  Matte's own colour it prints in blue. Your account shows it at the top, with Turn
+  over, and the page that makes a passkey now ends on it, the name written on as it
+  appears ("Your membership card is ready"); a recovery link ends on the same card as
+  before ("Your new passkey is ready"). With less motion asked for, it turns and the
+  name appears at once.
+- **A membership number**, 11 digits, worked out from what each person already has,
+  so nothing new is stored: the same number for good, through a new phone, a change
+  of name or a reset after a lost phone. It's never their place in the list, and it
+  opens nothing: no screen asks for it. Only they (their account, and the page that
+  makes their passkey) and you (their page in the admin, with Member since) are sent
+  it. Member since is the month you added them, in UTC, so the card and the
+  admin agree wherever they're looked at.
+- The card's three fonts, Fraunces, Grape Nuts and Courier Prime, come from your
+  server, in `fonts/`, and only pages with a card download them. They're under the
+  SIL Open Font License, not the GPL; the licences file names them and gives each
+  licence in full. The pages' Content-Security-Policy now allows fonts from the
+  cinema's own address (`font-src 'self'`), and nowhere else.
+
 ## 1.0.3 — 2026-11-05
 
 ### Changed

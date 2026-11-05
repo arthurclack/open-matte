@@ -39,7 +39,8 @@ export default defineConfig({
 // itself, so a package added, dropped or tree-shaken away changes the file, with no
 // list here to keep up to date (except VENDORED, below). The file starts with Open
 // Matte's own copyright and licence, the GPL, and where its source is: package.json's
-// repository.
+// repository. The fonts the membership card is printed in, which the app serves from
+// web/public/fonts, come last, each with its licence (FONTS, below).
 
 export const LICENCES_FILE = 'third-party-licenses.txt';
 const SELF = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
@@ -59,7 +60,7 @@ export function thirdPartyLicenses() {
       }
       const source = sourceUrl(SELF);
       if (!source) this.warn(`package.json has no repository, so ${LICENCES_FILE} can't say where Open Matte's source code is.`);
-      this.emitFile({ type: 'asset', fileName: LICENCES_FILE, source: licenceNotices(packages, { source }) });
+      this.emitFile({ type: 'asset', fileName: LICENCES_FILE, source: licenceNotices(packages, { source, fonts: shippedFonts() }) });
     },
   };
 }
@@ -208,6 +209,23 @@ function licenceId(json) {
   return all.length ? all.join(' OR ') : null;
 }
 
+// ------------------------------------------------------------ fonts
+// The membership card's fonts, served unchanged from web/public/fonts (they are in
+// public/, so no module imports them and the bundle can't list them). Each is under
+// the SIL Open Font License 1.1, not the GPL, and its licence, copyright line first,
+// is kept beside it as <family>-OFL.txt, which the licences file repeats in full.
+export const FONTS = [
+  { name: 'Fraunces', file: 'Fraunces-Variable.ttf', licenceFile: 'Fraunces-OFL.txt', use: "the shop's name and \"Membership card\", on the front" },
+  { name: 'Grape Nuts', file: 'GrapeNuts-Regular.ttf', licenceFile: 'GrapeNuts-OFL.txt', use: "the member's name, written on the back" },
+  { name: 'Courier Prime', file: 'CourierPrime-Regular.ttf', licenceFile: 'CourierPrime-OFL.txt', use: 'the typed month and year, and the membership number' },
+];
+const FONTS_DIR = new URL('./web/public/fonts/', import.meta.url);
+
+// FONTS with each licence's text: [{ name, file, use, licence, text }].
+export function shippedFonts(dir = FONTS_DIR) {
+  return FONTS.map(({ name, file, licenceFile, use }) => ({ name, file, use, licence: 'OFL-1.1', text: tidy(fs.readFileSync(new URL(licenceFile, dir), 'utf8')) }));
+}
+
 const RULE = '='.repeat(80);
 
 // Open Matte's own copyright notice. The GPL asks for one on every copy, and the app
@@ -240,8 +258,9 @@ const NOTES = {
 // The file itself: Open Matte's own copyright, licence and where its source is
 // (`source`, a URL or null), the packages in a list, then each package's licence. A
 // package carried inside another is listed, and given, after it. The last line says
-// the file ends there, so a copy cut short shows it.
-export function licenceNotices(packages, { source = null } = {}) {
+// the file ends there, so a copy cut short shows it. `fonts` (shippedFonts) are named
+// after the TMDB logo and given in full after the packages.
+export function licenceNotices(packages, { source = null, fonts = [] } = {}) {
   const out = [
     'Licences',
     '',
@@ -257,6 +276,7 @@ export function licenceNotices(packages, { source = null } = {}) {
     // The one file in the build that isn't free software (web/public/tmdb.svg).
     "The TMDB logo (tmdb.svg) is a trademark of TMDB and isn't covered by the GPL.",
     '',
+    ...(fonts.length ? [...fontsParagraph(fonts), ''] : []),
     'The app also includes code from the open-source packages below. Their licences',
     'ask for the licence text to go with every copy of the code, so each one appears',
     'here as the package ships it, followed by the licence in full where a package',
@@ -297,6 +317,36 @@ export function licenceNotices(packages, { source = null } = {}) {
       out.push(t.text);
     });
   }
+  for (const f of fonts) {
+    out.push('', RULE, `${f.name} (fonts/${f.file}), a font`, `Licence: ${f.licence}`, RULE, '');
+    out.push(...wrap(`Used for ${f.use} of the membership card. A font made by others, sent unchanged: it is under the SIL Open Font License, not the GPL.`), '');
+    out.push(f.text);
+  }
   out.push('', RULE, 'End of licences');
   return `${out.join('\n')}\n`;
+}
+
+// "The membership card is printed in fonts made by others: Fraunces, Grape Nuts and
+// Courier Prime, ...".
+function fontsParagraph(fonts) {
+  const names = fonts.map((f) => f.name);
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
+  return wrap(
+    `The membership card is printed in ${fonts.length === 1 ? 'a font' : 'fonts'} made by others: ${list}, in fonts/. ` +
+      `${fonts.length === 1 ? 'It is' : 'They are'} under the SIL Open Font License, version 1.1, not the GPL, and ` +
+      `${fonts.length === 1 ? 'its licence is' : 'their licences are'} given in full at the end of this file.`,
+  );
+}
+
+// Lines of at most 80 characters, like the rest of the file.
+function wrap(text) {
+  const lines = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    if (line && line.length + 1 + word.length > 80) {
+      lines.push(line);
+      line = word;
+    } else line = line ? `${line} ${word}` : word;
+  }
+  return [...lines, line];
 }

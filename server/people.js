@@ -3,6 +3,7 @@
 // signed-in session is all it produces, and access.js decides the rest.
 import crypto from 'node:crypto';
 import { tx } from './db.js';
+import { membershipOf } from './membership.js';
 import { deviceLabel, randomToken, sha256 } from './sessions.js';
 import { PasskeyError, clientData, registrationOptions, signInOptions, verifyRegistration, verifySignIn } from './webauthn.js';
 
@@ -258,7 +259,7 @@ export function createPeople({ db, sessions, access, settings, rp, ceremonies })
       }
       const signedIn = sessions.signIn(req, { personId: person.id, passkeyId, currentHash }, now);
       event('passkey-added', person.id, { via: link.purpose, device }, { sessionHash: signedIn.session.id_hash }, now);
-      return { ...signedIn, person: { name: person.name }, slug: linkFilm(link)?.slug ?? null };
+      return { ...signedIn, person: { name: person.name }, membership: membershipOf(person), slug: linkFilm(link)?.slug ?? null };
     }, { immediate: true });
   }
 

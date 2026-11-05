@@ -169,6 +169,10 @@ repository or a Docker image, does convey it.
 `web/public/tmdb.svg` is TMDB's logo and trademark, included unchanged because TMDB's
 terms require apps that use its data to show it. It isn't covered by the GPL.
 
+`web/public/fonts/` holds the membership card's fonts, Fraunces, Grape Nuts and
+Courier Prime, unchanged, each under the SIL Open Font License 1.1 (its licence is
+beside it, and in the licences file), not the GPL.
+
 ### Third-party licences
 
 The web app also includes other people's open-source code: hls.js (Apache License

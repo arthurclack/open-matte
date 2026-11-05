@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api, formatDayTime } from '../api.js';
 import { enrollLink } from '../enrollLink.js';
+import MembershipCard, { loadCardFonts } from '../MembershipCard.jsx';
 import { OpenInBrowser } from '../PasskeySignIn.jsx';
 import { anotherBrowserMayHelp, browserProblem, createPasskey, serverProblem, supportsPasskeys, useCeremonyOptions } from '../passkeys.js';
 import { useSite } from '../site.jsx';
@@ -19,7 +20,11 @@ const Page = ({ children }) => (
     {children}
   </div>
 );
-const Title = ({ children }) => <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>{children}</h1>;
+const Title = ({ children, ...attrs }) => (
+  <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }} {...attrs}>
+    {children}
+  </h1>
+);
 
 // /enroll#<token>: create a passkey from a setup or recovery link. The token is in the
 // fragment, which never reaches the server; once read, this tab keeps it (enrollLink.js).
@@ -71,6 +76,18 @@ function EnrollLink({ token }) {
   // The browser itself said no: it may be an app's built-in browser that looked as if
   // it could use passkeys (see OpenInBrowser).
   const [refusedHere, setRefusedHere] = useState(false);
+  const doneRef = useRef(null);
+
+  // The membership card's fonts, asked for now, so they have come by the time the
+  // card appears with the name being written on it: a new member never has them yet.
+  useEffect(() => {
+    loadCardFonts();
+  }, []);
+  // The button that was pressed has gone: the heading saying it worked takes the focus,
+  // so a screen reader says so.
+  useEffect(() => {
+    if (done) doneRef.current?.focus();
+  }, [done]);
 
   const fetchOptions = useCallback(() => api.post('/api/enroll/options', { token }), [token]);
   const ceremony = useCeremonyOptions(fetchOptions, { enabled: Boolean(token) && !deadCode && !done });
@@ -97,7 +114,7 @@ function EnrollLink({ token }) {
       .then((r) => {
         enrollLink.forget();
         // The link may carry a ticket: then it ends on that film.
-        setDone({ ...r, film: r.slug ? info.film : null });
+        setDone({ ...r, film: r.slug ? info.film : null, again: info.purpose !== 'setup' });
         refresh();
       })
       .catch((err) => {
@@ -117,10 +134,19 @@ function EnrollLink({ token }) {
   }
 
   if (done) {
+    // The card, back up. New: their name is written on it as it appears. A recovery
+    // link (a new phone, a lost one): the same card as before, name and all.
     return (
       <Page>
-        <Title>You're in, {done.person.name}</Title>
-        <p className="dim">Your passkey is ready. Next time, use it to sign in.</p>
+        <Title ref={doneRef} tabIndex={-1} className="focus-target">
+          {done.again ? 'Your new passkey is ready' : 'Your membership card is ready'}
+        </Title>
+        <p className="dim">{done.again ? 'Your membership card is the same as before. Next time, sign in with the new passkey.' : 'Your passkey is ready. Next time, use it to sign in.'}</p>
+        {done.membership && (
+          <div className="enroll-card">
+            <MembershipCard site={site} name={done.person.name} membership={done.membership} start="back" writeOn={!done.again} />
+          </div>
+        )}
         <button className="btn primary" onClick={() => navigate(done.slug ? `/${done.slug}` : '/', { replace: true })}>
           {done.film ? `Continue to ${done.film.title}` : 'Continue'}
         </button>

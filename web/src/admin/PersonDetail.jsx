@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, formatAgo, formatDateTime, formatDayTime, plural } from '../api.js';
+import { api, formatAgo, formatDateTime, formatDayTime, formatMonthYear, plural } from '../api.js';
+import { groupNumber } from '../membershipCard.js';
 import { CreatedLink, PasskeysProblem, PersonBadge, peopleError } from './People.jsx';
 import { TicketTable } from './Tickets.jsx';
 import { ErrorNote, describeEvent, linkLifetime, useAction, useLoad } from './ui.jsx';
@@ -204,6 +205,15 @@ export default function PersonDetail() {
           <dl className="kv">
             <dt>Added</dt>
             <dd>{formatDateTime(p.createdAt)}</dd>
+            {/* What their membership card says. Printed on a card, not a key: nothing accepts it. */}
+            {p.membership && (
+              <>
+                <dt>Membership number</dt>
+                <dd className="nowrap">{groupNumber(p.membership.number)}</dd>
+                <dt>Member since</dt>
+                <dd>{formatMonthYear(p.membership.since)}</dd>
+              </>
+            )}
             <dt>Passkeys</dt>
             <dd>{p.passkeys.length || (p.setUp ? 'None' : 'None yet')}</dd>
             <dt>Signed in on</dt>

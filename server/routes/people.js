@@ -1,5 +1,6 @@
 import express from 'express';
 import { publicOrigin } from '../config.js';
+import { membershipOf } from '../membership.js';
 
 const bad = (message, status = 400) => Object.assign(new Error(message), { status });
 
@@ -75,6 +76,8 @@ export function peopleRoutes({ db, people }) {
     const now = Date.now();
     return {
       ...summary(p, now),
+      // The number on their membership card and when they became a member.
+      membership: membershipOf(p),
       passkeys: q.passkeys.all(p.id).map((k) => ({ ...k, synced: Boolean(k.synced) })),
       browsers: q.browsers.all(p.id, now),
       links: q.links.all(p.id).map((l) => ({ ...l, reset: Boolean(l.reset) })),

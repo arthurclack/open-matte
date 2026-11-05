@@ -96,7 +96,7 @@ async function enrollThrough(page, name) {
   await page.goto(await admin.setupLink(person.id));
   await expect(page.getByRole('heading', { name: `Welcome, ${name}` })).toBeVisible();
   await page.getByRole('button', { name: 'Create a passkey' }).click();
-  await expect(page.getByRole('heading', { name: `You're in, ${name}` })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your membership card is ready' })).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(menu(page, name)).toBeVisible();
   return person;
@@ -133,7 +133,7 @@ test('a setup link: the token leaves the address, stays in this tab until it is 
 
   await test.step('creating the passkey uses the link up, and the tab lets it go', async () => {
     await page.getByRole('button', { name: 'Create a passkey' }).click();
-    await expect(page.getByRole('heading', { name: `You're in, ${name}` })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your membership card is ready' })).toBeVisible();
     expect(await keptLink(page)).toBeNull();
   });
 
@@ -237,7 +237,7 @@ test('a passkey or sign-in the cinema refuses gets a fresh challenge before the 
     await auth.spoil({});
     // The button waits for fresh options: the server has taken the first challenge.
     await page.getByRole('button', { name: 'Create a passkey' }).click();
-    await expect(page.getByRole('heading', { name: `You're in, ${name}` })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your membership card is ready' })).toBeVisible();
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(menu(page, name)).toBeVisible();
   });
@@ -331,7 +331,7 @@ test("after a refused attempt, Copy link on /enroll puts the whole setup link ba
 
   // The cinema never saw the refused attempt, so its challenge still works.
   await page.getByRole('button', { name: 'Create a passkey' }).click();
-  await expect(page.getByRole('heading', { name: `You're in, ${name}` })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your membership card is ready' })).toBeVisible();
 });
 
 test('after a refused attempt, Sign in and keep it says to open the link you were sent: the film page has no code to copy', async ({ page }, testInfo) => {

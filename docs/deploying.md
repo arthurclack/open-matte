@@ -624,8 +624,9 @@ CSP blocked img-src https://tracker.example.com on /arrival (Chrome on Android):
 
 Each line gives the rule that blocked it, what was blocked, the page's path, and the
 browser and device that said so, as your account page names them. The rules:
-`img-src` is images, `media-src` the film itself, `script-src` and `style-src`
-scripts and styles, `connect-src` the app's own requests. A rule's name may end in
+`img-src` is images, `media-src` the film itself, `font-src` the membership card's
+fonts, `script-src` and `style-src` scripts and styles, `connect-src` the app's own
+requests. A rule's name may end in
 `-elem` (a script or style element) or `-attr` (a script or style written on an
 element: `onclick=` and the like, or `style=`), as in `script-src-elem`,
 `style-src-elem`, `script-src-attr` and `style-src-attr`.
@@ -635,7 +636,7 @@ page, or another site tried to show the cinema in a frame. Please report any of
 these, and any `script-src-attr` line: the cinema writes no script on an element, so
 it may mean someone found a way to add their own.
 
-Any other name, such as `font-src`, `frame-src`, `worker-src` or `manifest-src`, is
+Any other name, such as `frame-src`, `worker-src` or `manifest-src`, is
 something the cinema never uses, so it is almost always an extension or other
 software on the visitor's device.
 

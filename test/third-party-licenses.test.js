@@ -31,7 +31,7 @@ else {
     skip = `Vite isn't installed (${err.message})`;
   }
 }
-const { LICENCES_FILE, VENDORED, bundledPackages, licenceNotices, sourceUrl, thirdPartyLicenses } = build;
+const { FONTS, LICENCES_FILE, VENDORED, bundledPackages, licenceNotices, shippedFonts, sourceUrl, thirdPartyLicenses } = build;
 
 const PKG = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const APACHE_TERMS = 'TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION';
@@ -187,7 +187,8 @@ describe('the build writes the file', { skip }, () => {
     const list = ['@scope/beta 2.0.0 (BSD-3-Clause)', 'alpha 1.2.3 (MIT)', 'delta 4.0.0 (MIT OR Apache-2.0)', 'epsilon 1.0.0 (Apache-2.0)', 'gamma 0.1.0 (ISC)', 'tool 9.9.9 (MIT)', 'zeta 3.1.4 (Apache-2.0)'];
     assert.ok(text.includes(list.map((l) => `  ${l}`).join('\n')), 'the list');
     const headings = [...text.matchAll(/^={80}\n(.+)\nLicence: (.+)\n={80}$/gm)].map((m) => `${m[1]} (${m[2]})`);
-    assert.deepEqual(headings, list);
+    // Then the membership card's fonts.
+    assert.deepEqual(headings, [...list, ...FONTS.map((f) => `${f.name} (fonts/${f.file}), a font (OFL-1.1)`)]);
     assert.ok(text.includes(MIT('Alpha')) && text.includes(MIT('Delta')) && text.includes(MIT('Tool')));
     assert.ok(text.includes('Epsilon includes software from Somebody.'), 'a NOTICE is passed on');
     assert.doesNotMatch(text, /unused|Unused|missing|commonjsHelpers/);
@@ -196,7 +197,10 @@ describe('the build writes the file', { skip }, () => {
 
   test('it ends with a line saying so, after the last licence', () => {
     const text = run(bundle).emitted[0].source;
-    assert.ok(text.endsWith(`Apache License\nVersion 2.0, January 2004\n\n${APACHE_TERMS}\n...${END}`), 'zeta, the last package, then the end');
+    const fonts = text.indexOf(`\n${'='.repeat(80)}\n${FONTS[0].name} (fonts/`);
+    assert.ok(text.slice(0, fonts).endsWith(`Apache License\nVersion 2.0, January 2004\n\n${APACHE_TERMS}\n...\n`), 'zeta, the last package, then the fonts');
+    const last = shippedFonts().at(-1);
+    assert.ok(text.endsWith(`${last.text}${END}`), 'the last font’s licence, then the end');
     assert.equal(text.split('End of licences').length, 2, 'once');
   });
 
@@ -238,9 +242,10 @@ describe('the build writes the file', { skip }, () => {
 
   test('a bundle with no packages still gets the file, saying so', () => {
     const { emitted, warnings } = run({ 'assets/index.js': { type: 'chunk', moduleIds: [`${root}/src/main.jsx`] } });
-    assert.ok(emitted[0].source.endsWith(`\nThis build includes no third-party packages.${END}`));
+    assert.ok(emitted[0].source.includes(`\nThis build includes no third-party packages.\n\n${'='.repeat(80)}\n${FONTS[0].name} (fonts/`));
+    assert.ok(licenceNotices([]).endsWith(`\nThis build includes no third-party packages.${END}`), 'and with no fonts either, nothing after it');
     assert.deepEqual(aboutPackages(warnings), []);
-    assert.equal(licenceNotices([], { source: sourceUrl(PKG) }), emitted[0].source);
+    assert.equal(licenceNotices([], { source: sourceUrl(PKG), fonts: shippedFonts() }), emitted[0].source);
   });
 
   // The start, line for line: Open Matte, its copyright, its licence, its source and
@@ -417,6 +422,62 @@ describe('the links to it', { skip }, () => {
 });
 
 // The server's side runs everywhere: it serves whatever the build wrote.
+// The fonts the membership card is printed in: served as they are from
+// web/public/fonts, each with its licence beside it and in the licences file.
+describe('the membership card’s fonts', { skip }, () => {
+  const FONTS_DIR = new URL('../web/public/fonts/', import.meta.url);
+  const CARD_CSS = new URL('../web/src/membershipCard.css', import.meta.url);
+
+  test('each is in web/public/fonts, with its OFL beside it, copyright line first', () => {
+    for (const f of FONTS) {
+      const font = fs.readFileSync(new URL(f.file, FONTS_DIR));
+      // A TrueType file: version 1.0's tag.
+      assert.equal(font.readUInt32BE(0), 0x00010000, `${f.file} is a TrueType font`);
+      const licence = fs.readFileSync(new URL(f.licenceFile, FONTS_DIR), 'utf8');
+      assert.match(licence, /^Copyright \d{4} The .+ Project Authors/, f.licenceFile);
+      assert.match(licence, /SIL OPEN FONT LICENSE Version 1\.1/);
+    }
+    assert.deepEqual(FONTS.map((f) => f.name), ['Fraunces', 'Grape Nuts', 'Courier Prime']);
+    // Names an address can carry as they are.
+    for (const f of FONTS) assert.match(f.file, /^[A-Za-z0-9.-]+$/);
+  });
+
+  test('the licences file says they are under the OFL, not the GPL, and gives each licence in full', () => {
+    const text = licenceNotices([], { source: sourceUrl(PKG), fonts: shippedFonts() });
+    const intro = text.slice(0, text.indexOf('The app also includes code'));
+    assert.match(
+      intro,
+      /\n\nThe membership card is printed in fonts made by others: Fraunces, Grape Nuts and\nCourier Prime, in fonts\/\. They are under the SIL Open Font License, version 1\.1,\nnot the GPL, and their licences are given in full at the end of this file\.\n\n$/,
+    );
+    for (const f of shippedFonts()) {
+      const at = text.indexOf(`\n${f.name} (fonts/${f.file}), a font\nLicence: OFL-1.1\n`);
+      assert.ok(at > 0, f.name);
+      const section = text.slice(at, text.indexOf(`\n${'='.repeat(80)}\n`, at + 100));
+      assert.ok(section.replace(/\s+/g, ' ').includes('A font made by others, sent unchanged: it is under the SIL Open Font License, not the GPL.'), f.name);
+      assert.ok(section.includes(f.text), `${f.name}'s licence, whole`);
+      assert.ok(section.includes(f.text.split('\n')[0]), `${f.name}'s copyright line`);
+    }
+    assert.ok(text.split('\n').every((line) => line.length <= 80 || /^(Copyright|http)/.test(line) || / {2}/.test(line) || line.includes('github.com')), 'its own lines fit 80 columns');
+  });
+
+  test('the card’s stylesheet declares each one, from this site, letting text show while it loads', () => {
+    const css = fs.readFileSync(CARD_CSS, 'utf8');
+    const faces = [...css.matchAll(/@font-face\s*{([^}]*)}/g)].map((m) => m[1]);
+    assert.equal(faces.length, FONTS.length);
+    for (const f of FONTS) {
+      const face = faces.find((x) => x.includes(`font-family: '${f.name}'`));
+      assert.ok(face, f.name);
+      assert.match(face, new RegExp(`src: url\\('/fonts/${f.file.replace('.', '\\.')}'\\) format\\('truetype'\\);`));
+      assert.match(face, /font-display: swap;/);
+    }
+    // Only the card's stylesheet: the rest of the app never asks for them.
+    for (const file of fs.readdirSync(new URL('../web/src/', import.meta.url), { recursive: true })) {
+      if (!/\.(css|jsx?)$/.test(file) || file === 'membershipCard.css') continue;
+      assert.doesNotMatch(fs.readFileSync(new URL(`../web/src/${file}`, import.meta.url), 'utf8'), /@font-face|\/fonts\//, file);
+    }
+  });
+});
+
 describe('serving it, and the version', () => {
   const NOTICES = 'Third-party licences\n\nThe web app this site sends to your browser includes code ...\n';
   let srv;

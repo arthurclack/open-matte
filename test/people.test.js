@@ -283,7 +283,8 @@ describe('setup links', () => {
     const auth = softAuthenticator();
     const done = await b.post('/api/enroll/finish', { token: l.token, credential: auth.create(second.data.options) });
     assert.equal(done.status, 200, JSON.stringify(done.data));
-    assert.deepEqual(done.data, { person: { name }, slug: null });
+    // And their membership card, which only they and the admin are sent (membership.test.js).
+    assert.deepEqual(done.data, { person: { name }, slug: null, membership: (await detail(p.id)).membership });
     assert.ok(b.jar.get('om_session'));
     assert.deepEqual(await personIn(b), { name });
 

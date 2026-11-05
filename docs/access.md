@@ -492,6 +492,12 @@ hasn't been used. So send setup links to the person's own phone or computer, and
 suggest a private window on a borrowed one.
 
 **Your account** (`/account`, in the menu under their name) shows a signed-in person
+their membership card, which turns over: your cinema's name on the front, and their
+name, the month and year you added them and their membership number on the back (the
+page that makes their passkey ends on the same card). The number is 11 digits,
+worked out from the random id their passkeys carry, so it never changes, not even
+after a reset; it's printed on the card, not a key, and nothing accepts it. Only they
+and you (on their page in the admin) are sent it. The account page also shows
 their passkeys (Synced or This device only, when and where each was added, whether
 from the setup link or a recovery link, when last used, and which one signed in
 this browser) and every browser signed in as them (device, when it signed in, when
