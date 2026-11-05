@@ -37,7 +37,7 @@ test('a request refused after a takeover says another device has the screening, 
   const otherReports = heartbeats(other);
   await test.step('another browser opens the link and resumes the screening, then pauses', async () => {
     await other.goto(`/t/${ticket.code}`);
-    await expect(playButton(other)).toHaveText(/^▶ Resume/);
+    await expect(playButton(other)).toHaveText(/^Resume/);
     await playButton(other).click();
     await media.playedPast(other, 0.5);
     await other.locator('video').evaluate((v) => v.pause());

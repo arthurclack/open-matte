@@ -15,7 +15,7 @@ test('a passkey set up from a link signs in, keeps a ticket, and shows on the ac
   const name = unique('Ada', testInfo);
   const person = await admin.newPerson(name);
   const setupLink = await admin.setupLink(person.id);
-  const menu = page.getByRole('button', { name: `${name} ▾` });
+  const menu = page.getByRole('button', { name, exact: true });
 
   // A passkey provider built into this browser: it answers every request at once,
   // as if the person had used Touch ID.

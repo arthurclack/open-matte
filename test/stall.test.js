@@ -19,13 +19,18 @@ const POOL = Number(process.env.UV_THREADPOOL_SIZE) || 4;
 const TIMEOUT_MS = 300;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// A request that gives up after `ms`: { status, ms } or { status: null } for no answer.
+// A request that gives up after `ms`: { status, ms, waited } or { status: null } for
+// no answer. `ms` is until the whole answer has come, `waited` until it started: any
+// wait for a place is in that. Reading a 64 MB poster through fetch takes most of a
+// second on a small server, and longer on Node 22, so `ms` can't tell whether a
+// request waited.
 async function timed(url, { headers, ms = 3000 } = {}) {
   const t = Date.now();
   try {
     const r = await fetch(url, { headers, signal: AbortSignal.timeout(ms) });
+    const waited = Date.now() - t;
     await r.arrayBuffer();
-    return { status: r.status, ms: Date.now() - t };
+    return { status: r.status, ms: Date.now() - t, waited };
   } catch {
     return { status: null, ms: Date.now() - t };
   }
@@ -234,10 +239,11 @@ describe('one browser, or one address, can’t take every place on the films’ 
     // Started together: two are sent, and the others wait for one of those to finish.
     const stalled = Promise.all(Array.from({ length: 6 }, () => stall(srv.base, '/media/arrival/hls/v_h264_720/big.m4s', greedy)));
     await sleep(200);
-    const t = Date.now();
     const r = await timed(`${srv.base}/media/arrival/hls/v_h264_720/seg_0.m4s`, { headers: { cookie: other } });
     assert.equal(r.status, 200, 'another viewer still plays');
-    assert.ok(Date.now() - t < 900, 'without waiting for a place');
+    // Had the browser's waiting downloads held places everyone shares, this one would
+    // only get one at their 503s, 800 ms in.
+    assert.ok(r.waited < 400, `without waiting for a place (${r.waited} ms)`);
     const done = await stalled;
     assert.equal(sending(done), 2, JSON.stringify(done.map((s) => s.status)));
     // The rest waited their time behind the browser's own, and got a 503.
@@ -264,15 +270,15 @@ describe('one browser, or one address, can’t take every place on the films’ 
     await sleep(200);
     // The posters waiting behind the browser's other posters hold none of its places,
     // so they hold three of its four, waiting or not, and its player still plays.
-    let t = Date.now();
+    // Had the waiting posters held places the next two requests need, each would only
+    // get one at those posters' 503s, 2.8 seconds in.
     const own = await timed(`${srv.base}/media/arrival/hls/v_h264_720/seg_0.m4s`, { headers: { cookie: greedy } });
     assert.equal(own.status, 200, 'the same browser’s segment');
-    assert.ok(Date.now() - t < 1500, 'without waiting for a place');
+    assert.ok(own.waited < 1500, `without waiting for a place (${own.waited} ms)`);
     // And another viewer's poster still has places of its own.
-    t = Date.now();
     const theirs = await timed(srv.base + poster, { headers: { cookie: other } });
     assert.equal(theirs.status, 200, 'another viewer’s poster');
-    assert.ok(Date.now() - t < 1500, 'without waiting for a place');
+    assert.ok(theirs.waited < 1500, `without waiting for a place (${theirs.waited} ms)`);
     const done = await stalled;
     assert.deepEqual(done.map((s) => s.status).sort(), [200, 200, 200, 503, 503]);
     const rows = srv.app.locals.refusals.view().recent.filter((r) => r.status === 503).map((r) => [r.reason, r.count]);
@@ -283,10 +289,11 @@ describe('one browser, or one address, can’t take every place on the films’ 
     const { srv, poster } = await cinema({ inFlight: 16, artwork: 4, perClient: 4, timeoutMs: 1000, idleMs: 60_000 }, 1);
     const stalled = Promise.all(Array.from({ length: 4 }, () => stall(srv.base, poster, null, '203.0.113.50')));
     await sleep(200);
-    const t = Date.now();
     const r = await timed(srv.base + poster, { headers: { 'x-forwarded-for': '203.0.113.51' } });
     assert.equal(r.status, 200, 'someone else’s preview');
-    assert.ok(Date.now() - t < 900, 'without waiting for a place');
+    // Had the fourth held one of the artwork's places while it waited, this one would
+    // only get it at the fourth's 503, 800 ms in.
+    assert.ok(r.waited < 400, `without waiting for a place (${r.waited} ms)`);
     assert.equal(sending(await stalled), 3, 'three of the four at a time');
   });
 

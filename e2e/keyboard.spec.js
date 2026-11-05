@@ -67,7 +67,7 @@ async function signedInFrontPage(page, context, testInfo) {
   const { cookie } = await signedInPerson(name);
   await context.addCookies([cookie]);
   await page.goto('/');
-  return page.getByRole('button', { name: `${name} ▾` });
+  return page.getByRole('button', { name, exact: true });
 }
 
 test('the name menu opens with Enter and closes with Escape, focus staying on its button', async ({ page, context }, testInfo) => {

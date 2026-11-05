@@ -38,7 +38,8 @@ export default defineConfig({
 // other file in dist/ and the footers link to. The list is read from the bundle
 // itself, so a package added, dropped or tree-shaken away changes the file, with no
 // list here to keep up to date (except VENDORED, below). The file starts with Open
-// Matte's own licence, the GPL, and where its source is: package.json's repository.
+// Matte's own copyright and licence, the GPL, and where its source is: package.json's
+// repository.
 
 export const LICENCES_FILE = 'third-party-licenses.txt';
 const SELF = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
@@ -143,7 +144,9 @@ function packageDir(id, root) {
 
 // LICENSE, LICENCE.md, COPYING, LICENSE-MIT and the like, then any NOTICE (Apache 2.0
 // asks for that to be passed on too). Files only, and not code that shares the name.
-const LICENCE_FILE = /^(?:licen[cs]e|copying)(?:[.\-_][\w.-]*)?$/i;
+// THIRD-PARTY-LICENSE too: Rolldown's holds the licences of the code its own is
+// derived from (Rollup's and esbuild's), and its LICENSE points to it.
+const LICENCE_FILE = /^(?:third-party-)?(?:licen[cs]e|copying)(?:[.\-_][\w.-]*)?$/i;
 const NOTICE_FILE = /^notice(?:[.\-_][\w.-]*)?$/i;
 const CODE = /\.(?:[cm]?js|ts|json|map)$/i;
 
@@ -207,25 +210,58 @@ function licenceId(json) {
 
 const RULE = '='.repeat(80);
 
-// The file itself: Open Matte's own licence and where its source is (`source`, a URL
-// or null), the packages in a list, then each package's licence. A package carried
-// inside another is listed, and given, after it.
+// Open Matte's own copyright notice. The GPL asks for one on every copy, and the app
+// sent to browsers is a copy too. The owner confirmed it.
+const COPYRIGHT = 'Copyright (C) 2026 Arthur Clack';
+
+// The build tools that write a little of their own code into the bundle (see
+// bundledPackages) are listed like any other package, but almost none of either is in
+// the app, and Vite's licence file is mostly the licences of packages bundled inside
+// Vite for its own use. Without a note, the file would seem to say those are in the
+// app. What each note says was checked against a build of Vite 8.3 with Rolldown 1.2:
+// of Vite, the bundle has \0vite/preload-helper.js, and of Rolldown, \0rolldown/runtime.js,
+// whose helpers wrap React's CommonJS files, and \0vite/modulepreload-polyfill.js. That
+// id names Vite, but Vite 8 has Rolldown's own plugin write the code.
+const NOTES = {
+  vite: [
+    'Vite builds the app, and only a small part of it ends up in the app: a little',
+    "code that loads the app's files. Its licence file below also covers packages",
+    'bundled inside Vite itself, which Vite uses for its own work and which never',
+    'reach your browser.',
+  ].join('\n'),
+  rolldown: [
+    'Rolldown is the bundler Vite uses to build the app, and only a small part of it',
+    'ends up in the app: a few helpers that let the app use packages written as',
+    'CommonJS modules, such as React, and a little code that helps older browsers',
+    "load the app's files.",
+  ].join('\n'),
+};
+
+// The file itself: Open Matte's own copyright, licence and where its source is
+// (`source`, a URL or null), the packages in a list, then each package's licence. A
+// package carried inside another is listed, and given, after it. The last line says
+// the file ends there, so a copy cut short shows it.
 export function licenceNotices(packages, { source = null } = {}) {
   const out = [
     'Licences',
     '',
-    'The web app this site sends to your browser is Open Matte. It is free software:',
-    'you can copy, change and share it under the GNU General Public License, version 3 or',
-    '(at your option) any later version',
-    '(https://www.gnu.org/licenses/gpl-3.0.html).',
-    source ? `Its source code is at ${source}` : "This copy doesn't say where its source code is: ask whoever runs this site.",
-    // The one file in the build that isn't free software (web/public/tmdb.svg).
-    "tmdb.svg is TMDB's logo and trademark, and isn't covered by the GPL.",
+    'The web app this site sends to your browser is Open Matte.',
+    COPYRIGHT,
     '',
-    'It also includes code from the open-source packages below. Their licences ask for',
-    'the licence text to go with every copy of the code, so here is each one as the',
-    'package ships it, followed by the licence in full where a package only points to',
-    'it. The list is made when the app is built, from the packages that ended up in it.',
+    'It is free software: you can copy, change and share it under the GNU General',
+    'Public License, version 3 or (at your option) any later version:',
+    'https://www.gnu.org/licenses/gpl-3.0.html',
+    '',
+    source ? `Its source code is at ${source}` : "This copy doesn't say where its source code is: ask whoever runs this site.",
+    '',
+    // The one file in the build that isn't free software (web/public/tmdb.svg).
+    "The TMDB logo (tmdb.svg) is a trademark of TMDB and isn't covered by the GPL.",
+    '',
+    'The app also includes code from the open-source packages below. Their licences',
+    'ask for the licence text to go with every copy of the code, so each one appears',
+    'here as the package ships it, followed by the licence in full where a package',
+    'only points to it. This list is made when the app is built, from the packages',
+    'that ended up in it.',
     '',
   ];
   if (!packages.length) out.push('This build includes no third-party packages.');
@@ -236,6 +272,10 @@ export function licenceNotices(packages, { source = null } = {}) {
   for (const p of packages.flatMap((p) => [p, ...(p.includes ?? [])])) {
     const heading = p.inside ? `${p.name} ${p.version}, inside ${p.inside}` : `${p.name} ${p.version}`;
     out.push('', RULE, heading, `Licence: ${p.licence ?? 'not stated'}`, RULE, '');
+    // Its own notes only: NOTES[p.name] alone would also find what every object
+    // inherits, for a package called constructor, say.
+    const note = !p.inside && Object.hasOwn(NOTES, p.name) ? NOTES[p.name] : null;
+    if (note) out.push(note, '');
     if (!p.texts.some((t) => !t.added)) {
       out.push(
         p.licence
@@ -244,12 +284,19 @@ export function licenceNotices(packages, { source = null } = {}) {
         ...(p.texts.length ? [''] : []),
       );
     }
-    // More than one text (a licence and a notice, two licences, or one added here) says which is which.
-    const titled = p.texts.length > 1 || p.texts.some((t) => t.added);
-    p.texts.forEach(({ title, text }, i) => {
-      if (titled) out.push(...(i ? [''] : []), `--- ${title} ---`, '');
-      out.push(text);
+    // More than one text (a licence and a notice, two licences, or one added here) says
+    // which is which, and so does a text after a note, so the note isn't read as part of it.
+    const titled = p.texts.length > 1 || p.texts.some((t) => t.added) || Boolean(note);
+    // A package's one licence file is called that. Two or more keep their names, which
+    // tell them apart (LICENSE-MIT, LICENSE-APACHE), and so does a NOTICE, the name the
+    // Apache License gives it.
+    const licenceFiles = p.texts.filter((t) => !t.added && LICENCE_FILE.test(t.title));
+    p.texts.forEach((t, i) => {
+      const label = licenceFiles.length === 1 && t === licenceFiles[0] ? 'Licence file' : t.title;
+      if (titled) out.push(...(i ? [''] : []), `--- ${label} ---`, '');
+      out.push(t.text);
     });
   }
+  out.push('', RULE, 'End of licences');
   return `${out.join('\n')}\n`;
 }

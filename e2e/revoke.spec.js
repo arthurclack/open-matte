@@ -86,7 +86,7 @@ test('giving a screening back mid-film stops the player, which says the screenin
   // The ticket is still good: the page offers a new screening, and Play starts it,
   // from the beginning.
   await expect(page.getByText('Pressing Play starts a screening.', { exact: false })).toBeVisible();
-  await expect(playButton(page)).toHaveText('▶ Play');
+  await expect(playButton(page)).toHaveText('Play');
   await expect(playButton(page)).toBeEnabled();
   const again = page.waitForResponse((r) => r.url().endsWith(`/api/films/${film.slug}/screenings`) && r.request().method() === 'POST');
   await playButton(page).click();

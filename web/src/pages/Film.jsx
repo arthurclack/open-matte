@@ -2,6 +2,8 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, formatClock, formatDate, formatDateTime, formatDateTimeYear, formatRuntime, plural } from '../api.js';
 import { lazyPart } from '../ErrorBoundary.jsx';
+import { PlayIcon } from '../icons.jsx';
+import { scrollBehavior } from '../motion.js';
 import PasskeySignIn, { NewPasskeys } from '../PasskeySignIn.jsx';
 import { supportsPasskeys } from '../passkeys.js';
 import { useSite } from '../site.jsx';
@@ -88,7 +90,7 @@ export default function Film() {
       const s = await api.post(`/api/films/${encodeURIComponent(slug)}/screenings`);
       setScreening({ ...s, key: Date.now() });
       setStopped(false);
-      requestAnimationFrame(() => theatreRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      requestAnimationFrame(() => theatreRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }));
       // The ticket panel then tells of the screening just opened, not the one Play would start.
       load(true);
     } catch (err) {
@@ -229,7 +231,8 @@ function TicketPanel({ access, film, site, signedIn, onPlay, starting, playing, 
         {!access.published && <p>This film isn't published, so ticket holders can't see it yet.</p>}
         {!playing && (
           <button className="btn primary big" onClick={onPlay} disabled={starting || access.mediaStatus === 'error' || access.mediaStatus === 'missing'}>
-            ▶ Preview
+            <PlayIcon />
+            Preview
           </button>
         )}
       </div>
@@ -276,7 +279,8 @@ function TicketPanel({ access, film, site, signedIn, onPlay, starting, playing, 
     const resumeAt = open && open.position > 15 ? ` at ${formatClock(open.position)}` : '';
     button = !playing && (
       <button className="btn primary big" onClick={onPlay} disabled={starting}>
-        ▶ {open ? `Resume${resumeAt}` : 'Play'}
+        <PlayIcon />
+        {open ? `Resume${resumeAt}` : 'Play'}
       </button>
     );
   } else if (t?.state === 'used_up') {

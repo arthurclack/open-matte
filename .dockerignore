@@ -10,6 +10,7 @@ playwright-report
 playwright.config.js
 scripts
 docs
+site
 .env
 .git
 .claude

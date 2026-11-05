@@ -2,9 +2,12 @@
 // docs/history/milestone-3.md. The build collects the licence of every package whose
 // code ends up in the bundle into dist/third-party-licenses.txt (vite.config.js), the
 // server sends it as plain text, and the viewer's footer and the admin's Settings link
-// to it. The file starts with Open Matte's own licence and where its source is.
-// Packages that carry others inside their published code (hls.js) have those listed
-// too. The admin's Settings show package.json's version; viewers are told nothing new.
+// to it. The file starts with Open Matte's own copyright, licence and where its source
+// is, and ends with a line saying it ends there. Packages that carry others inside
+// their published code (hls.js) have those listed too. Vite and Rolldown, of which only
+// a few helpers are in the bundle, have a note saying so, and a THIRD-PARTY-LICENSE
+// beside a LICENSE, as Rolldown has, goes in too. The admin's Settings show
+// package.json's version; viewers are told nothing new.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -37,6 +40,8 @@ const APACHE_NOTICE = 'Copyright (c) Epsilon\n\nLicensed under the Apache Licens
 // The build's warning while package.json names no repository; the other warnings are about packages.
 const NO_REPOSITORY = /^package\.json has no repository/;
 const aboutPackages = (warnings) => warnings.filter((w) => !NO_REPOSITORY.test(w));
+// The file's last lines, whatever it holds.
+const END = `\n\n${'='.repeat(80)}\nEnd of licences\n`;
 
 // A project with packages in node_modules, as npm lays them out. A null file is a folder.
 function writePackage(dir, json, files = {}) {
@@ -80,6 +85,13 @@ if (!skip) {
   writePackage(nm + '/tool', { name: 'tool', version: '9.9.9', license: 'MIT' }, { LICENSE: MIT('Tool') });
   // Installed, but nothing of it is in the bundle.
   writePackage(nm + '/unused', { name: 'unused', version: '1.0.0', license: 'MIT' }, { LICENSE: MIT('Unused') });
+  // A LICENSE that points to a THIRD-PARTY-LICENSE, with the licences of the code its
+  // own is derived from, as Rolldown's does. Not in IDS: its own test bundles it.
+  writePackage(
+    nm + '/eta',
+    { name: 'eta', version: '2.1.0', license: 'MIT' },
+    { LICENSE: `${MIT('Eta')}\n\nThe licenses of the code this is derived from are in THIRD-PARTY-LICENSE.`, 'THIRD-PARTY-LICENSE': `${MIT('Rollup')}\n\n---\n\n${MIT('2020 Evan Wallace')}`, 'README.md': '# eta' },
+  );
   // A package that carries others in its own code, as hls.js does, listing them as its
   // package.json does (with a devDependency that isn't carried, too).
   writePackage(
@@ -170,8 +182,8 @@ describe('the build writes the file', { skip }, () => {
 
   test('says what it is, lists the packages, then gives each one’s licence, by name', () => {
     const text = run(bundle).emitted[0].source;
-    assert.match(text, /^Licences\n\nThe web app this site sends to your browser is Open Matte\./);
-    assert.match(text, /\n\nIt also includes code from the open-source packages below\./);
+    assert.match(text, /^Licences\n\nThe web app this site sends to your browser is Open Matte\.\n/);
+    assert.match(text, /\n\nThe app also includes code from the open-source packages below\./);
     const list = ['@scope/beta 2.0.0 (BSD-3-Clause)', 'alpha 1.2.3 (MIT)', 'delta 4.0.0 (MIT OR Apache-2.0)', 'epsilon 1.0.0 (Apache-2.0)', 'gamma 0.1.0 (ISC)', 'tool 9.9.9 (MIT)', 'zeta 3.1.4 (Apache-2.0)'];
     assert.ok(text.includes(list.map((l) => `  ${l}`).join('\n')), 'the list');
     const headings = [...text.matchAll(/^={80}\n(.+)\nLicence: (.+)\n={80}$/gm)].map((m) => `${m[1]} (${m[2]})`);
@@ -182,14 +194,36 @@ describe('the build writes the file', { skip }, () => {
     assert.ok(text.endsWith('\n') && !text.endsWith('\n\n'));
   });
 
+  test('it ends with a line saying so, after the last licence', () => {
+    const text = run(bundle).emitted[0].source;
+    assert.ok(text.endsWith(`Apache License\nVersion 2.0, January 2004\n\n${APACHE_TERMS}\n...${END}`), 'zeta, the last package, then the end');
+    assert.equal(text.split('End of licences').length, 2, 'once');
+  });
+
   test('a package with more than one text says which is which', () => {
     const text = run(bundle).emitted[0].source;
     const epsilon = text.slice(text.indexOf('\nepsilon 1.0.0\n'), text.indexOf('\ngamma 0.1.0\n'));
-    assert.match(epsilon, /--- LICENSE ---\n\nCopyright \(c\) Epsilon/);
+    assert.match(epsilon, /--- Licence file ---\n\nCopyright \(c\) Epsilon/);
     assert.match(epsilon, /--- NOTICE ---\n\nEpsilon includes/);
     assert.match(epsilon, /--- The Apache License 2\.0, which the package's licence refers to but doesn't include ---\n\n +Apache License/);
+    // Two licence files keep their names, which tell them apart.
+    const delta = text.slice(text.indexOf('\ndelta 4.0.0\n'), text.indexOf('\nepsilon 1.0.0\n'));
+    assert.match(delta, /--- LICENSE-APACHE ---\n\nLicensed under the Apache License/);
+    assert.match(delta, /--- LICENSE-MIT ---\n\nMIT License/);
+    assert.doesNotMatch(text, /^--- LICEN[CS]E(?:\.\w+)? ---$/m, 'a lone licence file is called that, not by its name');
     const alpha = text.slice(text.indexOf('\nalpha 1.2.3\n'), text.indexOf('\ndelta 4.0.0\n'));
     assert.doesNotMatch(alpha, /^---/m, 'one text needs no title');
+  });
+
+  test('a THIRD-PARTY-LICENSE goes in after the LICENSE, each under its name', () => {
+    const packages = bundledPackages([`${nm}/eta/dist/eta.mjs`], { root });
+    assert.deepEqual(packages[0].texts.map((t) => t.title), ['LICENSE', 'THIRD-PARTY-LICENSE']);
+    const text = licenceNotices(packages);
+    assert.ok(
+      text.includes(`\neta 2.1.0\nLicence: MIT\n${'='.repeat(80)}\n\n--- LICENSE ---\n\n${MIT('Eta')}\n\nThe licenses of the code this is derived from are in THIRD-PARTY-LICENSE.\n\n--- THIRD-PARTY-LICENSE ---\n\n${MIT('Rollup')}\n\n---\n\n${MIT('2020 Evan Wallace')}${END}`),
+      'both texts, in full, by name',
+    );
+    assert.doesNotMatch(text, /--- Licence file ---|# eta/);
   });
 
   test('a package with no licence file is named with its licence, says so, and the build warns', () => {
@@ -204,25 +238,78 @@ describe('the build writes the file', { skip }, () => {
 
   test('a bundle with no packages still gets the file, saying so', () => {
     const { emitted, warnings } = run({ 'assets/index.js': { type: 'chunk', moduleIds: [`${root}/src/main.jsx`] } });
-    assert.match(emitted[0].source, /This build includes no third-party packages\.\n$/);
+    assert.ok(emitted[0].source.endsWith(`\nThis build includes no third-party packages.${END}`));
     assert.deepEqual(aboutPackages(warnings), []);
     assert.equal(licenceNotices([], { source: sourceUrl(PKG) }), emitted[0].source);
   });
 
-  test('it starts with Open Matte’s own licence, and where its source is: package.json’s repository', () => {
-    const text = licenceNotices([], { source: 'https://example.com/open-matte' });
-    assert.match(text, /^Licences\n\nThe web app this site sends to your browser is Open Matte\. It is free software:\n/);
-    assert.match(text, /GNU General Public License, version 3 or\n\(at your option\) any later version\n\(https:\/\/www\.gnu\.org\/licenses\/gpl-3\.0\.html\)\.\nIts source code is at https:\/\/example\.com\/open-matte\n/);
-    assert.match(licenceNotices([]), /\nThis copy doesn't say where its source code is: ask whoever runs this site\.\n/);
+  // The start, line for line: Open Matte, its copyright, its licence, its source and
+  // the TMDB logo, each a paragraph of its own, then the packages.
+  const INTRO = (sourceLine) =>
+    [
+      'Licences',
+      '',
+      'The web app this site sends to your browser is Open Matte.',
+      'Copyright (C) 2026 Arthur Clack',
+      '',
+      'It is free software: you can copy, change and share it under the GNU General',
+      'Public License, version 3 or (at your option) any later version:',
+      'https://www.gnu.org/licenses/gpl-3.0.html',
+      '',
+      sourceLine,
+      '',
+      "The TMDB logo (tmdb.svg) is a trademark of TMDB and isn't covered by the GPL.",
+      '',
+      'The app also includes code from the open-source packages below. Their licences',
+      'ask for the licence text to go with every copy of the code, so each one appears',
+      'here as the package ships it, followed by the licence in full where a package',
+      'only points to it. This list is made when the app is built, from the packages',
+      'that ended up in it.',
+      '',
+      '',
+    ].join('\n');
+
+  test('it starts with Open Matte’s copyright and licence, and where its source is: package.json’s repository', () => {
+    const repository = { type: 'git', url: 'git+https://github.com/arthurclack/open-matte.git' };
+    const text = licenceNotices([], { source: sourceUrl({ repository }) });
+    assert.ok(text.startsWith(INTRO('Its source code is at https://github.com/arthurclack/open-matte')), 'the start, line for line');
+    assert.ok(licenceNotices([]).startsWith(INTRO("This copy doesn't say where its source code is: ask whoever runs this site.")), 'with no source');
     // Without a repository the build says so, every time, until there is one.
     const { emitted, warnings } = run(bundle);
     assert.equal(warnings.some((w) => NO_REPOSITORY.test(w)), !sourceUrl(PKG));
-    if (sourceUrl(PKG)) assert.ok(emitted[0].source.includes(`Its source code is at ${sourceUrl(PKG)}\n`));
+    if (sourceUrl(PKG)) {
+      assert.doesNotMatch(sourceUrl(PKG), /^git\+|\.git$/, 'the address a browser opens');
+      assert.ok(emitted[0].source.includes(`\nCopyright (C) 2026 Arthur Clack\n\n`));
+      assert.ok(emitted[0].source.includes(`\n\nIts source code is at ${sourceUrl(PKG)}\n\n`));
+    }
   });
 
   test('it says the TMDB logo is TMDB’s, and not under the GPL, whatever the build holds', () => {
     for (const source of ['https://example.com/open-matte', null]) {
-      assert.match(licenceNotices([], { source }), /\ntmdb\.svg is TMDB's logo and trademark, and isn't covered by the GPL\.\n\n/);
+      assert.match(licenceNotices([], { source }), /\n\nThe TMDB logo \(tmdb\.svg\) is a trademark of TMDB and isn't covered by the GPL\.\n\n/);
+    }
+  });
+
+  // Vite and Rolldown write a few helpers into the bundle, so they're listed, but Vite's
+  // licence file is mostly the licences of the packages Vite bundles for its own use.
+  test('Vite and Rolldown each have a note on how little of them is in the app, before their licence file', () => {
+    const tool = (name, version, title, text) => ({ name, version, licence: 'MIT', texts: [{ title, text }] });
+    const text = licenceNotices([tool('rolldown', '1.2.15', 'LICENSE', MIT('VoidZero')), tool('vite', '8.3.5', 'LICENSE.md', '# Vite core license\nVite is released under the MIT license:')]);
+    const section = (name, next) => text.slice(text.indexOf(`\n${name}\n`), next ? text.indexOf(`\n${next}\n`) : text.indexOf(END));
+    assert.match(
+      section('vite 8.3.5'),
+      /^\nvite 8\.3\.5\nLicence: MIT\n={80}\n\nVite builds the app, and only a small part of it ends up in the app: a little\ncode that loads the app's files\. Its licence file below also covers packages\nbundled inside Vite itself, which Vite uses for its own work and which never\nreach your browser\.\n\n--- Licence file ---\n\n# Vite core license\n/,
+    );
+    assert.match(
+      section('rolldown 1.2.15', 'vite 8.3.5'),
+      /^\nrolldown 1\.2\.15\nLicence: MIT\n={80}\n\nRolldown is the bundler Vite uses to build the app, and only a small part of it\nends up in the app: a few helpers that let the app use packages written as\nCommonJS modules, such as React, and a little code that helps older browsers\nload the app's files\.\n\n--- Licence file ---\n\nMIT License\n/,
+    );
+    for (const line of text.split('\n')) assert.ok(line.length <= 80, `a line of 80 characters at most: ${line}`);
+    // Every other package has its licence straight after its heading, as before, even
+    // one named after something every object inherits.
+    for (const name of ['react', 'constructor']) {
+      const plain = licenceNotices([tool(name, '19.3.1', 'LICENSE', MIT('Meta'))]);
+      assert.ok(plain.includes(`\n${name} 19.3.1\nLicence: MIT\n${'='.repeat(80)}\n\n${MIT('Meta')}${END}`), name);
     }
   });
 

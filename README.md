@@ -146,6 +146,7 @@ docs/           installing, running and updating, access rules, import format,
                 encoding, film information, and the roadmap
 docs/history/   the project's own build record: milestone plans and device checks
 test/           node:test suites
+site/           the project website, openmatte.dev
 media/          film folders for npm run dev (MEDIA_DIR), not in git
 data/           npm run dev's database, images and backups (DATA_DIR), not in git
 ```
@@ -158,11 +159,12 @@ option) any later version (`GPL-3.0-or-later`). See [LICENSE](LICENSE).
 The GPL's conditions apply when you convey a copy, that is, pass it on. Your site
 sends the built web app to every browser that opens it. That conveys it, so everyone
 who gets it must be offered its source. The site's licences file,
-`/third-party-licenses.txt`, linked from its footer, starts by saying where that
-source is, from `repository` in `package.json`. If you change the web app, publish
-your changed source and point `repository` at it. Server code that only runs on your
-own server isn't conveyed, so the GPL doesn't make you publish changes to it. Passing
-on the code itself, such as a copy of the repository or a Docker image, does convey it.
+`/third-party-licenses.txt`, linked from its footer, starts with Open Matte's
+copyright and licence, and where that source is, from `repository` in `package.json`.
+If you change the web app, publish your changed source and point `repository` at it.
+Server code that only runs on your own server isn't conveyed, so the GPL doesn't make
+you publish changes to it. Passing on the code itself, such as a copy of the
+repository or a Docker image, does convey it.
 
 `web/public/tmdb.svg` is TMDB's logo and trademark, included unchanged because TMDB's
 terms require apps that use its data to show it. It isn't covered by the GPL.

@@ -8,6 +8,69 @@ A release has an **Upgrading** note when updating to it takes more than copying 
 new code and rebuilding: a backup first, a setting to choose, or a migration you can't
 undo without a restore. Read it before you update.
 
+## 1.0.3 — 2026-11-05
+
+### Changed
+
+- **The licences file starts more clearly.** Open Matte's copyright line comes first,
+  then its licence, where its source code is and the note on TMDB's logo, each in a
+  paragraph of its own. Under Vite and Rolldown, a note says that only a little of
+  each is in the app, and that most of Vite's licence file is about packages bundled
+  inside Vite for its own work, which never reach your browser. Rolldown's second
+  licence file, for the code from Rollup and esbuild that its own is derived from, is
+  in it too. The file ends with "End of licences", so a copy that's cut short shows it.
+- **Your account lists this browser first**, then your other signed-in browsers, the
+  most recently seen first. Two that would read the same, such as two Safaris on one
+  Mac signed in on the same day, also say what time each signed in.
+- **The footer is one block**: TMDB's logo and its notice together, then Powered by
+  Open Matte and Licences on a quieter line. Its text is a little smaller, but never
+  under 12px. It no longer repeats the cinema's name, which is at the top of every
+  page.
+- **On a phone, the admin's tabs are one row that scrolls sideways**, with the start of
+  the next tab showing, so you can tell there are more.
+- The tests and the build run on GitHub for every push to main and every pull
+  request, on Node 22, 24 and 26. Dependabot also proposes updates to the actions
+  they use.
+- **hls.js 1.7.4**, which plays the films wherever Safari's own player doesn't. Going
+  back to the audio track that was playing before now finishes the switch, so the
+  audio menu shows it. And while the player has stopped loading to ask the server why
+  it refused a segment, a seek no longer starts it loading again.
+- React Router 7.18.5. Its fixes are for server rendering and the data it streams,
+  which Open Matte doesn't use, so nothing changes on the site.
+- `scripts/deploy.sh` no longer copies `site/`, the project's website, to the server,
+  and building the Docker image leaves it out too. The website is published on its
+  own, at openmatte.dev, and a cinema never uses it.
+
+### Removed
+
+- `scripts/deploy.sh` no longer keeps `deploy/Caddyfile` on the server, so the next
+  deploy deletes it. Caddy's config was there before 1.0.0, and nothing has read it
+  since. From a deploy older than 1.0.0, step 8 of 1.0.0's Upgrading now applies to
+  `scripts/deploy.sh` too: if the deploy stops before it finishes, move Caddy over at
+  once.
+
+### Fixed
+
+- **On a phone, tapping a menu no longer zooms the page, and everything you tap is
+  bigger.** iOS Safari zooms in on a field whose text is under 16px, and the player's
+  Audio, Subtitles and Quality menus and the admin's filters were smaller. On a touch
+  screen, and at a phone's width, every field's text is at least 16px; with a mouse,
+  in a window wider than a phone, nothing changes. The small buttons, such as your
+  name at the top, Admin and the admin's filters, reach 40px for a finger but still
+  show 32px tall, so they look much as before. The player's menus, Aa and its
+  choices, Playback help and the items in the menu with your name are 40px tall, and
+  the admin's filter menus 32px. On a phone, the player's bar is now tidy rows: each
+  label beside its menu, every menu starting at the same place, and Aa beside
+  Subtitles.
+- **Play, Resume, Preview and the menu with your name use drawn icons, not the
+  characters ▶ and ▾.** iOS can draw ▶ as a coloured emoji, and screen readers read
+  them out as "black right-pointing triangle" and the like. The icons are hidden from
+  screen readers, so the buttons are just "Play", "Resume at 42:17" or your name. The
+  ▸ between Settings, Accessibility and Subtitles & Captioning in the subtitle style
+  panel is an icon too, read as a pause. And if your device is set to reduce motion,
+  Play now jumps to the player, and Playback help to its panel, instead of scrolling
+  smoothly, and a poster no longer lifts under the pointer.
+
 ## 1.0.2 — 2026-11-04
 
 ### Upgrading

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from './api.js';
 import { ErrorBoundary } from './ErrorBoundary.jsx';
 import { enrollLink } from './enrollLink.js';
+import { MenuIcon } from './icons.jsx';
 
 const SiteContext = createContext(null);
 
@@ -89,27 +90,27 @@ export function SiteProvider({ children }) {
         <main className="site-main">
           <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
         </main>
+        {/* TMDB's credit, then Powered by and Licences. The cinema's name isn't here:
+            the header and the tab have it. */}
         <footer className="site-footer">
-          <span>{site?.cinemaName}</span>
-          <span>
-            {/* TMDB's terms ask for its logo, less prominent than the cinema's own name
-                and logo, and the notice below, shown prominently, wherever its film
-                information is used. The logo is an <img> from this site, not inline
-                SVG: the page's Content-Security-Policy would block the SVG's own <style>. */}
-            {site?.tmdbCredit && (
-              <>
-                <a href="https://www.themoviedb.org/" rel="noreferrer">
-                  <img className="tmdb-logo" src="/tmdb.svg" width="92" height="12" alt="TMDB" />
-                </a>
-                {' · '}
-              </>
-            )}
+          {/* TMDB's terms ask for its logo, less prominent than the cinema's own name
+              and logo, and its notice, shown prominently, wherever its film information
+              is used: together, as one credit. The logo is an <img> from this site, not
+              inline SVG: the page's Content-Security-Policy would block the SVG's own <style>. */}
+          {site?.tmdbCredit && (
+            <p className="tmdb-credit">
+              <a href="https://www.themoviedb.org/" rel="noreferrer">
+                <img className="tmdb-logo" src="/tmdb.svg" width="92" height="12" alt="TMDB" />
+              </a>{' '}
+              {/* Word for word as TMDB's terms give it. */}
+              <span className="tmdb-notice">This website uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.</span>
+            </p>
+          )}
+          <p>
             {site?.poweredBy && 'Powered by Open Matte · '}
             {/* The licences of the code this site sends to browsers, which the build writes (vite.config.js). */}
             <a href="/third-party-licenses.txt">Licences</a>
-          </span>
-          {/* Word for word as TMDB's terms give it. */}
-          {site?.tmdbCredit && <p className="tmdb-notice">This website uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.</p>}
+          </p>
         </footer>
       </div>
     </SiteContext.Provider>
@@ -195,7 +196,8 @@ function PersonMenu({ me, onSignOut }) {
   return (
     <div className="menu" ref={ref}>
       <button ref={buttonRef} className="btn small" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} disabled={busy}>
-        {me.person.name} ▾
+        {me.person.name}
+        <MenuIcon />
       </button>
       {open && (
         <div className="menu-list" role="menu">

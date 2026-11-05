@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, formatAgo, formatDay } from '../api.js';
+import { api, formatAgo, formatDay, formatDayTime } from '../api.js';
 import { enrollLink } from '../enrollLink.js';
 import { confirmSignOut, useSite } from '../site.jsx';
 
@@ -78,6 +78,12 @@ export default function Account() {
   }
 
   const others = data.browsers.filter((b) => !b.current).length;
+  // The server lists this browser first, then the rest from the most recently seen.
+  // Two that would read the same, such as two Safaris on one Mac signed in on the
+  // same day, also say what time each signed in.
+  const device = (b) => b.device || 'A browser';
+  const sameDay = (a, b) => device(a) === device(b) && formatDay(a.signedInAt) === formatDay(b.signedInAt);
+  const signedIn = (b) => (data.browsers.some((o) => o !== b && sameDay(o, b)) ? formatDayTime(b.signedInAt) : formatDay(b.signedInAt));
 
   return (
     <Page>
@@ -115,11 +121,11 @@ export default function Account() {
         {data.browsers.map((b) => (
           <li key={`${b.signedInAt}-${b.device}`}>
             <div>
-              <strong>{b.device || 'A browser'}</strong>
+              <strong>{device(b)}</strong>
               {b.current && <span className="badge good" style={{ marginLeft: 8 }}>This browser</span>}
             </div>
             <div className="dim">
-              Signed in {formatDay(b.signedInAt)}. Last seen {formatAgo(b.lastSeenAt)}.
+              Signed in {signedIn(b)}. Last seen {formatAgo(b.lastSeenAt)}.
             </div>
           </li>
         ))}

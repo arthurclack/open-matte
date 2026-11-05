@@ -17,18 +17,14 @@ cd "$(dirname "$0")/.."
 # as one downloaded into this folder: they hold people's names and ticket links.
 # .agents and skills-lock.json are coding-agent skills installed on this computer;
 # e2e/.cache, test-results and playwright-report are what npm run e2e leaves behind.
-# deploy/Caddyfile is where Caddy's config was before 1.0.0, and a Caddy started
-# then has that file mounted until the step below recreates it. Deleted first, and
-# the deploy stopping before that (a failed build), the old Caddy couldn't start
-# again after a reboot. So for this release it stays on the server; nothing reads
-# it once Caddy runs from deploy/caddy/. (Drop this exclude in the next release.)
+# site is the project's own website, published on its own: a cinema never uses it.
 rsync -az --delete \
   --exclude node_modules --exclude /dist --exclude /data --exclude /media \
   --exclude '*.db' --exclude '*.db-*' \
   --exclude .env --exclude deploy/.env --exclude .git --exclude .claude \
   --exclude .agents --exclude skills-lock.json \
   --exclude e2e/.cache --exclude test-results --exclude playwright-report \
-  --exclude /deploy/Caddyfile \
+  --exclude /site \
   ./ "$HOST:$DIR/app/"
 
 # Caddy reads its Caddyfile only when it starts, and Compose restarts it only when

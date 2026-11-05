@@ -1,7 +1,9 @@
 import Hls from 'hls.js';
 import { createRef, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { api } from './api.js';
+import { StepIcon } from './icons.jsx';
 import { useMediaSession } from './mediaSession.js';
+import { scrollBehavior } from './motion.js';
 import PlaybackHelp from './PlaybackHelp.jsx';
 import { codecName, scrub } from './playbackHelp.js';
 import { loadPrefs, savePrefs } from './playerPrefs.js';
@@ -612,7 +614,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     setHelpOpen(true);
     requestAnimationFrame(() => {
       helpRef.current?.focus({ preventScroll: true });
-      helpRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      helpRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: 'nearest' });
     });
   }
 
@@ -707,7 +709,10 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
                     </label>
                   ))}
                 </fieldset>
-                <p>On iPhone in full screen, and on AirPlay, your device's own caption style applies (Settings ▸ Accessibility ▸ Subtitles &amp; Captioning).</p>
+                <p>
+                  On iPhone in full screen, and on AirPlay, your device's own caption style applies (Settings <StepIcon /> Accessibility <StepIcon />{' '}
+                  Subtitles &amp; Captioning).
+                </p>
               </div>
             )}
           </div>

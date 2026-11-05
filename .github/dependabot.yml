@@ -1,6 +1,7 @@
-# Dependabot proposes updates to the npm packages and the Docker images Open
-# Matte is built on, once a week. A new release waits a week before it's
-# proposed, so a compromised one has time to be found and withdrawn first.
+# Dependabot proposes updates to the npm packages, the Docker images Open
+# Matte is built on and the GitHub Actions its tests run, once a week. A new
+# release waits a week before it's proposed, so a compromised one has time to
+# be found and withdrawn first.
 # Security alerts are separate: turn on Dependabot alerts in the repository's
 # settings, under Code security.
 version: 2
@@ -27,6 +28,13 @@ updates:
   # deploy/compose.yml's caddy image.
   - package-ecosystem: docker-compose
     directory: /deploy
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+  # The actions .github/workflows/tests.yml runs, pinned to commits.
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
       interval: weekly
     cooldown:

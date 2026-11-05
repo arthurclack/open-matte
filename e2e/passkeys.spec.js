@@ -87,7 +87,7 @@ const refuseOnce = (page, method) =>
 
 const serverLog = () => fs.readFileSync(process.env.E2E_SERVER_LOG, 'utf8');
 const keptLink = (page) => page.evaluate(() => sessionStorage.getItem('om_enroll'));
-const menu = (page, name) => page.getByRole('button', { name: `${name} ▾` });
+const menu = (page, name) => page.getByRole('button', { name, exact: true });
 
 // A person, set up with a passkey in this page's browser from their setup link, and
 // signed in there.

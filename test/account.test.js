@@ -2,6 +2,7 @@
 // ("Endpoints", "Screens: Account", "Slice 5"), not from the implementation. No viewer
 // browser here holds the admin cookie.
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { after, before, describe, test } from 'node:test';
 import { softAuthenticator } from './softauth.js';
 import { adminBrowser, browser, enroll, makeFilm, newPerson, setupLink, signIn, startServer, tempDir } from './helpers.js';
@@ -28,6 +29,8 @@ const uniq = (name) => `${name} ${++counter}`;
 const fresh = () => browser(srv.base);
 const account = (b) => b.get('/api/account');
 const everywhere = (b) => b.post('/api/account/sign-out-everywhere');
+// A viewer session's id in the database (server/sessions.js).
+const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 // A person whose phone used the setup link; device() signs another browser in.
 async function member(name = uniq('Sam'), { synced = true } = {}) {
@@ -89,6 +92,47 @@ describe('GET /api/account', () => {
     assert.ok(hashes.every((h) => !text.includes(h)), 'no session hashes');
     const credentials = srv.db.prepare('SELECT credential_id FROM passkeys').all().map((c) => c.credential_id);
     assert.ok(credentials.every((c) => !text.includes(c)), 'no credential ids');
+  });
+
+  test('lists this browser first, then the rest from the most recently seen', async () => {
+    const sam = await member();
+    const laptop = await sam.device();
+    const tv = await sam.device();
+    const tablet = await sam.device();
+    const now = Date.now();
+    const [MIN, HOUR, DAY] = [60e3, 3600e3, 86400e3];
+    const times = (b, lastSeen, signedIn) =>
+      srv.db.prepare('UPDATE sessions SET last_seen_at = ?, signed_in_at = ? WHERE id_hash = ?').run(lastSeen, signedIn, sha256(b.jar.get('om_session')));
+    // The laptop, reading the page, was last seen four minutes ago: too recently for
+    // the request to bring it up to date (sessions.js), and before the phone.
+    times(laptop, now - 4 * MIN, now - 10 * DAY);
+    times(sam.phone, now - 1 * MIN, now - 20 * DAY);
+    // Seen at the same moment: the newer sign-in first.
+    times(tv, now - 2 * HOUR, now - 5 * DAY);
+    times(tablet, now - 2 * HOUR, now - 3 * DAY);
+
+    const r = await account(laptop);
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.deepEqual(
+      r.data.browsers.map((b) => [b.current, b.signedInAt]),
+      [
+        [true, now - 10 * DAY],
+        [false, now - 20 * DAY],
+        [false, now - 3 * DAY],
+        [false, now - 5 * DAY],
+      ],
+      'the laptop, the phone, the tablet, the TV',
+    );
+    // From the phone, the phone is first, and the laptop next.
+    assert.deepEqual(
+      (await account(sam.phone)).data.browsers.map((b) => [b.current, b.signedInAt]),
+      [
+        [true, now - 20 * DAY],
+        [false, now - 10 * DAY],
+        [false, now - 3 * DAY],
+        [false, now - 5 * DAY],
+      ],
+    );
   });
 
   test('a passkey added with a recovery link, kept on one device', async () => {

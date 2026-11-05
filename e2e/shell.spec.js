@@ -21,7 +21,7 @@ async function signedInWithTicket(context, testInfo, fields = {}) {
   const { person, cookie } = await signedInPerson(name);
   await context.addCookies([cookie]);
   await admin.issueTicket({ personId: person.id, ...fields });
-  return { person, menu: (page) => page.getByRole('button', { name: `${name} ▾` }) };
+  return { person, menu: (page) => page.getByRole('button', { name, exact: true }) };
 }
 
 // Presses Play and waits until the server has started the screening.
@@ -139,7 +139,7 @@ test('the tab is named after the film on its page, and after the cinema again on
 test('a part of the app gone since a deploy: Play says to reload, and reloading resumes', async ({ page }, testInfo) => {
   const ticket = await admin.issueTicket({ label: unique('Deploy', testInfo) });
   await page.goto(`/t/${ticket.code}`);
-  await expect(playButton(page)).toHaveText('▶ Play');
+  await expect(playButton(page)).toHaveText('Play');
   // The player's file from the build this page came with, removed by a newer one.
   await page.route('**/assets/Player-*.js', (route) => route.fulfill({ status: 404, body: '' }));
   expect((await pressPlay(page)).status()).toBe(200);
@@ -149,7 +149,7 @@ test('a part of the app gone since a deploy: Play says to reload, and reloading 
 
   await page.unroute('**/assets/Player-*.js');
   await page.getByRole('button', { name: 'Reload' }).click();
-  await expect(playButton(page)).toHaveText(/^▶ Resume/);
+  await expect(playButton(page)).toHaveText(/^Resume/);
 });
 
 test('mangled links show the front page, or nothing showing, never a blank page', async ({ page }) => {

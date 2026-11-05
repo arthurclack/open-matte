@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { NavLink, Route, Routes, useMatch } from 'react-router-dom';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { NavLink, Route, Routes, useLocation, useMatch } from 'react-router-dom';
 import { api } from '../api.js';
+import { scrollBehavior } from '../motion.js';
 import Activity from './Activity.jsx';
 import FilmDetail from './FilmDetail.jsx';
 import Films from './Films.jsx';
@@ -52,7 +53,7 @@ export default function AdminApp() {
       <div className="admin">
         <nav className="admin-nav">
           <div className="brand">Open Matte</div>
-          <div className="tabs">
+          <Tabs>
             <NavLink to="/admin" end className={({ isActive }) => (isActive || onFilm ? 'active' : undefined)}>
               Films
             </NavLink>
@@ -61,7 +62,7 @@ export default function AdminApp() {
             <NavLink to="/admin/activity">Activity</NavLink>
             <NavLink to="/admin/status">Status</NavLink>
             <NavLink to="/admin/settings">Settings</NavLink>
-          </div>
+          </Tabs>
           <div className="bottom">
             <a href="/">View site</a>
             <button style={{ textAlign: 'left' }} onClick={signOut}>
@@ -94,6 +95,59 @@ export default function AdminApp() {
         </main>
       </div>
     </AdminContext.Provider>
+  );
+}
+
+// Sideways only, as far as it needs, and keeping clear of the row's ends (styles.css).
+const reveal = (tab, behavior) => {
+  const row = tab?.parentElement;
+  // Not while every tab fits: the end padding alone would move the row off the page's edge.
+  if (!row || row.scrollWidth - row.clientWidth <= parseFloat(getComputedStyle(row).paddingRight)) return;
+  tab.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior });
+};
+
+// The sections. On a phone they are one row that scrolls sideways (styles.css), so
+// the current one is scrolled into view when the admin opens and whenever it
+// changes, and so is any tab the keyboard reaches.
+function Tabs({ children }) {
+  const ref = useRef(null);
+  const { pathname } = useLocation();
+  const opened = useRef(false);
+
+  // At once when the admin opens, with nothing to move from; smoothly after that,
+  // unless the person has asked for less motion.
+  // Before the fades are first measured, below, so they start from where it lands.
+  useLayoutEffect(() => {
+    reveal(ref.current.querySelector('a.active'), opened.current ? scrollBehavior() : 'auto');
+    opened.current = true;
+  }, [pathname]);
+
+  // How much of the tabs is hidden past each end of the row, for its fades. Measured
+  // from the tabs, not the scroll, so the row's own padding never counts.
+  useLayoutEffect(() => {
+    const row = ref.current;
+    const measure = () => {
+      const edges = row.getBoundingClientRect();
+      const before = edges.left - row.firstElementChild.getBoundingClientRect().left;
+      const after = row.lastElementChild.getBoundingClientRect().right - edges.right;
+      row.style.setProperty('--more-before', `${Math.max(0, before)}px`);
+      row.style.setProperty('--more-after', `${Math.max(0, after)}px`);
+    };
+    measure();
+    row.addEventListener('scroll', measure, { passive: true });
+    const resized = new ResizeObserver(measure);
+    resized.observe(row);
+    for (const tab of row.children) resized.observe(tab);
+    return () => {
+      row.removeEventListener('scroll', measure);
+      resized.disconnect();
+    };
+  }, []);
+
+  return (
+    <div className="tabs" ref={ref} onFocus={(e) => reveal(e.target, scrollBehavior())}>
+      {children}
+    </div>
   );
 }
 

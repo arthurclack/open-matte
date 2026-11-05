@@ -40,7 +40,8 @@ async function deploy({ reloadFails = 0 } = {}) {
   const repo = tempDir();
   write(path.join(repo, 'scripts', 'deploy.sh'), fs.readFileSync(DEPLOY_SH));
   fs.cpSync(DEPLOY_DIR, path.join(repo, 'deploy'), { recursive: true, filter: (f) => path.basename(f) !== '.env' });
-  for (const f of ['server/index.js', 'server/data/defaults.js', 'web/src/media/icons.js']) write(path.join(repo, f), 'code');
+  for (const f of ['server/index.js', 'server/data/defaults.js', 'web/src/media/icons.js', 'web/src/site.jsx']) write(path.join(repo, f), 'code');
+  write(path.join(repo, 'site', 'index.html'), 'the project website');
   const secret = [
     'data/open-matte.db',
     'media/arrival/film.json',
@@ -57,8 +58,6 @@ async function deploy({ reloadFails = 0 } = {}) {
   const server = tempDir();
   const app = path.join(server, 'app');
   write(path.join(app, 'deploy', '.env'), "the server's settings");
-  // Where Caddy's config was before 1.0.0, and a Caddy started then still mounts it.
-  write(path.join(app, 'deploy', 'Caddyfile'), 'the old Caddyfile');
   write(path.join(app, 'removed-since.txt'));
 
   const bin = tempDir();
@@ -102,11 +101,12 @@ describe('scripts/deploy.sh', { skip, concurrency: true }, () => {
     assert.ok(!sent.includes('removed-since.txt'), 'the server’s copy matches this one');
   });
 
-  test('leaves the Caddyfile from before 1.0.0 in place, for a Caddy still running on it until the new one starts', async () => {
+  test('leaves out the project website, which a cinema never uses', async () => {
     const { code, app } = await deploy();
     assert.equal(code, 0);
-    assert.equal(fs.readFileSync(path.join(app, 'deploy', 'Caddyfile'), 'utf8'), 'the old Caddyfile');
-    assert.ok(!fs.existsSync(path.join(DEPLOY_DIR, 'Caddyfile')), 'this copy has none');
+    const sent = filesUnder(app);
+    assert.deepEqual(sent.filter((f) => f.startsWith('site/')), []);
+    assert.ok(sent.includes('web/src/site.jsx'), 'the app’s own site.jsx is still sent');
   });
 
   test('starts the new code and has Caddy load the new Caddyfile, from a folder it sees the new file through', async () => {

@@ -68,7 +68,7 @@ test("on the viewer site: Your account doesn't come back signed in", async ({ pa
   const name = unique('Sam', testInfo);
   const { cookie } = await signedInPerson(name);
   await context.addCookies([cookie]);
-  const menu = (p) => p.getByRole('button', { name: `${name} ▾` });
+  const menu = (p) => p.getByRole('button', { name, exact: true });
   await page.goto('/account');
   await expect(page.getByText('Signed in here with this')).toBeVisible();
   // Another page, then Sign out there.

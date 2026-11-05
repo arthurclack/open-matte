@@ -11,10 +11,14 @@ export function accountRoutes({ db, sessions, people, limit }) {
       SELECT k.id, k.backed_up, k.created_at, k.added_device, k.last_used_at, l.purpose
       FROM passkeys k LEFT JOIN person_links l ON l.id = k.link_id
       WHERE k.person_id = ? ORDER BY k.created_at`),
+    // This browser first, then the rest from the most recently seen, and the newer
+    // sign-in of two seen at once. This browser goes first by name, not by its time:
+    // a session's last-seen time is only brought up to date every few minutes
+    // (sessions.js), so another browser can look more recent than the one reading.
     browsers: db.prepare(`
       SELECT id_hash, device, signed_in_at, last_seen_at FROM sessions
-      WHERE person_id = ? AND kind = 'viewer' AND revoked_at IS NULL AND expires_at > ?
-      ORDER BY signed_in_at DESC`),
+      WHERE person_id = ?1 AND kind = 'viewer' AND revoked_at IS NULL AND expires_at > ?2
+      ORDER BY id_hash = ?3 DESC, last_seen_at DESC, signed_in_at DESC`),
   };
   // A browser signed in as a person, or a 401.
   const signedIn = (req, res) => {
@@ -74,7 +78,7 @@ export function accountRoutes({ db, sessions, people, limit }) {
         lastUsedAt: k.last_used_at,
         current: k.id === viewer.passkey_id,
       })),
-      browsers: q.browsers.all(viewer.person_id, now).map((s) => ({
+      browsers: q.browsers.all(viewer.person_id, now, viewer.id_hash).map((s) => ({
         device: s.device,
         signedInAt: s.signed_in_at,
         lastSeenAt: s.last_seen_at,

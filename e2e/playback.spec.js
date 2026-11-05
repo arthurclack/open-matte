@@ -15,7 +15,7 @@ test('a ticket link plays the film, switches audio and subtitles, and Playback h
     await expect(page).toHaveURL((url) => url.pathname === `/${film.slug}`);
     expect(page.url()).not.toContain(ticket.code);
     await expect(page.getByRole('heading', { level: 1, name: film.title })).toBeVisible();
-    await expect(playButton(page)).toHaveText('▶ Play');
+    await expect(playButton(page)).toHaveText('Play');
   });
 
   const support = await playbackSupport(page);

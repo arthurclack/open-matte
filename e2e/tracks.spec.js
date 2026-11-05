@@ -3,8 +3,10 @@
 // starts in the languages and subtitle style chosen in the first, and a remembered
 // Off beats its default subtitles; a track turned on outside the bar, as the
 // browser's own menu does, moves the bar. Only the viewer's choices are kept, and
-// only as language codes. Every browser; skips where the browser can't decode
-// H.264 and AAC, since the audio tracks are only known once the film loads.
+// only as language codes. On a phone the bar is rows, with Aa beside Subtitles, or
+// at the left when no menu comes before it. Every browser; skips where the browser
+// can't decode H.264 and AAC, since the audio tracks are only known once the film
+// loads.
 import { admin, audioHeard, expect, film, media, playButton, playbackSupport, secondFilm, test, unique } from './fixtures.js';
 
 // Opens a fresh ticket's link and presses Play, or skips where the film can't play.
@@ -159,5 +161,52 @@ test('a subtitle track turned on outside the bar, as the browser’s own menu do
     // With English audio the forced French track has no reason to show.
     await expect.poll(() => media.subtitleModes(page)).toEqual(['English disabled', 'French disabled', 'French (forced) disabled']);
     expect(await media.remembered(page)).toEqual({ subtitles: 'off' });
+  });
+});
+
+test('on a phone the bar is rows: the menus start at one place, and Aa sits beside Subtitles, or at the left with no menu before it', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { audio, subtitles } = bar(page);
+  const aa = page.getByRole('button', { name: 'Aa subtitle style' });
+  const help = page.getByRole('button', { name: 'Playback help' });
+
+  await test.step('two audio tracks and subtitles: Aa on the Subtitles row, after its menu', async () => {
+    await startFilm(page, testInfo);
+    await expect(audio).toBeVisible();
+    const [heard, shown, style] = await Promise.all([audio, subtitles, aa].map((l) => l.boundingBox()));
+    expect(Math.abs(heard.x - shown.x), 'both menus start at the same place').toBeLessThan(1);
+    expect(style.x).toBeGreaterThanOrEqual(shown.x + shown.width);
+    const middle = style.y + style.height / 2;
+    expect(middle > shown.y && middle < shown.y + shown.height, 'Aa is on the Subtitles row').toBe(true);
+  });
+
+  await test.step('one audio track and only forced subtitles: Aa starts its own row, at the left', async () => {
+    // The same film, as if it had nothing but the French sign to show and only
+    // English to hear: no Audio menu and no Subtitles menu, so Aa comes first.
+    await page.route(
+      (url) => url.pathname === `/api/films/${film.slug}`,
+      async (route) => {
+        const response = await route.fetch();
+        const json = await response.json();
+        json.film.media.subtitles = json.film.media.subtitles.filter((s) => s.forced);
+        await route.fulfill({ response, json });
+      },
+    );
+    await page.route(
+      (url) => url.pathname === `/media/${film.slug}/hls/master.m3u8`,
+      async (route) => {
+        const response = await route.fetch();
+        const body = (await response.text()).replace(/^#EXT-X-MEDIA:TYPE=AUDIO,.*LANGUAGE="fr".*\n/m, '');
+        await route.fulfill({ response, body });
+      },
+    );
+    await startFilm(page, testInfo);
+    // Playing means the audio tracks are known, so no Audio menu is still to come.
+    await media.playedPast(page, 0.5);
+    await expect(audio).toHaveCount(0);
+    await expect(subtitles).toHaveCount(0);
+    const [style, link] = await Promise.all([aa, help].map((l) => l.boundingBox()));
+    expect(Math.abs(style.x - link.x), 'Aa lines up with Playback help, at the left').toBeLessThan(1);
+    expect(style.y + style.height).toBeLessThanOrEqual(link.y);
   });
 });

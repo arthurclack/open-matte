@@ -1,0 +1,43 @@
+# Runs the tests and builds the web app on every push to main and on every pull
+# request, Dependabot's included, on each long-term Node version package.json
+# supports (engines: node >= 22.13). The browser journeys (npm run e2e) need
+# ffmpeg and four browsers, so they stay a step you run yourself before a release.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Reading the code is all it needs.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      # One Node failing shouldn't hide whether the others pass.
+      fail-fast: false
+      matrix:
+        node: [22, 24, 26]
+    steps:
+      # Pinned to a commit, not a tag that could be moved. Dependabot proposes
+      # updates (.github/dependabot.yml).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      # .npmrc turns packages' install scripts off here too.
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      # The project website (site/) builds with the app's own Vite and React,
+      # from these node_modules, so an update to either is checked against it too.
+      # Once is enough.
+      - name: Build the project website
+        if: matrix.node == 26
+        run: node_modules/.bin/vite build --config site/vite.config.mjs
