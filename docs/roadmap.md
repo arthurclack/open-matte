@@ -83,32 +83,88 @@ storage, and v1.0.0 is released.
   server; a changelog; licence notices for the code sent to browsers; v1.0.0 tagged and
   released on GitHub
 
+## Version 2: one tape, one borrower
+
+Agreed on 2026-11-05, not yet planned in detail. Open Matte becomes a small video shelf
+for lending films to friends: you choose a film, write a note for one person, and lend
+it. Each film is one tape, and only one person can have it out at a time. It's 2.0, not
+1.x, because two people can no longer watch the same film at once.
+
+How a loan works:
+
+- Links are sent freely, several for one film if you like. Sending a link doesn't take
+  the tape.
+- Pressing Play takes it, if it's on the shelf. Checking that it's free and taking it
+  happen in one step, so two people can't take it at once.
+- From then on the borrower has a set time to watch, shown as the date it's due back.
+- While it's out, anyone else with a link sees "Out on loan" and the date it's due back,
+  never who has it, and can't press Play.
+- It comes back when the time runs out, when the borrower returns it early, or when you
+  take it back.
+
+In 2.0:
+
+- [ ] Loans: one tape per film, taken on the first Play, due back after a set time
+- [ ] The note on the tape. From milestone 4:
+  - Picked for you: your message to one person about one film or programme, kept apart
+    from your general note about the film, so editing one never changes the other
+- [ ] Handing it back, when the tape comes back, for signed-in friends only (anyone a
+  link was forwarded to could write one). From milestone 4:
+  - A private response after watching ("Loved it", "Still thinking about it", "Not for
+    me", "Let's talk") with an optional message, shared only with you, and saying so
+- [ ] On your card: what you have out and when it's due back, and continue watching
+  (the first part of milestone 4's warmer front page)
+- [ ] The video shop look, across the app and then the website
+
+Still to decide:
+
+- Two links for one film: first to press Play gets it (proposed), and the admin says
+  so when you send a second link for a film that already has one
+- Start-by dates: proposed not to count down while the tape is out with someone else
+- One clock: the resume window and "valid for N days after first play" become one
+  due-back time (proposed)
+- Finishing the film keeps the tape until it's due back, so a scene can be watched
+  again, with "Return it now" at the end (proposed)
+- Upgrading: what happens to films with several live tickets, and to screenings already
+  running on the same film
+
+After 2.0, as 2.x releases, moved from milestone 4. Before and after notes are the
+note in the sleeve, best watched blind is a plain unlabelled tape (the due-back date
+stays visible too), an answer to "Pick something for me" is a loan, and the journal is
+the tapes on your card:
+
+- Before and after notes: a spoiler-free note before, and a note for after (your reading,
+  a favourite moment, a question) opened when the viewer chooses to. Never unlocked by
+  how much has played, and opening it isn't the same as marking the film watched
+- Best watched blind: a recommendation or a member's own choice can hide the synopsis,
+  stills and your more revealing notes until the viewer chooses to see them. Access
+  details and content notes always stay visible
+- Asking for a recommendation: a member sends "Pick something for me", with an optional
+  note ("nothing too heavy", "I have 100 minutes"). It waits in an admin inbox, marked
+  unread, and you answer with a film and a message. No email or notifications at first
+- A viewing journal that belongs to the member: watched films, an optional date,
+  private notes, a "watch again" list, marked and unmarked by hand
+
+Later, maybe version 3: two people on the same film at the same time, only as a live
+watch-along with playback kept in step. This replaces milestone 4's rule against
+synchronised watch parties.
+
 ## Milestone 4: curation
 
 Agreed as the next milestone, not yet planned in detail. Milestone 1 delivers the
 film, milestone 2 remembers the person, milestone 4 makes the recommendation personal.
-It comes after the v1.0.0 release.
+It comes after the v1.0.0 release. Version 2 has taken over part of it (see above):
+"Picked for you", the private response and the first part of the front page are in
+2.0; the before and after notes, best watched blind, asking for a recommendation and
+the journal come as 2.x releases. What's left still needs fitting around one tape:
+programmes especially, since a programme sent to several people has them taking turns
+with the same tapes.
 
 - Programmes: a named, ordered set of films with your introduction, a cover, a note for
   each film, optional suggested dates, draft and published. Shown to every member, or to
   the people you choose. Double bills and short seasons are programmes
 - A warmer front page for members: continue watching, picked for you, your programmes,
   your other films, and what you've watched behind a link
-- Picked for you: your message to one person about one film or programme, kept apart
-  from your general note about the film, so editing one never changes the other
-- Before and after notes: a spoiler-free note before, and a note for after (your reading,
-  a favourite moment, a question) opened when the viewer chooses to. Never unlocked by
-  how much has played, and opening it isn't the same as marking the film watched
-- A private response after watching ("Loved it", "Still thinking about it", "Not for
-  me", "Let's talk") with an optional message, shared only with you, and saying so
-- A viewing journal that belongs to the member: watched films, an optional date,
-  private notes, a "watch again" list, marked and unmarked by hand
-- Asking for a recommendation: a member sends "Pick something for me", with an optional
-  note ("nothing too heavy", "I have 100 minutes"). It waits in an admin inbox, marked
-  unread, and you answer with a film and a message. No email or notifications at first
-- Best watched blind: a recommendation or a member's own choice can hide the synopsis,
-  stills and your more revealing notes until the viewer chooses to see them. Access
-  details and content notes always stay visible
 - Readiness before a programme goes out: artwork and media there, each recipient able
   to play each film, no ticket expiring before a suggested date, subtitles in the
   languages they need, no draft note showing. And "Preview as this person": a read-only
@@ -132,8 +188,9 @@ What stays true throughout:
   in someone's journal never gives them access back.
 - Each has its own check: seeing a programme, reading a note, playing a film. Being able
   to watch a film never shows someone else's recommendation, response or journal.
-- Out of it: public reviews, ratings, followers, likes, activity feeds, synchronised
-  watch parties, recommendation algorithms, timed commentary.
+- Out of it: public reviews, ratings, followers, likes, activity feeds, recommendation
+  algorithms, timed commentary. Synchronised watch parties were here too; a live
+  watch-along is now a possible version 3 (see version 2).
 
 ## Later
 
@@ -151,7 +208,8 @@ What stays true throughout:
 
 Things to consider once people and passkeys exist. None of them grants playback on its
 own: a programme, a note or a collection is presentation, and watching still needs a
-ticket. Programmes, after-notes, responses and the journal are now milestone 4.
+ticket. Programmes are now milestone 4; after-notes, responses and the journal are
+version 2.
 
 - A "surprise me" ticket that hides the title until the viewer reveals it, while the
   running time, content notes, limits and expiry stay visible
@@ -159,7 +217,8 @@ ticket. Programmes, after-notes, responses and the journal are now milestone 4.
   evening, a printable version
 - Pairing a TV by approving a short code on a signed-in phone, without using a screening
 - Screening nights: a shared page, a start time and an introduction, with everyone
-  watching on their own ticket (not synchronised)
+  watching on their own ticket (not synchronised). With one tape per film, this only
+  works across different films, or as version 3's watch-along
 - A short test clip to check picture, sound and subtitles before the first Play, which
   never uses a screening
 - "Start now, finishes around 10:42": the end time from the running time, and an

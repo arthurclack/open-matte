@@ -1,45 +1,91 @@
-/* Matte Sans: a Latin subset of GitHub's Mona Sans, renamed as the SIL Open
-   Font License asks (public/fonts/OFL.txt). One variable file: width 100 to
-   125, weight 300 to 600. */
+/* tokens.css: every face and colour openmatte.dev uses, and its few sizes.
+   The values are the approved video-shop look's (its design files, kept
+   outside the repository) and 1.1.0's own (web/src/look/tokens.css), so the site and the
+   shop it advertises are one room. Only what the pages use is here: the
+   other stocks, the shop's second ink and the machine's blue appear only
+   inside the pictures in public/img. */
+
+/* ---------- faces: the app's own files (web/public/fonts on 1.1.0), cut down
+   by tools/fonts.py to the Latin characters and to the weights and settings
+   this page asks for, as WOFF2, each with its SIL Open Font License beside it
+   in public/fonts. IBM Plex Mono's licence reserves the name "Plex", so its
+   cut-down copy is called Matte Mono. index.html and 404.html preload the
+   three faces the first screen sets; Courier Prime waits for the till slip.
+   Plex Mono SemiBold, Grape Nuts and VT323 are not sent: no text on the page
+   uses them (Grape Nuts and VT323 appear only in the pictures). ---------- */
 @font-face {
-  font-family: "Matte Sans";
-  src: url("/fonts/matte-sans.woff2") format("woff2");
-  font-weight: 300 600;
-  font-stretch: 100% 125%;
+  font-family: "Libre Franklin";
+  src: url("/fonts/LibreFranklin-400-700.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+/* one fixed style: weight 800, opsz 72, SOFT 100, WONK 0, the wordmark's and the poster's */
+@font-face {
+  font-family: "Fraunces";
+  src: url("/fonts/Fraunces-800.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+/* the interface is set at 400 only: the page asks for no other weight */
+@font-face {
+  font-family: "Matte Mono";
+  src: url("/fonts/MatteMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Courier Prime";
+  src: url("/fonts/CourierPrime-Regular.woff2") format("woff2");
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 :root {
   color-scheme: dark;
-  --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px; --space-3xl: 96px; --space-4xl: 144px;
-  --text-xs: 0.8125rem; --text-sm: 0.875rem; --text-md: 1rem; --text-lg: 1.25rem; --text-xl: 1.5625rem; --text-2xl: 1.953rem; --text-3xl: 2.441rem;
-  --text-display-s: clamp(2.25rem, 4vw + 0.5rem, 3.75rem); --text-display: clamp(2.5rem, 4.4vw + 1rem, 4.75rem);
-  --text-section: clamp(2rem, 2.5vw + 1rem, 3.5rem); --text-title: clamp(1.25rem, 0.75vw + 0.875rem, 1.625rem); --text-lead: clamp(1.125rem, 0.35vw + 1rem, 1.375rem);
-  --text-figure: clamp(5rem, 12vw, 10rem);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --ease-in: cubic-bezier(0.7, 0, 0.84, 0); --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --dur-micro: 120ms; --dur-short: 220ms; --dur-long: 420ms;
-  --color-error: oklch(72% 0.15 27); --color-success: oklch(76% 0.13 150);
-  --container: 1440px; --gutter: 64px; --gap-columns: 32px; --section-gap-s: 120px; --section-gap: 144px; --section-gap-l: 176px;
-  --z-base: 1; --z-raised: 10; --z-dropdown: 100; --z-sticky: 200; --z-sticky-nav: 300; --z-modal: 400; --z-toast: 500; --z-tooltip: 600;
 
-  /* The red room with the house lights down: black with a hint of red, like
-     a cinema seat in the dark (#080101, #120202, #1d0304). Surfaces one
-     lightness step apart, hue 22 throughout. rule-2 stays at 50% so outlined
-     controls keep 3:1 against every surface. */
-  --color-paper: oklch(9.5% 0.026 22); --color-paper-2: oklch(12.5% 0.038 22); --color-paper-3: oklch(15.5% 0.05 22);
-  --color-rule: oklch(20% 0.05 22); --color-rule-2: oklch(50% 0.055 22);
+  /* the room */
+  --deep: #100E0D;     /* the focus ring's gap; the open menu */
+  --room: #171513;     /* the page; theme-color */
+  --surface: #1F1C19;  /* a hovered or pressed item */
+  --text: #E9DFC9;     /* reading text, 13.8:1 on the room */
+  --text-2: #B4AC9B;   /* the room's sentence under the poster, the footer, step numbers */
+  --text-3: #9A9284;   /* the frame mark's lines */
+  --rule: rgb(233 223 201 / 0.14); /* the bar's and the footer's rule, the app pictures' 1px edge */
 
-  /* The app's warm white (#ece8e1) and its family */
-  --color-ink: oklch(93.2% 0.01 82); --color-ink-2: oklch(84% 0.02 65); --color-muted: oklch(70% 0.025 45);
+  /* the shop's computer: lit blocks, square boxes */
+  --ui-edge: #8A8273;  /* the menu's 1px box */
+  --ui-lit: #E9DFC9; --ui-lit-hover: #F4EDDE; --ui-lit-press: #DCD2BC;
+  --ui-lit-ink: #171513; /* words on a lit block */
+  --ui-focus: #F2EDE1;   /* the 3px focus ring, on a 2px --deep gap */
 
-  /* Amber light, Open Matte's own: #e8b04a, #f2c46d on hover and focus,
-     #1a1306 for words set on it. Kept under 5% of any screen. */
-  --color-accent: oklch(79.1% 0.134 79.5); --color-accent-2: oklch(84.3% 0.118 82); --color-accent-ink: oklch(19.2% 0.027 82.6); --color-focus: oklch(84.3% 0.118 82);
+  /* printed stock and ink */
+  --stock-card: #E9DFC9;  /* the poster */
+  --stock-till: #F1EEE7;  /* the till slip */
+  --stock-tape: #262320;  /* black label tape */
+  --tape-letter: #E2DED5; /* the tape's whitened letters */
+  --ink: #171513;         /* print on the poster; text selected on paper */
+  --ink-ribbon: #1C1729;  /* the till's impact print */
 
-  --font-display: "Matte Sans", ui-sans-serif, system-ui, sans-serif; --font-body: var(--font-display); --font-outlier: var(--font-display);
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --radius-card: 0; --radius-pill: 0; --rule-hair: 1px;
-  --shadow-card: 0 24px 48px -24px oklch(8% 0.03 20 / 0.7);
-  --tracking-display: -0.015em; --display-weight: 300; --display-stretch: 125%;
+  /* print effects: the tape's gloss and edges, the paper's mottle, the ribbon's rule, contact shadows */
+  --tape-gloss: rgb(255 248 236 / 0.075); --tape-hi: rgb(255 248 236 / 0.11); --tape-lo: rgb(0 0 0 / 0.45);
+  --tape-glow: rgb(226 222 213 / 0.45); --tape-drop: rgb(0 0 0 / 0.5);
+  --mottle: rgb(120 96 60 / 0.07); --mottle-faint: rgb(120 96 60 / 0.05); --paper-light: rgb(255 252 244 / 0.16);
+  --slip-mottle: rgb(120 100 70 / 0.05); --ribbon-rule: rgb(28 23 41 / 0.55);
+  --contact: rgb(0 0 0 / 0.6); --contact-thin: rgb(0 0 0 / 0.45);
+
+  /* faces */
+  --sans: "Libre Franklin", system-ui, sans-serif;   /* everything you read; the tape's letters */
+  --shop: "Fraunces", Georgia, serif;                 /* the shop's own printing: the wordmark, the poster */
+  --ui: "Matte Mono", ui-monospace, monospace;        /* IBM Plex Mono, renamed: the shop's computer, bar, buttons, menu */
+  --type: "Courier Prime", "Courier New", monospace;  /* the typewriter and the till */
+
+  /* sizes */
+  --gutter: 16px;
+  --wrap: 1200px;
+  --section: 72px; /* between sections, and the footer's margin */
 }
+@media (min-width: 48rem) { :root { --gutter: 32px; --section: 112px; } }

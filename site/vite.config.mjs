@@ -1,14 +1,15 @@
-// The project website: static pages built by Vite into site/dist.
+// The project website: two static pages built by Vite into site/dist.
 //
 //   node_modules/.bin/vite build --config site/vite.config.mjs
-//   node_modules/.bin/vite --config site/vite.config.mjs        (dev, with /stage.html)
+//   node_modules/.bin/vite --config site/vite.config.mjs        (development)
 //
-// Two pages go into the build: index.html and 404.html. stage.html is a
-// development page for filming the scenes and is left out of it.
+// index.html and 404.html go into the build, with their one stylesheet
+// (src/site.css, which imports tokens.css and base.css) and the home page's
+// one small script (src/main.ts). public/ is copied in as it is: the fonts,
+// the pictures, the favicon, the link preview and the licences. No plugins.
 
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url))
 
@@ -16,13 +17,6 @@ export default defineConfig({
   root: here('.'),
   base: '/',
   publicDir: here('public'),
-  plugins: [react()],
-  resolve: {
-    // The kit's parts import lucide-react, which this site doesn't install:
-    // a few glyphs, drawn locally.
-    alias: { 'lucide-react': here('src/stageshow-kit/lucide-shim.tsx') },
-    dedupe: ['react', 'react-dom'],
-  },
   server: { host: '127.0.0.1' },
   preview: { host: '127.0.0.1' },
   build: {
@@ -30,8 +24,10 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'es2022',
     // Every byte comes from this origin: no inlined assets the
-    // Content-Security-Policy would have to allow as data: (fonts especially).
+    // Content-Security-Policy would have to allow as data:
     assetsInlineLimit: 0,
+    // One small module and nothing to preload: no helper is added to it
+    modulePreload: false,
     rollupOptions: {
       input: {
         index: here('index.html'),
