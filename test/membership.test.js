@@ -275,6 +275,311 @@ describe('the ink', { skip: noWeb }, () => {
   });
 });
 
+// ------------------------------------------------------------ ink in the card, the pen, the stamp
+
+const hexRgb = (h) => [1, 3, 5].map((i) => Number.parseInt(h.slice(i, i + 2), 16));
+
+describe('ink that soaks into the card', { skip: noWeb }, () => {
+  const stock = web?.CARD_STOCK;
+  const shaded = web && mix(stock, '#000000', 0.1);
+  // The shops' usual colours, and vivid blues and violets, which are brighter than the
+  // cream in their blue: as bright an ink as cream card can't show.
+  const accents = ['#e8b04a', '#f2e8a0', '#4caf6e', '#34905b', '#e5776d', '#8ab4f8', '#ffffff', '#ff00ff', '#5a1e1e', '#000000', '#0000ff', '#3366ff', '#4433ff', '#8a2be2', '#6a5acd'];
+
+  test('blended "multiply": no ink is the card itself, white is no ink, and ink only ever darkens', () => {
+    assert.equal(web.onCard('#2030c8', 0, stock), stock);
+    assert.equal(web.onCard('#ffffff', 1, stock), stock);
+    assert.equal(web.onCard('#ffffff', 0.4, shaded), shaded);
+    for (const accent of accents) {
+      const { ink } = web.printInk(accent);
+      for (const cover of [0.3, 0.88, 1]) assert.ok(contrast(web.onCard(ink, cover, stock), '#000000') <= contrast(mix(stock, ink, cover), '#000000') + 1e-9, `${ink} at ${cover}`);
+    }
+  });
+
+  test('soaked in, the shop’s ink shows deepened by the cream: the same in every channel, never clipped in one', () => {
+    for (const accent of accents) {
+      const { ink } = web.printInk(accent);
+      const { down, shown, soak } = web.soakIn(ink);
+      assert.equal(web.laidDown(ink), down);
+      assert.ok(soak >= 0 && soak <= web.SOAK + 1e-12, `${ink}: ${soak}`);
+      const [k, d, sh, st] = [ink, down, shown, stock].map(hexRgb);
+      for (let i = 0; i < 3; i++) {
+        // Laid down within what a screen shows: never 255 but where the ink is too.
+        assert.ok(d[i] <= 255 && (d[i] < 255 || k[i] === 255 || k[i] * (255 / st[i]) ** soak >= 254.5), `${ink}: channel ${i} of ${down}`);
+        // What shows is the ink times the stock to one power, the same in every channel.
+        assert.ok(Math.abs(sh[i] - k[i] * (st[i] / 255) ** (1 - soak)) <= 1, `${ink} shows as ${shown}`);
+        assert.ok(sh[i] <= k[i], `${ink}: soaked in, never lighter than the ink`);
+      }
+      // And it's what the layer's blending makes of it on the plain stock.
+      const blended = hexRgb(web.onCard(down, 1, stock));
+      assert.ok(blended.every((c, i) => Math.abs(c - sh[i]) <= 1), `${down} on the stock`);
+    }
+    // The shops' usual colours are allowed half the stock; a vivid blue none, a blue-violet some.
+    for (const ink of ['#2030c8', '#4e4603', '#025127']) assert.equal(web.soakIn(ink).soak, web.SOAK, ink);
+    assert.deepEqual(web.soakIn('#0000ff'), { down: '#0000ff', shown: '#0000c9', soak: 0 });
+    assert.ok(web.soakIn('#3a0feb').soak > 0.3 && web.soakIn('#3a0feb').soak < web.SOAK);
+    assert.equal(web.laidDown('#2030c8'), '#2133e1');
+    assert.equal(web.soakIn('#2030c8').shown, '#1f2db2');
+    assert.equal(web.laidDown('#4e4603'), '#524b03');
+  });
+
+  test('print where its wear leaves it thinnest still reads at 4.5:1 on the darkest grain, and so do the words knocked out of the band', () => {
+    assert.ok(web.INK_THINNEST >= 0.85);
+    for (const accent of accents) {
+      const down = web.laidDown(web.printInk(accent).ink);
+      for (const paper of [stock, shaded]) {
+        const thin = web.onCard(down, web.INK_THINNEST, paper);
+        assert.ok(contrast(thin, paper) >= 4.5, `${accent} laid down as ${down}: ${contrast(thin, paper).toFixed(2)}:1`);
+        assert.ok(contrast(stock, thin) >= 4.5, `${accent}: the words on its band`);
+      }
+    }
+  });
+
+  test('the date stamp, at its faintest, reads at 4.5:1 on the darkest grain; the pen at its lightest too, shine and all', () => {
+    const stamp = contrast(web.onCard(web.STAMP_INK, web.STAMP_FAINTEST, shaded), shaded);
+    assert.ok(stamp >= 4.5, `stamp ${stamp.toFixed(2)}:1`);
+    assert.ok(contrast(web.onCard(web.STAMP_INK, web.STAMP_FAINTEST, stock), stock) > stamp);
+    const pen = contrast(web.onCard(web.PEN_INK, web.PEN_LIGHTEST, shaded), shaded);
+    assert.ok(pen >= 4.5, `pen ${pen.toFixed(2)}:1`);
+    // The shine only where the ink lies full (0.8 and more).
+    const shine = contrast(web.onCard(mix(web.PEN_INK, web.PEN_SHEEN, web.PEN_SHINE), 0.8, shaded), shaded);
+    assert.ok(shine >= 4.5, `shine ${shine.toFixed(2)}:1`);
+  });
+});
+
+describe('the date stamp', { skip: noWeb }, () => {
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  // A stamp's canvas as the card lays it out (drawStamp): its characters' box, and its
+  // frame a hair round them, in CSS pixels.
+  const box = { w: 120, h: 25, scale: 2, ink: { x0: 8, x1: 112, y0: 2.2, y1: 21.7 }, frame: { x0: 5.7, x1: 114.3, y0: 1.1, y1: 22.6, r: 2.7 } };
+  const inside = (r, x, y) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1;
+
+  test('the same member, the same impression; another member, another', () => {
+    assert.deepEqual(web.dateStamp('Nov 2026', 'member:1:back'), web.dateStamp('Nov 2026', 'member:1:back'));
+    assert.notDeepEqual(web.dateStamp('Nov 2026', 'member:1:back'), web.dateStamp('Nov 2026', 'member:2:back'));
+  });
+
+  test('a little crooked, never far off, its month on one band and the year’s last two digits on a band each', () => {
+    for (let i = 0; i < 200; i++) {
+      const s = web.dateStamp('Nov 2026', `member:${i}:back`);
+      assert.ok(Math.abs(s.tilt) >= 1 && Math.abs(s.tilt) <= 2.4, `tilt ${s.tilt}`);
+      assert.ok(s.dx >= -1 && s.dx <= 3 && Math.abs(s.dy) <= 1);
+      assert.ok(s.rock.low >= 0.86 && s.rock.low <= 0.9);
+      assert.ok(s.patch.low * s.rock.low >= web.STAMP_FAINTEST, 'the ink film never under its faintest');
+      assert.equal(s.bands.map((b) => b.ch).join(''), 'Nov 2026');
+      const y = s.bands.map((b) => b.y);
+      assert.ok(y[0] === y[1] && y[1] === y[2], 'NOV on one band');
+      assert.equal(y[3], undefined);
+      assert.equal(y[4], y[5], '20 cast in');
+      assert.ok(y.filter((v) => v !== undefined).every((v) => Math.abs(v) <= 0.5));
+    }
+  });
+
+  test('every month fits its bands: each character condensed to its band with room to spare, so no two touch', () => {
+    for (const month of MONTHS) {
+      for (const year of ['2026', '2031', '2048']) {
+        for (const b of web.dateStamp(`${month} ${year}`, 'm').bands) {
+          if (b.y === undefined) continue;
+          const kind = b.digit ? 'digit' : 'letter';
+          const ink = web.STAMP_INK_EM[b.ch.toUpperCase()];
+          assert.ok(ink, `${b.ch} measured`);
+          assert.ok(ink * b.sx <= web.STAMP_PITCH[kind] - web.STAMP_ROOM[kind] + 1e-3, `${month}: ${b.ch} is ${(ink * b.sx).toFixed(3)}em in a ${web.STAMP_PITCH[kind]}em band`);
+          assert.ok(b.sx <= 0.8 && b.sx >= 0.65, `${b.ch} condensed to ${b.sx}`);
+        }
+      }
+    }
+    // M and A, the widest, condensed further than the rest.
+    assert.ok(web.stampSqueeze('M') < web.stampSqueeze('N') && web.stampSqueeze('A') < web.stampSqueeze('N'));
+  });
+
+  test('faded and patchy, and its wear only on its own characters: the voids few, never bare, the frame only on the heavy side', () => {
+    for (const seed of ['member:18998139325:back', 'member:50401811463:back', 'a', 'b', 'c']) {
+      const s = web.dateStamp('Nov 2026', seed);
+      const { width, height, cover, ring } = web.stampCoverage(s, box);
+      assert.equal(cover.length, width * height);
+      let voids = 0;
+      let sum = 0;
+      let sq = 0;
+      let n = 0;
+      for (let j = 0; j < height; j++) {
+        for (let i = 0; i < width; i++) {
+          const [x, y] = [(i + 0.5) / box.scale, (j + 0.5) / box.scale];
+          const c = cover[j * width + i];
+          if (!inside(box.ink, x, y)) {
+            assert.equal(c, 1, `${seed}: no wear outside the characters (${x}, ${y})`);
+            continue;
+          }
+          assert.ok(c >= web.STAMP_VOID - 1e-6 && c <= 1);
+          if (c < web.STAMP_FAINTEST) voids++;
+          sum += c;
+          sq += c * c;
+          n++;
+        }
+      }
+      const mean = sum / n;
+      assert.ok(voids / n < 0.016, `${seed}: voids ${(voids / n).toFixed(4)}`);
+      assert.ok(mean > 0.78 && mean < 0.95, `${seed}: mean ${mean.toFixed(3)}, faded`);
+      assert.ok(Math.sqrt(sq / n - mean * mean) > 0.02, `${seed}: patchy`);
+      // The heavy and the light ends, along the way the stamp rocked.
+      const a = (s.rock.angle * Math.PI) / 180;
+      const along = (x, y) => ((x - 60) * Math.cos(a) + (y - 12) * Math.sin(a)) / (Math.abs(Math.cos(a)) * 104 + Math.abs(Math.sin(a)) * 19.5);
+      const side = (sign) => {
+        let t = 0;
+        let k = 0;
+        for (let j = 0; j < height; j++) {
+          for (let i = 0; i < width; i++) {
+            const [x, y] = [(i + 0.5) / box.scale, (j + 0.5) / box.scale];
+            const c = cover[j * width + i];
+            if (inside(box.ink, x, y) && along(x, y) * sign > 0.2 && c >= web.STAMP_FAINTEST) {
+              t += c;
+              k++;
+            }
+          }
+        }
+        return t / k;
+      };
+      assert.ok(side(1) < side(-1), `${seed}: lighter on the light side`);
+      for (let j = 0; j < height; j++) {
+        for (let i = 0; i < width; i++) {
+          const v = ring[j * width + i];
+          if (!v) continue;
+          const [x, y] = [(i + 0.5) / box.scale, (j + 0.5) / box.scale];
+          assert.ok(along(x, y) <= 0.05, `${seed}: no frame on the light side`);
+          assert.ok(x > box.frame.x0 - 1 && x < box.frame.x1 + 1 && y > box.frame.y0 - 1 && y < box.frame.y1 + 1, `${seed}: the frame where it's put`);
+          assert.ok(v <= 0.3);
+        }
+      }
+      assert.deepEqual(web.stampCoverage(s, box).cover, cover, 'the same every time');
+    }
+  });
+
+  test('across a thousand members, the voids stay few: about one per cent, never more than one and a half', () => {
+    const shares = [];
+    for (let m = 0; m < 1000; m++) {
+      const { width, height, cover } = web.stampCoverage(web.dateStamp('Nov 2026', `member:${m}:back`), box);
+      let v = 0;
+      let n = 0;
+      for (let j = 0; j < height; j++) {
+        for (let i = 0; i < width; i++) {
+          if (!inside(box.ink, (i + 0.5) / box.scale, (j + 0.5) / box.scale)) continue;
+          n++;
+          if (cover[j * width + i] < web.STAMP_FAINTEST) v++;
+        }
+      }
+      shares.push(v / n);
+    }
+    shares.sort((x, y) => x - y);
+    assert.ok(shares[500] < 0.008, `median ${shares[500]}`);
+    assert.ok(shares[950] < 0.013, `95th ${shares[950]}`);
+    assert.ok(shares[999] < 0.02, `most ${shares[999]}`);
+  });
+});
+
+describe('the pen', { skip: noWeb }, () => {
+  // A word's letters as a font would draw them: strokes `w` CSS pixels wide along a
+  // scribble of `n` segments, at `scale` pixels to one.
+  function word(n, seed, { scale = 2, w = 1.8 } = {}) {
+    const R = web.rng(seed);
+    const W = Math.round((n * 9 + 20) * scale);
+    const H = 40 * scale;
+    const pts = [[8, 20]];
+    for (let i = 0; i < n; i++) pts.push([pts[i][0] + R.range(3, 14), Math.min(34, Math.max(6, pts[i][1] + R.range(-14, 14)))]);
+    const mask = new Uint8ClampedArray(W * H);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const [px, py] = [(x + 0.5) / scale, (y + 0.5) / scale];
+        let d = Infinity;
+        for (let i = 0; i < n; i++) {
+          const [[ax, ay], [bx, by]] = [pts[i], pts[i + 1]];
+          const [vx, vy] = [bx - ax, by - ay];
+          const t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy)));
+          d = Math.min(d, Math.hypot(px - ax - t * vx, py - ay - t * vy));
+        }
+        mask[y * W + x] = Math.max(0, Math.min(255, Math.round((w / 2 + 0.5 / scale - d) * scale * 255)));
+      }
+    }
+    return { mask, W, H, scale };
+  }
+
+  test('the same word, the same ink; the ink only where the letters are, or a blob at a stroke’s end', () => {
+    const { mask, W, H, scale } = word(30, 'long');
+    const a = web.ballpoint(mask, W, H, scale, { size: 29, seed: 'member:1:back:name' });
+    assert.deepEqual(web.ballpoint(mask, W, H, scale, { size: 29, seed: 'member:1:back:name' }), a);
+    let blobs = 0;
+    for (let p = 0; p < mask.length; p++) {
+      assert.ok(a.film[p] >= 0 && a.film[p] <= 1);
+      assert.ok(a.sheen[p] >= 0 && a.sheen[p] <= web.PEN_SHINE + 1e-6);
+      if (!mask[p] && a.film[p] > 0) blobs++;
+      if (!a.film[p]) assert.equal(a.sheen[p], 0);
+    }
+    assert.ok(blobs < mask.length * 0.01, 'blobs are small');
+  });
+
+  test('full down the strokes, never lighter than its lightest but in a skip: skips a few per cent of the ink, long name or short', () => {
+    for (const [n, seed] of [[40, 'a'], [30, 'b'], [6, 'c'], [3, 'd'], [12, 'e']]) {
+      for (const who of ['member:1', 'member:2', 'member:3']) {
+        const { mask, W, H, scale } = word(n, seed);
+        const r = web.ballpoint(mask, W, H, scale, { size: 29, seed: `${who}:back:name` });
+        assert.ok(r.inked > 0);
+        assert.ok(r.skipped / r.inked <= 0.035, `${n} strokes: ${((r.skipped / r.inked) * 100).toFixed(1)}% skipped`);
+        // Of the letters' solid pixels, a few per cent at most are lighter than the pen's
+        // lightest (its skips); the rest are at least that.
+        let solid = 0;
+        let light = 0;
+        let full = 0;
+        for (let p = 0; p < mask.length; p++) {
+          if (mask[p] < 255) continue;
+          solid++;
+          if (r.film[p] < web.PEN_LIGHTEST - 1e-6) light++;
+          if (r.film[p] > 0.9) full++;
+        }
+        assert.ok(light / solid <= 0.05, `${n} strokes: ${((light / solid) * 100).toFixed(1)}% under its lightest`);
+        assert.ok(full > 0, 'pressed full somewhere');
+      }
+    }
+    // A long scribble has its skips: the pen did run dry now and then.
+    let some = 0;
+    for (const seed of ['p', 'q', 'r', 's']) {
+      const { mask, W, H, scale } = word(60, seed);
+      some += web.ballpoint(mask, W, H, scale, { size: 29, seed }).skipped;
+    }
+    assert.ok(some > 0);
+  });
+});
+
+describe("the card's thickness", { skip: noWeb }, () => {
+  test('ID-1 card, a little thicker so it reads: under 6px on a 440px card, in proportion on a smaller one', () => {
+    assert.equal(web.cardThickness(440), 5.72);
+    assert.ok(web.cardThickness(440) > (440 * 0.76) / 85.6 && web.cardThickness(440) <= 6);
+    assert.equal(web.cardThickness(360), 4.68);
+    assert.equal(web.cardThickness(0), 0);
+  });
+
+  test('its cut edge: a strip down each long side, three round each corner, all on the card’s outline, facing out', () => {
+    const width = 440;
+    const height = (440 * 54) / 85.6;
+    const r = 12;
+    const pieces = web.slabPieces({ width, height, radius: r });
+    assert.deepEqual(pieces.map((p) => p.key), ['l', 'r', 'tl0', 'tl1', 'tl2', 'tr0', 'tr1', 'tr2', 'bl0', 'bl1', 'bl2', 'br0', 'br1', 'br2']);
+    assert.match(pieces[0].place, /^translateX\(-220px\) rotateY\(-90deg\)$/);
+    assert.match(pieces[1].place, /^translateX\(220px\) rotateY\(90deg\)$/);
+    assert.ok(Math.abs(pieces[0].h - (height - 2 * r)) < 1);
+    const chord = 2 * r * Math.sin(Math.PI / 12);
+    for (const p of pieces.slice(2)) {
+      const [, x, y, z, ry] = /^translate\((-?[\d.]+)px, (-?[\d.]+)px\) rotateZ\((-?[\d.]+)deg\) rotateY\((-?\d+)deg\)$/.exec(p.place).map(Number);
+      const [sx, sy] = [Math.sign(x), Math.sign(y)];
+      // On the corner's arc (a chord's width inside it), and turned to face out of it.
+      const d = Math.hypot(x - sx * (width / 2 - r), y - sy * (height / 2 - r));
+      assert.ok(d > r * 0.95 && d <= r, `${p.key} at ${d.toFixed(2)} from its corner's centre`);
+      assert.equal(ry, sx < 0 ? -90 : 90);
+      const out = Math.atan2(y - sy * (height / 2 - r), x - sx * (width / 2 - r));
+      const facing = Math.atan2(Math.sin((z * Math.PI) / 180) * sx, Math.cos((z * Math.PI) / 180) * sx);
+      assert.ok(Math.abs(Math.atan2(Math.sin(out - facing), Math.cos(out - facing))) < 1e-3, `${p.key} faces out`);
+      assert.ok(p.h > chord && p.h < chord + 1);
+    }
+  });
+});
+
 // ------------------------------------------------------------ who is sent it
 
 describe('who is sent the membership number', () => {

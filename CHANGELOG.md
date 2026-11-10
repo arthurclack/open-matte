@@ -61,7 +61,7 @@ undo without a restore. Read it before you update.
 - **A membership card for everyone you add.** It's a printed card that turns over:
   the front is all yours, with your shop's name (and logo, if you have one) and
   "Membership card" knocked out of a solid band of ink; the back has their name in
-  ballpoint, the month and year you added them, typed, their membership number on a
+  ballpoint, the month and year you added them, stamped, their membership number on a
   stuck-on barcode label, and one line asking whoever finds it to hand it back. It's
   printed in your colour, darkened until it reads on the card; with Open Matte's own
   colour it prints in blue. Your membership card (the page that was Your account)
@@ -69,6 +69,16 @@ undo without a restore. Read it before you update.
   the name written on as it appears ("Your membership card is ready"); a recovery
   link ends on the same card as before ("Your new passkey is ready"). With less
   motion asked for, it turns and the name appears at once.
+  - **It looks printed, stamped and written by hand.** Your ink soaks into the card,
+    a little deeper and warmer than on screen, with the card's grain showing through
+    it and the odd pin-hole of bare card in the band. The back's printed words bleed a
+    hair into the card's fibres. Member since is stamped at the counter in a stamp
+    pad's violet, a little crooked, faded and patchy, and always clear of the print
+    around it. The name is a ballpoint's: full on the downstrokes, lighter elsewhere,
+    now and then a short dry skip or a small blob of ink, every name as legible as the
+    next. It all reads at 4.5:1 or more where it's lightest, in every browser, Safari
+    on an iPhone included. Turning over, it shows its thickness, the cut edge of the
+    card. With more contrast or forced colours asked for, it's plain ink.
 - **A membership number**, 11 digits, worked out from what each person already has,
   so nothing new is stored: the same number for good, through a new phone, a change
   of name or a lost phone. It's never their place in the list, and it opens nothing:
