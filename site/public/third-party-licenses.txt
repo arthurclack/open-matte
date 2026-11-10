@@ -4,207 +4,57 @@ This website's own code is part of Open Matte, which is free software under
 the GNU General Public License, version 3 or later. Its source, this site's
 included, is at https://github.com/arthurclack/open-matte.
 
-The pages also send code and a font made by others, under their own licences,
-which follow.
+The pages also send four fonts made by others, each under the SIL Open Font
+License, version 1.1. Each is cut down to the Latin characters and to the
+weights and settings these pages use, and sent as WOFF2; that makes each a
+modified version, released under the same licence. Each licence is served
+beside its font, in full and unchanged.
 
 ------------------------------------------------------------------------
 
-react 19.3.1 (MIT)
+Libre Franklin: /fonts/LibreFranklin-400-700.woff2
+Licence: /fonts/LibreFranklin-OFL.txt
+Changed: cut down to Latin, weights 400 to 700.
 
-MIT License
-
-Copyright (c) Meta Platforms, Inc. and affiliates.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Copyright 2020 The Libre Franklin Project Authors
+(https://github.com/googlefonts/Libre-Franklin)
 
 ------------------------------------------------------------------------
 
-react-dom 19.3.1 (MIT)
+Fraunces: /fonts/Fraunces-800.woff2
+Licence: /fonts/Fraunces-OFL.txt
+Changed: cut down to Latin and fixed at one style (weight 800, opsz 72,
+SOFT 100, WONK 0).
 
-MIT License
-
-Copyright (c) Meta Platforms, Inc. and affiliates.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Copyright 2018 The Fraunces Project Authors
+(https://github.com/undercasetype/Fraunces)
 
 ------------------------------------------------------------------------
 
-scheduler 0.28.0 (MIT)
+Matte Mono: /fonts/MatteMono-Regular.woff2
+Licence: /fonts/MatteMono-OFL.txt
+Changed: IBM Plex Mono Regular, cut down to Latin and renamed Matte Mono,
+as its licence asks of a modified version.
 
-MIT License
-
-Copyright (c) Meta Platforms, Inc. and affiliates.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
 
 ------------------------------------------------------------------------
 
-Stageshow (MIT): the parts the two product scenes are built with, copied
-into the site's source as src/stageshow-kit.
+Courier Prime: /fonts/CourierPrime-Regular.woff2
+Licence: /fonts/CourierPrime-OFL.txt
+Changed: cut down to Latin.
 
-From its notice: product and operating-system names, familiar device
-geometry and illustrated interfaces are used as examples; those names and
-marks remain with their owners, and the Stageshow licence grants no
-trademark rights and implies no endorsement.
-
-MIT License
-
-Copyright (c) 2026 Benji Taylor
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Copyright 2015 The Courier Prime Project Authors
+(https://github.com/quoteunquoteapps/CourierPrime)
 
 ------------------------------------------------------------------------
 
-Lucide (ISC): the path data of three small icons (check, x, chevron-down),
-drawn by the site's own code.
+The pictures in /img, and the link preview /og-v2.png, are of Open Matte
+itself and of its printed look, made for this project. The words in them
+are drawn in the faces above and in two more under the same licence,
+Grape Nuts (the staff pick's hand) and VT323 (the Play tile); no file of
+either is sent. The film in them, Dr. Strangelove (1964), is only named:
+no poster, still or title lettering of the film appears.
 
-ISC License
-
-Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as
-part of Feather (MIT). All other copyright (c) for Lucide are held by Lucide
-Contributors 2022.
-
-Permission to use, copy, modify, and/or distribute this software for any
-purpose with or without fee is hereby granted, provided that the above
-copyright notice and this permission notice appear in all copies.
-
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-------------------------------------------------------------------------
-
-Vite (MIT): the small module-loading helper the build adds to the page's
-script.
-
-MIT License
-
-Copyright (c) 2019-present, VoidZero Inc. and Vite contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-------------------------------------------------------------------------
-
-Rolldown 1.2.15 (MIT): the small module helpers the bundler adds to the
-page's script.
-
-MIT License
-
-Copyright (c) 2024-present VoidZero Inc. & Contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-end of terms and conditions
-
-The licenses of externally maintained libraries from which parts of the
-Software is derived are listed at
-https://github.com/rolldown/rolldown/blob/main/THIRD-PARTY-LICENSE
-
-------------------------------------------------------------------------
-
-Matte Sans: Mona Sans, by The Mona Sans Project Authors, cut down to Latin
-and renamed Matte Sans, as its licence asks of a modified version. SIL Open
-Font License, version 1.1; the full licence is at /fonts/OFL.txt.
-
-Copyright 2022 The Mona Sans Project Authors
-(https://github.com/github/mona-sans), with Reserved Font Name "Mona"
+The page's one script and its stylesheet are the site's own code, with
+nothing of anyone else's bundled in.

@@ -3,58 +3,58 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nothing showing here, Open Matte</title>
-    <meta name="description" content="Nothing is showing at this address. Open Matte is a small, self-hosted cinema for recommending films to friends." />
+    <title>Not on the shelf, Open Matte</title>
     <meta name="robots" content="noindex" />
-    <meta name="theme-color" content="#080101" />
+    <meta name="theme-color" content="#171513" />
     <meta name="color-scheme" content="dark" />
+    <!-- root paths throughout: this page is served for any address, /films/a/b included -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="preload" href="/fonts/matte-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/LibreFranklin-400-700.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/Fraunces-800.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/MatteMono-Regular.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="./src/site.css" />
   </head>
   <body>
+    <svg class="defs" aria-hidden="true" focusable="false">
+      <defs>
+        <filter id="ink-print" x="-4%" y="-12%" width="108%" height="124%" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="1.15" numOctaves="2" seed="12" result="n" />
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="0.8" xChannelSelector="R" yChannelSelector="G" result="d" />
+          <feGaussianBlur in="d" stdDeviation="0.34" result="b" />
+          <feComponentTransfer in="b"><feFuncA type="linear" slope="1.5" intercept="-0.08" /></feComponentTransfer>
+        </filter>
+      </defs>
+    </svg>
+
     <a class="skip" href="#main">Skip to content</a>
 
-    <header class="slab">
-      <div class="container slab__row">
-        <a class="wordmark" href="/" aria-label="Open Matte home">
-          <svg class="mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true" focusable="false">
-            <rect x="4" y="8" width="24" height="16" rx="1.5" stroke-width="2" />
-            <path d="M14 12.5v7l6-3.5z" />
-          </svg>
-          <span>Open Matte</span>
-        </a>
-        <nav class="slab__nav" aria-label="Main">
-          <a class="btn btn--quiet btn--nav" href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Install</a>
+    <header class="bar">
+      <div class="wrap bar__row">
+        <a class="mark" href="/" aria-label="Open Matte home"><span class="mark__ink"><span>O</span><span>p</span><span>e</span><span>n</span><span> </span><span>M</span><span>a</span><span>t</span><span>t</span><span>e</span></span></a>
+        <nav class="bar__nav" aria-label="Main">
+          <a class="item item--lit" href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Install</a>
         </nav>
       </div>
     </header>
 
-    <main id="main">
-      <section class="lost" aria-labelledby="lost-title">
-        <div class="container">
-          <h1 id="lost-title"><span class="lost__code">404</span> Nothing showing here.</h1>
-          <p class="lead">The link may be old, or the address mistyped.</p>
-          <div class="actions">
-            <a class="btn btn--primary btn--large" href="/">Back to Open Matte</a>
-          </div>
-        </div>
-      </section>
+    <main id="main" class="lost">
+      <div class="wrap">
+        <p class="tape tape--b"><span class="sr">404</span><span aria-hidden="true"><span class="tape__c">4</span><span class="tape__c">0</span><span class="tape__c">4</span></span></p>
+        <h1>Not on the shelf.</h1>
+        <p class="lead">The link may be old, or the address mistyped.</p>
+        <a class="btn btn--lit" href="/">Back to Open Matte</a>
+      </div>
     </main>
 
-    <footer class="foot">
-      <div class="container foot__grid">
-        <div class="foot__letter">
-          <p class="foot__signoff">Only share films you have the right to share.</p>
-        </div>
-        <ul class="foot__links foot__links--short">
+    <footer class="foot foot--short">
+      <div class="wrap foot__grid">
+        <p class="foot__rights">Only share films you have the right to share.</p>
+        <ul class="foot__links">
           <li><a href="https://github.com/arthurclack/open-matte">GitHub</a></li>
           <li><a href="https://github.com/arthurclack/open-matte/blob/main/LICENSE">Licence</a></li>
           <li><a href="/third-party-licenses.txt">Third-party licences</a></li>
         </ul>
       </div>
     </footer>
-
-    <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

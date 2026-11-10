@@ -1,860 +1,318 @@
-/* Hallmark · shape: Split Studio · genre: atmospheric · theme: Midnight (by request), reworked as a red room with amber light · job: try · draw: b51e9d
- * hero: Counter, the install guide set large beside the phone · nav: slab · footer: letter close · imagery: the product built, two stageshow scenes of the real app with stills as posters · signature: the phone scene, a ticket link opening Sherlock Jr. in a friend's browser
- * axes: dark/grotesk-sans/warm · posture: committed · contrast: pass · fold: pass · v2.0.0 */
-/* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V4 · weakest: V, text beside a phone is the commonest hero; Counter sets the install guide large and the phone runs off the hero's foot into the next room, and Grid and Figures stay out of the page */
-/* Hallmark · waive 47b · one kit frame, the phone in the hero, the real ticket page and player inside; the admin is the app's own page cropped, with no browser drawn round it · the user asked for stageshow scenes of Open Matte in its own look, and a ticket only makes sense on a friend's phone */
-/* Hallmark · waive 84 · the app runs, but a capture would show the owner's own films, friends and links · the scenes rebuild the real ticket page, player and admin word for word, with an invented cinema and a public domain film */
-/* Hallmark · waive 47c · the scenes are the product built in React, each figure holding its still as a real img with alt text · by the user's request the app is shown in its own look, not captured into a slot */
-/* Hallmark · by request · the amber accent: Open Matte's own #e8b04a waives Midnight's cold light, kept to the one primary action, focus rings and the mark */
-/* Hallmark · dismissed 77 · the 404 is one screen and the footer on purpose: a way home, not a second page; the home page has six sections */
-/* Hallmark · by request · the scenes are React and need JavaScript: each figure holds its still as an img with real alt text, shown with scripting off and under reduced motion */
-/* Hallmark · answered F6 · the 38 and 48 figures stay proportional: Matte Sans's tabular zero is slashed, and nothing on the page compares figures */
-/* Hallmark · hero-review: in-thread, folded into the finish review · finish-review: subagent · 7 findings · 7 resolved · gap: the pinned admin scene, which now opens with Sam filled in, presses Issue within about 2s of its moment and keeps its ending · stageshow-review: subagent · 8 findings · 8 resolved */
-/* Hallmark · sweep: Floor 0 FAIL (47a kept: the admin is the app's own page, cropped, no browser drawn) · Reflex 0 open, 3 waived (47b, 84, 47c) · WARN 77 on the 404 dismissed · facts review 6 resolved · a11y review 8 resolved 2 partial (F3 the close keeps its own still, F7 the headers stay as agreed) */
+/* =====================================================================
+   openmatte.dev in the video shop look (1.1.0). The page is the shop's
+   counter at closing time: the dark room, flat printed things on it (a
+   poster, black label tape, a till slip, pictures of the staff pick, the
+   sleeve, the due-back tape and the membership card) and the shop's quiet
+   computer (IBM Plex Mono, lit blocks, square boxes, no motion). The blue
+   screen appears only inside the pictures of the app.
+
+   Everything a reader reads is real text. No inline style, nothing from
+   another host: the pages pass the site's Content-Security-Policy as it
+   stands (README.md, "Headers"). The ink filter, #ink-print, is an inline
+   SVG in each page; url(#ink-print) points into the same document.
+   ===================================================================== */
 @import url("./tokens.css");
 @import url("./base.css");
 
-:root {
-  --slab-h: 4.5rem;
-  /* The hero's phone column, sized by the screen's height: the scene's wide
-     design is 540 x 700, so it is never drawn past its own size */
-  --phone: clamp(30rem, (100svh - var(--slab-h) - 7rem) * 0.7714, 33.75rem);
-}
+/* the skip link: a lit block when focused, 44px tall, over the wordmark and centred in the bar */
+.skip { position: absolute; left: max(var(--gutter), calc(50% - var(--wrap) / 2)); top: -100px; z-index: 10; padding: 12px 16px; background: var(--ui-lit); color: var(--ui-lit-ink); font: 400 15px/20px var(--ui); text-decoration: none; }
+.skip:focus { top: 10px; }
+@media (min-width: 48rem) { .skip:focus { top: 14px; } }
 
-/* Type: one family at two widths. Heads at the expanded 300, items at 500 */
-h1, h2 {
-  font-stretch: var(--display-stretch);
-  line-height: 1.04;
-}
-h3 {
-  font-weight: 500;
-  font-stretch: 100%;
-  letter-spacing: 0;
-}
-code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-}
-.lead {
-  color: var(--color-ink-2);
-}
+/* ---------- the shop's computer: bar, buttons, menu ---------- */
+.bar { border-bottom: 1px solid var(--rule); }
+.bar__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; }
+@media (min-width: 48rem) { .bar__row { min-height: 72px; } }
 
-a {
-  text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
-  transition: text-decoration-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
-}
-/* Hover only where there is a pointer that hovers: a tap on a touch screen
-   leaves :hover set, and the colour would stick after it */
+/* "Open Matte" in the shop's rub-down lettering: each letter a hair off.
+   44px tall on a phone. The ink filter is on the letters, not the link, so the focus ring stays the computer's */
+.mark { display: inline-flex; align-items: baseline; padding: 12px 0; color: var(--text); text-decoration: none; font: 800 20px/1 var(--shop); font-variation-settings: "SOFT" 100, "WONK" 0, "opsz" 72; letter-spacing: -0.005em; }
+@media (min-width: 48rem) { .mark { font-size: 22px; } }
+.mark__ink { display: inline-flex; align-items: baseline; filter: url(#ink-print); }
+.mark__ink > span { display: inline-block; }
+.mark__ink > span:nth-child(2) { transform: translateY(0.4px) rotate(-0.6deg); }
+.mark__ink > span:nth-child(3) { transform: translateY(-0.3px); margin-left: 0.2px; }
+.mark__ink > span:nth-child(4) { transform: translateY(0.2px) rotate(0.4deg); }
+.mark__ink > span:nth-child(5) { width: 0.24em; }
+.mark__ink > span:nth-child(6) { transform: translateY(-0.3px) rotate(-0.3deg); }
+.mark__ink > span:nth-child(7) { transform: translateY(0.4px) rotate(0.6deg); margin-left: 0.3px; }
+.mark__ink > span:nth-child(8) { transform: translateY(-0.2px); }
+.mark__ink > span:nth-child(9) { transform: translateY(0.3px) rotate(-0.5deg); margin-left: -0.2px; }
+.mark__ink > span:nth-child(10) { transform: translateY(-0.3px) rotate(0.4deg); }
+
+.bar__nav { display: flex; align-items: center; gap: 4px; }
+.bar__items { display: none; margin: 0; padding: 0; list-style: none; }
+@media (min-width: 48rem) { .bar__items { display: flex; gap: 8px; } }
+.item { display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px; font: 400 15px/20px var(--ui); color: var(--text); text-decoration: none; }
+.item--lit { background: var(--ui-lit); color: var(--ui-lit-ink); margin-left: 8px; }
+
+/* the phone's menu: a <details>, so it works without script, drawn as the computer's pull-down
+   (src/main.ts closes it after a link, on Escape, on a tap outside it, or when focus leaves it) */
+.menu { position: relative; }
+@media (min-width: 48rem) { .menu { display: none; } }
+.menu > summary { list-style: none; cursor: pointer; }
+.menu > summary::-webkit-details-marker { display: none; }
+.menu > summary::after { content: ""; width: 10px; height: 6px; margin-left: 8px; background: currentColor; clip-path: polygon(0 0, 100% 0, 100% 33%, 80% 33%, 80% 66%, 60% 66%, 60% 100%, 40% 100%, 40% 66%, 20% 66%, 20% 33%, 0 33%); }
+.menu[open] > summary { background: var(--ui-lit); color: var(--ui-lit-ink); }
+.menu__list { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 220px; margin: 0; padding: 4px; list-style: none; background: var(--deep); border: 1px solid var(--ui-edge); }
+.menu__list a { display: flex; align-items: center; min-height: 44px; padding: 0 12px; font: 400 15px/20px var(--ui); text-decoration: none; }
+.menu__list a:focus-visible { background: var(--ui-lit); color: var(--ui-lit-ink); outline: none; box-shadow: none; }
+
+.btns { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 52px; padding: 0 24px; font: 400 16px/20px var(--ui); text-decoration: none; border-radius: 0; }
+.btn--lit { background: var(--ui-lit); color: var(--ui-lit-ink); }
+/* the quiet button's words sit on the column's edge; its padding is for the hit area and the ring */
+.btn--quiet { padding: 0 4px; margin-inline: -4px; min-height: 44px; color: var(--text); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.25em; }
+/* a button's words can't be long-press selected */
+.btn, .item { -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+
+/* hover only where there is a pointer that hovers (a tap would leave it stuck); presses everywhere, at once */
 @media (hover: hover) and (pointer: fine) {
-  a:hover {
-    text-decoration-color: var(--color-accent);
-  }
+  a:hover { text-decoration-thickness: 2px; }
+  .item:hover { background: var(--surface); text-decoration: none; }
+  .item--lit:hover { background: var(--ui-lit-hover); }
+  .menu__list a:hover { background: var(--ui-lit); color: var(--ui-lit-ink); }
+  .mark:hover { text-decoration: none; }
+  .btn--lit:hover { background: var(--ui-lit-hover); text-decoration: none; }
+  .btn--quiet:hover { text-decoration-thickness: 2px; }
 }
+.item:active, .btn--quiet:active { background: var(--surface); }
+.item--lit:active, .btn--lit:active { background: var(--ui-lit-press); }
+.menu__list a:active { background: var(--ui-lit-press); color: var(--ui-lit-ink); }
+/* 44px to a finger (the footer's links too, under the footer) */
+@media (pointer: coarse) { .item { min-height: 44px; } }
 
-.skip {
-  position: absolute;
-  left: var(--space-md);
-  top: calc(-1 * var(--space-3xl));
-  z-index: var(--z-toast);
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: var(--space-xs) var(--space-md);
-  background: var(--color-ink);
-  color: var(--color-paper);
-}
-.skip:focus-visible {
-  top: var(--space-md);
-}
-
-/* Controls: one filled primary (amber), one outlined secondary, square */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-xs);
-  min-height: 44px;
-  padding: 0 var(--space-lg);
-  border: var(--rule-hair) solid transparent;
-  border-radius: var(--radius-pill);
-  background: none;
-  color: var(--color-ink);
-  font: 500 var(--text-md) / 1 var(--font-body);
+/* ---------- printed things ---------- */
+/* label-maker tape: black plastic, whitened letters, cut with scissors. One wheel per letter, so every
+   letter gets the same cell (kit.css .emb): a span per letter, aria-hidden, with the words in .sr beside them */
+.tape, .tape__part {
+  display: inline-block; max-width: 100%;
+  padding: 7px 14px 7px 13px;
+  background-color: var(--stock-tape);
+  background-image:
+    linear-gradient(to bottom, transparent 18%, var(--tape-gloss) 27%, transparent 40%),
+    url("/img/grain-paper.webp");
+  background-size: 100% 100%, 128px 128px;
+  box-shadow: inset 0 1px 0 var(--tape-hi), inset 0 -1px 0 var(--tape-lo);
+  color: var(--tape-letter);
+  font: 700 20px/26px var(--sans);
   white-space: nowrap;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background-color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+  text-shadow: 0 0 1.2px var(--tape-glow), 0 0.75px 0.5px var(--tape-drop);
+  clip-path: polygon(0.6px 0, calc(100% - 2.4px) 0, calc(100% - 0.4px) 100%, 3px 100%);
+  transform: rotate(-0.5deg);
+  filter: url(#ink-print);
+}
+@media (min-width: 48rem) { .tape, .tape__part { font-size: 28px; line-height: 34px; padding: 8px 20px 9px 18px; } }
+.tape--b { clip-path: polygon(2.6px 0, calc(100% - 0.5px) 0, calc(100% - 3px) 100%, 0.4px 100%); transform: rotate(0.4deg); }
+.tape--c { clip-path: polygon(1px 0, calc(100% - 3.2px) 0, 100% 100%, 2.2px 100%); transform: rotate(-0.25deg); }
+.tape--d { clip-path: polygon(3px 0, calc(100% - 1px) 0, calc(100% - 2.4px) 100%, 0 100%); transform: rotate(0.6deg); }
+/* each letter sits a hair high or low and whitens by its own amount; the wide ones are cut to the wheel's pitch */
+.tape__c { display: inline-block; width: 0.68em; text-align: center; opacity: 0.95; }
+.tape__c:nth-child(3n) { opacity: 0.9; transform: translateY(0.4px); }
+.tape__c:nth-child(5n+2) { opacity: 0.86; transform: translateY(-0.3px); }
+.tape__c:nth-child(7n+4) { opacity: 0.98; transform: translateY(0.2px); }
+.tape__c--w:nth-child(n) { transform: scaleX(0.84); }
+/* a head too long for one strip on a phone is cut in two and the strips laid one under the other, as take 2
+   cuts the film's tape at 390; from 48rem it is one strip */
+@media (min-width: 48rem) {
+  .tape--cut > .tape__part { display: inline; padding: 0; background: none; box-shadow: none; clip-path: none; transform: none; filter: none; border: 0; }
 }
-.btn:active {
-  transform: translateY(1px);
-}
-.btn:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-.btn:disabled,
-.btn[aria-disabled="true"] {
-  opacity: 0.55;
-  cursor: not-allowed;
-  transform: none;
-}
-/* The page's two actions: a step up from the nav's, never louder than the
-   light heads beside them, and a pair that fits one row of every column it
-   sits in from 640 up (the narrowest, the close's just over 960, is 436) */
-.btn--large {
-  min-height: 48px;
-  padding-inline: var(--space-lg);
-  font-size: 1.0625rem;
-}
-.btn--primary {
-  background: var(--color-accent);
-  color: var(--color-accent-ink);
-}
-.btn--quiet {
-  border-color: var(--color-rule-2);
-}
-@media (hover: hover) and (pointer: fine) {
-  .btn--primary:hover {
-    background: var(--color-accent-2);
-  }
-  .btn--quiet:hover {
-    background: var(--color-paper-2);
-    border-color: var(--color-muted);
-  }
-}
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-}
-
-/* Nav: a slab, one step lighter than the room, to every edge */
-.slab {
-  background: var(--color-paper-2);
-}
-.slab__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-lg);
-  min-height: var(--slab-h);
-}
-.wordmark {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-height: 44px;
-  font-size: var(--text-lg);
-  font-weight: 400;
-  font-stretch: 125%;
-  letter-spacing: -0.01em;
-  text-decoration: none;
-  white-space: nowrap;
-}
-.mark {
-  flex-shrink: 0;
-}
-.mark rect {
-  fill: none;
-  stroke: var(--color-accent);
-}
-.mark path {
-  fill: var(--color-accent);
-}
-.slab__nav {
-  display: flex;
-  align-items: center;
-  gap: var(--space-lg);
-}
-.slab__links {
-  display: flex;
-  gap: var(--space-lg);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.slab__links a,
-.slab__menu a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  color: var(--color-ink-2);
-  text-decoration: none;
-  white-space: nowrap;
-}
-@media (hover: hover) and (pointer: fine) {
-  .slab__links a:hover,
-  .slab__menu a:hover {
-    color: var(--color-ink);
-  }
-  .btn--nav:hover {
-    background: var(--color-paper-3);
-  }
-}
-.slab__menu {
-  display: none;
-  position: relative;
-}
-.slab__menu summary {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding-inline: var(--space-sm);
-  color: var(--color-ink-2);
-  list-style: none;
-  cursor: pointer;
-}
-.slab__menu summary::-webkit-details-marker {
-  display: none;
-}
-.slab__menu[open] summary {
-  color: var(--color-ink);
-}
-@media (hover: hover) and (pointer: fine) {
-  .slab__menu summary:hover {
-    color: var(--color-ink);
-  }
-}
-.slab__menu ul {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: var(--z-dropdown);
-  min-width: 12rem;
-  margin: 0;
-  padding: var(--space-xs) 0;
-  list-style: none;
-  background: var(--color-paper-3);
-  box-shadow: var(--shadow-card);
-}
-.slab__menu li a {
-  display: flex;
-  padding: 0 var(--space-md);
-}
-
-/* Hero: Counter. The text and the install guide, centred on the phone, which
-   stands on the hero's foot and runs off it into the next room. The screen's
-   height up to 52rem (a 1440 x 900 screen's): the phone never grows past its
-   700, so on a taller screen the next room shows under it instead of a void
-   over it */
-.hero {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  min-height: min(calc(100svh - var(--slab-h)), 52rem);
-  padding-top: var(--space-2xl);
-}
-.hero__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--phone);
-  column-gap: var(--space-2xl);
-  align-items: center;
-}
-.hero h1 {
-  max-width: none;
-}
-.hero .lead {
-  margin-top: var(--space-lg);
-  max-width: 34ch;
-}
-.hero .actions {
-  margin-top: var(--space-xl);
-}
-.hero__figure {
-  margin: 0;
-}
-/* The phones go on past the band's edge rather than stop on it: their last
-   3rem fade into the room. On the picture and the live layer, not the
-   figure, so a Pause set above the figure's box is never faded */
-.hero__figure > picture,
-.hero__figure > .scene-live,
-.close__figure > img {
-  mask-image: linear-gradient(to bottom, var(--color-ink) calc(100% - 3rem), transparent);
-}
-.hero__text {
-  animation: settle var(--dur-long) var(--ease-out) backwards;
-}
-.hero__figure > picture {
-  animation: settle var(--dur-long) var(--ease-out) 80ms backwards;
-}
-@keyframes settle {
-  from {
-    opacity: 0.6;
-  }
-}
-
-/* The live scenes' Pause / Play, just above a scene's top-right corner (the
-   hero's sits over its phone's corner: see the end of this file) */
-.scene-toggle {
-  position: absolute;
-  right: 0;
-  bottom: 100%;
-  z-index: var(--z-raised);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  min-height: 44px;
-  padding: 0 var(--space-xs);
-  border: 0;
-  background: none;
-  color: var(--color-muted);
-  font: 500 var(--text-sm) / 1 var(--font-body);
-  cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out), opacity var(--dur-short) var(--ease-out), visibility 0s;
-}
-/* Made as the scene mounts, shown as it takes over from its still (mount.ts):
-   never a Pause over a picture that hasn't started */
-.scene-toggle[data-pending] {
-  opacity: 0;
-  visibility: hidden;
-}
-.scene-toggle svg {
-  width: 16px;
-  height: 16px;
-  fill: currentColor;
-}
-@media (hover: hover) and (pointer: fine) {
-  .scene-toggle:hover {
-    color: var(--color-ink);
-  }
-}
-.scene-toggle:active {
-  color: var(--color-ink-2);
-}
-.scene-toggle:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 0;
-}
-
-/* How it works: a band one step up. Three moments, each with its picture on
-   the paper steps; on a wide screen the pictures pin beside the text */
-.how {
-  padding-block: var(--section-gap-l) var(--section-gap-s);
-  background: var(--color-paper-2);
-}
-.how h2 {
-  margin-bottom: var(--space-2xl);
-}
-.moments {
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  column-gap: var(--space-2xl);
-  row-gap: var(--space-3xl);
-}
-.moment {
-  display: contents;
-}
-.moment__text {
-  grid-column: 1;
-  align-self: center;
-  transition: color var(--dur-long) var(--ease-out);
-}
-.moment__text p {
-  margin-top: var(--space-sm);
-  font-size: var(--text-lead);
-  line-height: 1.5;
-}
-.moment__plate {
-  grid-column: 2;
-  margin: 0;
-}
-.moment:nth-child(1) > * {
-  grid-row: 1;
-}
-.moment:nth-child(2) > * {
-  grid-row: 2;
-}
-.moment:nth-child(3) > * {
-  grid-row: 3;
-}
-/* Each picture is a screen in the lit band: the room's own dark, edged with
-   the rule */
-.plate {
-  position: relative;
-  background: var(--color-paper);
-  box-shadow: inset 0 0 0 var(--rule-hair) var(--color-rule);
-}
-.plate--card,
-.plate--figure {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  aspect-ratio: 600 / 560;
-  padding: var(--space-2xl);
-}
-/* The film's title card, as the player shows it: a double hairline frame */
-.titlecard {
-  padding: var(--space-xl) var(--space-lg);
-  border: var(--rule-hair) solid color-mix(in oklab, var(--color-ink) 40%, transparent);
-  outline: var(--rule-hair) solid color-mix(in oklab, var(--color-ink) 22%, transparent);
-  outline-offset: 4px;
-  text-align: center;
-}
-.titlecard__title {
-  font-size: var(--text-display);
-  font-weight: 300;
-  font-stretch: 125%;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.04;
-  text-wrap: balance;
-  overflow-wrap: break-word;
-}
-.titlecard__by {
-  margin-top: var(--space-md);
-  color: var(--color-muted);
-  font-size: var(--text-lead);
-}
-.fig {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0 var(--space-md);
-}
-.fig__n {
-  font-size: var(--text-figure);
-  font-weight: 300;
-  font-stretch: 125%;
-  letter-spacing: -0.03em;
-  line-height: 0.9;
-}
-.fig__unit {
-  font-size: var(--text-section);
-  font-weight: 400;
-  color: var(--color-ink-2);
-  line-height: 1;
-}
-.plate__line {
-  margin-top: var(--space-lg);
-  max-width: 28ch;
-  font-size: var(--text-lead);
-  line-height: 1.45;
-  color: var(--color-ink-2);
-}
-
-@media (min-width: 60rem) {
-  .moments.is-pinned {
-    row-gap: 0;
-  }
-  .moments.is-pinned .moment__text {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    min-height: 72svh;
-  }
-  .moments.is-pinned .moment:not(.is-current) .moment__text {
-    color: var(--color-muted);
-  }
-  /* The pictures and the screen they share: one box, pinned beside the text,
-     that stays while only what is in it changes */
-  .moments.is-pinned::before,
-  .moments.is-pinned .moment__plate {
-    grid-column: 2;
-    grid-row: 1 / span 3;
-    align-self: start;
-    justify-self: end;
-    position: sticky;
-    /* Centred on the screen: the plates are 560 tall at their full size */
-    top: max(var(--space-xl), calc(50svh - 17.5rem));
-  }
-  .moments.is-pinned::before {
-    content: "";
-    width: 100%;
-    max-width: 37.5rem;
-    aspect-ratio: 600 / 560;
-    background: var(--color-paper);
-    box-shadow: inset 0 0 0 var(--rule-hair) var(--color-rule);
-  }
-  .moments.is-pinned .moment__plate {
-    background: none;
-    box-shadow: none;
-  }
-  /* One picture at a time (moments.ts): the one leaving fades out at once,
-     on the frame its text dims (data-plate="out"), then the next fades in
-     (data-plate="in"), so two are never seen through each other */
-  .moments.is-pinned .moment__plate {
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 120ms var(--ease-out);
-  }
-  .moments.is-pinned .moment[data-plate="in"] > .moment__plate {
-    opacity: 1;
-    pointer-events: auto;
-    transition: opacity var(--dur-long) var(--ease-out);
-  }
-  .moments.is-pinned .moment:not([data-plate]) > .plate--scene {
-    display: none;
-  }
-  /* The admin scene comes out of display: none, so its fade starts here;
-     coming back from "out" it carries on from where it was */
-  @starting-style {
-    .moments.is-pinned .moment[data-plate="in"] > .plate--scene {
-      opacity: 0;
-    }
-  }
-  /* While the admin scene's place is hidden, its story is told to screen
-     readers here instead */
-  .moments.is-pinned .moment:not([data-plate]) .moment__desc {
-    display: block;
-  }
-}
-.moment__desc {
-  display: none;
-}
-
-/* What you need: the head beside one honest figure, then two lists */
-.need {
-  padding-block: var(--section-gap) var(--section-gap);
-}
-.need__head,
-.need__lists {
-  display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-  column-gap: var(--space-2xl);
-}
-.need__head {
-  align-items: end;
-}
-.need__head h2 {
-  max-width: 12ch;
-}
-.need__line {
-  margin-top: var(--space-md);
-  max-width: 32ch;
-  color: var(--color-ink-2);
-  font-size: var(--text-lead);
-  line-height: 1.45;
-}
-.need__lists {
-  margin-top: var(--space-3xl);
-}
-.need__group h3 {
-  margin-bottom: var(--space-md);
-}
-.rows {
-  margin: 0;
-  border-top: var(--rule-hair) solid var(--color-rule);
-}
-.rows > div {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-  column-gap: var(--space-2xl);
-  padding-block: var(--space-md);
-  border-bottom: var(--rule-hair) solid var(--color-rule);
-}
-.rows dt {
-  font-weight: 500;
-}
-.rows dd {
-  margin: 0;
-  color: var(--color-ink-2);
-  text-wrap: pretty;
-}
-
-/* What it isn't: one limit, said once, as the page's one statement: the
-   head across the container at the hero's size (a light face takes the
-   larger step), its line under the right-hand columns, between two of the
-   rules the lists use, on the gutter every section starts from. The quiet
-   band between the pinned run and the lists */
-.isnt {
-  padding-block: var(--section-gap) var(--section-gap-s);
-}
-.isnt__panel {
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  column-gap: var(--space-2xl);
-  row-gap: var(--space-lg);
-  padding: var(--space-2xl) 0;
-  border-block: var(--rule-hair) solid var(--color-rule);
-}
-.isnt h2 {
-  grid-column: 1 / -1;
-  max-width: none;
-  font-size: var(--text-display);
-  overflow-wrap: break-word;
-  min-width: 0;
-}
-.isnt p {
-  grid-column: 2;
-  max-width: 46ch;
-  font-size: var(--text-lead);
-  line-height: 1.5;
-  color: var(--color-ink-2);
-}
-
-/* The close: the install guide again, beside the film playing, which runs
-   off into the footer. The phone gives up a little width before the text
-   does, so the two actions stay on one row down to 960 */
-.close__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) min(26rem, 40%);
-  column-gap: var(--space-2xl);
-  align-items: center;
-}
-.close .lead {
-  margin-top: var(--space-lg);
-  max-width: 36ch;
-}
-.close .actions {
-  margin-top: var(--space-xl);
-}
-.close__licence {
-  margin-top: var(--space-lg);
-  color: var(--color-muted);
-}
-.close__figure {
-  margin: 0;
-}
-.close__figure img {
-  width: 100%;
-}
-
-/* Footer: a letter close, the sign-off last */
-.foot {
-  padding-block: var(--space-3xl) var(--space-2xl);
-  background: var(--color-paper-2);
-}
-.foot__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-  column-gap: var(--space-2xl);
-  align-items: end;
-}
-.foot__letter p {
-  max-width: 46ch;
-  font-size: var(--text-lead);
-  color: var(--color-ink-2);
-}
-.foot__letter .foot__signoff {
-  margin-top: var(--space-md);
-  max-width: 26ch;
-  font-size: var(--text-2xl);
-  text-wrap: balance;
-  font-weight: 300;
-  font-stretch: 125%;
-  line-height: 1.15;
-  letter-spacing: var(--tracking-display);
-  color: var(--color-ink);
-}
-.foot__links {
-  display: grid;
-  grid-template-columns: repeat(2, max-content);
-  justify-content: end;
-  gap: 0 var(--space-2xl);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.foot__links a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  color: var(--color-ink-2);
-  white-space: nowrap;
-}
-.foot__links a:hover {
-  color: var(--color-ink);
-}
-/* The 404's three links: one row that wraps, never one left alone */
-.foot__links--short {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 var(--space-xl);
-}
-
-/* The 404: its one real number set like a title card, then the way home */
-.lost {
-  display: grid;
-  align-content: center;
-  min-height: calc(100svh - var(--slab-h));
-  padding-block: var(--space-2xl);
-}
-.lost h1 {
-  max-width: 12ch;
-}
-.lost__code {
-  display: block;
-  margin-bottom: var(--space-lg);
-  font-size: clamp(6rem, 16vw, 14rem);
-  letter-spacing: -0.03em;
-  line-height: 0.9;
-}
-.lost .lead {
-  margin-top: var(--space-lg);
-}
-.lost .actions {
-  margin-top: var(--space-xl);
-}
-
-/* Between the full width and the phone column: the phone's compact design */
-@media (max-width: 74.99rem) {
-  :root {
-    --phone: 22.375rem;
-  }
-}
-
-@media (max-width: 63.99rem) {
-  .hero {
-    min-height: 0;
-  }
-  .hero__grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .hero__figure {
-    justify-self: center;
-    width: 100%;
-    max-width: 33.75rem;
-    margin-top: var(--space-3xl);
-  }
-}
-
-@media (max-width: 59.99rem) {
-  .moments {
-    display: block;
-  }
-  .moment {
-    display: block;
-  }
-  .moment + .moment {
-    margin-top: var(--space-3xl);
-  }
-  .moment__plate {
-    margin-top: var(--space-2xl);
-  }
-  .need__head,
-  .need__lists,
-  .foot__grid,
-  .close__grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .need__figure {
-    margin-top: var(--space-xl);
-  }
-  .need__group + .need__group {
-    margin-top: var(--space-2xl);
-  }
-  .isnt__panel {
-    grid-template-columns: minmax(0, 1fr);
-    padding: var(--space-xl) 0;
-  }
-  .isnt p {
-    grid-column: 1;
-  }
-  .close__figure {
-    justify-self: center;
-    width: 100%;
-    max-width: 22.375rem;
-    margin-top: var(--space-2xl);
-  }
-  .foot__links {
-    justify-content: start;
-    margin-top: var(--space-xl);
-  }
-}
-
 @media (max-width: 47.99rem) {
-  .slab__links {
-    display: none;
-  }
-  .slab__menu {
-    display: block;
-  }
-  .slab__nav {
-    gap: var(--space-xs);
-  }
-  /* The menu carries the install guide here: the nav row fits a 320 screen */
-  .slab__menu ~ .btn--nav {
-    display: none;
-  }
-  .rows > div {
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: var(--space-2xs);
-  }
+  .tape.tape--cut { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0; background: none; box-shadow: none; clip-path: none; transform: none; filter: none; }
+  .tape__gap { display: none; }
 }
 
-@media (max-width: 39.99rem) {
-  .actions .btn {
-    flex: 1 1 100%;
-  }
-  .foot__links {
-    grid-template-columns: repeat(2, minmax(0, max-content));
-    column-gap: var(--space-lg);
-  }
-  .foot__links a {
-    white-space: normal;
-  }
+/* card stock, printed by a local jobbing printer in one ink */
+.sheet {
+  position: relative;
+  background-color: var(--stock-card);
+  background-image:
+    radial-gradient(60% 45% at 22% 30%, var(--mottle), transparent 70%),
+    radial-gradient(50% 60% at 82% 76%, var(--paper-light), transparent 70%),
+    radial-gradient(40% 35% at 70% 18%, var(--mottle-faint), transparent 70%),
+    url("/img/grain-paper.webp");
+  background-size: 100% 100%, 100% 100%, 100% 100%, 128px 128px;
+  color: var(--ink);
 }
+/* text selected on paper is reversed print */
+.sheet ::selection, .slip__paper ::selection { background: var(--ink); color: var(--stock-card); }
 
-/* The pictures of How it works are never drawn past the admin scene's own
-   size: 600 wide where it shows its full design, its 358 phone design where
-   the column is narrower than that (the same widths as the still's source in
-   index.html). The type plates take the same shape, so the run's pictures
-   are one size */
-.moment__plate {
-  width: 100%;
-  max-width: 37.5rem;
-}
-@media (max-width: 631.98px), (min-width: 640.01px) and (max-width: 647.98px), (min-width: 960px) and (max-width: 1220.5px) {
-  .plate--card,
-  .plate--figure {
-    aspect-ratio: 358 / 342;
-    padding: var(--space-xl);
-  }
-  /* The title card at the phone size: its title on one line from 358 wide
-     (at 320 it breaks at the space) */
-  .plate--card {
-    padding: var(--space-lg);
-  }
-  .titlecard {
-    padding: var(--space-lg) var(--space-md);
-  }
-  .titlecard__title {
-    font-size: var(--text-3xl);
-  }
-}
-@media (min-width: 960px) and (max-width: 1220.5px) {
-  .moment__plate,
-  .moments.is-pinned::before {
-    max-width: 22.375rem;
-  }
-  .moments.is-pinned::before {
-    aspect-ratio: 358 / 342;
-  }
-  /* and 342 tall at the admin scene's phone size */
-  .moments.is-pinned::before,
-  .moments.is-pinned .moment__plate {
-    top: max(var(--space-xl), calc(50svh - 10.6875rem));
-  }
-}
+/* ---------- sections ---------- */
+.section { padding: var(--section) 0 0; }
+/* from 75rem sections are 160px apart, as far as Due back's clock is from its rules; --section stays 112 (the
+   footer's margin), so the 404 stays one screen */
+@media (min-width: 75rem) { .section { padding-top: 160px; } }
+.section__head { margin: 0 0 32px; }
+@media (min-width: 48rem) { .section__head { margin-bottom: 44px; } }
+/* about 75 characters a line: Libre Franklin's zero, which sets the ch, is wide */
+.prose { max-width: 50ch; }
+.prose p + p { margin-top: 20px; }
+.lead { font-size: 20px; line-height: 30px; }
+@media (min-width: 48rem) { .lead { font-size: 22px; line-height: 32px; } }
 
-/* The hero's Pause / Play sits in the band above its phone, its edge on the
-   phone's edge, where the wide design shows (56 of 540 at each side); over
-   the compact design, whose band is 16 of 358, it stays just above */
-.hero__figure > .scene-toggle {
-  right: 4.47%;
+/* the hero: the shop poster, then the computer, then the app */
+.hero { padding: 32px 0 0; }
+@media (min-width: 48rem) { .hero { padding-top: 48px; } }
+.hero__grid { display: grid; gap: 48px; }
+@media (min-width: 64rem) { .hero__grid { grid-template-columns: minmax(0, 1fr) 360px; gap: 64px; align-items: start; } }
+/* 392: the app's 390 at 1:1 inside its 1px edge, as the close and the back office are shown */
+@media (min-width: 75rem) { .hero__grid { grid-template-columns: minmax(0, 1fr) 392px; gap: 96px; } }
+.poster {
+  max-width: 46rem;
+  padding: 32px 24px;
+  clip-path: polygon(0 0.4px, 100% 0, calc(100% - 0.8px) 100%, 0.5px calc(100% - 0.6px));
+  transform: rotate(-0.45deg);
+  filter: drop-shadow(0 1px 0.8px var(--contact));
 }
-@media (min-width: 512px) and (max-width: 63.99rem), (min-width: 75rem) {
-  .hero__figure > .scene-toggle {
-    top: 0;
-    bottom: auto;
-    right: 10.37%;
-  }
+@media (min-width: 48rem) { .poster { padding: 48px; } }
+.poster h1 {
+  font: 800 clamp(2.5rem, 5.6vw + 0.5rem, 5.5rem)/1.02 var(--shop);
+  font-variation-settings: "SOFT" 100, "WONK" 0, "opsz" 72;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+  filter: url(#ink-print);
 }
+/* reading-size print is set clean (the kit's "clean" print): WebKit rasterises an SVG filter on text at 1x,
+   which blurs it on 2x screens and washes the glyph cores out to under 4.5:1 on 1x ones. The paper keeps its
+   grain, mottle, tilt and cut; the ink filter stays on display sizes only (the H1, the wordmark, the tape) */
+.poster__lead { margin-top: 24px; max-width: 33ch; font: 400 20px/30px var(--sans); }
+@media (min-width: 48rem) { .poster__lead { font-size: 22px; line-height: 32px; margin-top: 32px; } }
+/* the smallest phones: the H1 in three lines, and the first button on the first screen */
+@media (max-width: 22.4375rem) { .poster { padding: 28px 20px; } .poster h1 { font-size: 2.25rem; } }
+.hero__under { margin-top: 32px; }
+.hero__under p { max-width: 46ch; margin-bottom: 24px; }
+/* one headline on the poster; the room's sentence supports it */
+.hero__under .lead { color: var(--text-2); }
+.hero__app { justify-self: center; width: min(100%, 360px); }
+@media (min-width: 64rem) { .hero__app { justify-self: end; width: 100%; } }
 
-@media (prefers-reduced-motion: reduce) {
-  .hero__text,
-  .hero__figure > picture {
-    animation: none;
-  }
-  .btn,
-  a,
-  .moment__text,
-  .scene-toggle {
-    transition: none;
-  }
-  /* The pictures of How it works still change by a short fade, which moves
-     nothing (they carry keep-motion, so base.css leaves them this) */
-  .moments.is-pinned .moment__plate,
-  .moments.is-pinned .moment[data-plate="in"] > .moment__plate {
-    transition: opacity 200ms var(--ease-out);
-  }
+/* the app, shown as it is: a plain crop at phone width with a 1px edge, as in take 2.
+   No drawn device, status bar or address bar. */
+.app-crop { margin: 0; }
+.app-crop img { width: 100%; border: 1px solid var(--rule); }
+
+/* the story */
+.prose .story__end { margin-top: 24px; font-weight: 600; }
+
+/* how it works: each step beside its own picture, its heading level with the picture's top. Sticky, not
+   moving: beside the tall back office the step's words stay in view */
+.steps { display: grid; gap: 56px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
+@media (min-width: 60rem) { .steps { gap: 88px; } }
+.step { display: grid; gap: 24px; align-items: center; }
+@media (min-width: 60rem) {
+  .step { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; align-items: start; }
+  .step__text { position: sticky; top: 32px; }
+}
+.step__text { max-width: 44ch; }
+.step h3 { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; font: 600 20px/26px var(--sans); }
+@media (min-width: 48rem) { .step h3 { font-size: 22px; line-height: 28px; } }
+.step__n { font: 400 15px/20px var(--ui); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.step__pic { margin: 0; display: flex; justify-content: center; }
+/* from 60rem the three pictures share the column's left edge (each object baked to its own edge, 4px of shadow) */
+@media (min-width: 60rem) { .step__pic { justify-content: flex-start; } }
+.step__pic--sleeve img { width: 171px; }
+@media (min-width: 48rem) { .step__pic--sleeve img { width: 196px; } }
+.step__pic--pick img { width: 402px; }
+/* the back office: 600 wide at 1:1 inside its 1px edge; under 36rem, the office's own phone layout */
+.step__pic--office picture { display: block; min-width: 0; }
+.step__pic--office img { width: 602px; border: 1px solid var(--rule); }
+/* the phone cut is 358 wide: never shown larger than 1:1, as the hero and the close aren't */
+@media (max-width: 35.99rem) { .step__pic--office img { width: 360px; } }
+
+/* due back: two screens. The rules beside the tape, then what pressing Play starts, a section's space below */
+.due__grid { display: grid; gap: 36px; }
+@media (min-width: 60rem) { .due__grid { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 64px; align-items: start; } }
+.due__pic { margin: 0; }
+/* two strips, cut as 1.1.0 cuts the film's tape; letters the size the one-strip tape had at 1440 (1.14x the bake) */
+.due__pic img { width: 292px; }
+@media (min-width: 60rem) { .due__pic { padding-top: 6px; } }
+.due__clock { max-width: 50ch; margin-top: var(--section); }
+@media (min-width: 75rem) { .due__clock { margin-top: 160px; } }
+.due__clock b { font-weight: 600; }
+
+/* what it won't do */
+.wont .prose p:last-child { margin-top: 24px; font-weight: 600; }
+
+/* what you need: the till slip, and the back of the card */
+.need__intro { max-width: 50ch; margin-bottom: 36px; }
+.need__grid { display: grid; gap: 40px; }
+@media (min-width: 60rem) { .need__grid { grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 72px; align-items: start; } }
+.slip {
+  --slip-clip: polygon(0.0% 0.59px, 2.08% 3.19px, 4.17% 0.78px, 6.25% 2.65px, 8.33% 0.33px, 10.42% 2.66px, 12.5% 0.68px, 14.58% 2.71px, 16.67% 0.86px, 18.75% 3.12px, 20.83% 1.18px, 22.92% 3.37px, 25.0% 0.43px, 27.08% 2.88px, 29.17% 0.46px, 31.25% 3.18px, 33.33% 0.79px, 35.42% 2.65px, 37.5% 0.91px, 39.58% 2.88px, 41.67% 0.71px, 43.75% 3.31px, 45.83% 0.52px, 47.92% 3.07px, 50.0% 0.96px, 52.08% 3.48px, 54.17% 0.68px, 56.25% 2.74px, 58.33% 0.34px, 60.42% 3.29px, 62.5% 1.09px, 64.58% 3.23px, 66.67% 0.82px, 68.75% 3.36px, 70.83% 0.73px, 72.92% 2.65px, 75.0% 0.88px, 77.08% 3.34px, 79.17% 0.65px, 81.25% 2.62px, 83.33% 0.45px, 85.42% 2.65px, 87.5% 0.42px, 89.58% 2.95px, 91.67% 0.37px, 93.75% 3.09px, 95.83% 1.04px, 97.92% 2.85px, 100.0% 0.62px, 100.0% calc(100% - 1.1px), 97.92% calc(100% - 2.97px), 95.83% calc(100% - 1.08px), 93.75% calc(100% - 3.4px), 91.67% calc(100% - 0.7px), 89.58% calc(100% - 3.38px), 87.5% calc(100% - 0.52px), 85.42% calc(100% - 3.29px), 83.33% calc(100% - 0.41px), 81.25% calc(100% - 3.02px), 79.17% calc(100% - 0.9px), 77.08% calc(100% - 2.86px), 75.0% calc(100% - 1.19px), 72.92% calc(100% - 3.23px), 70.83% calc(100% - 0.9px), 68.75% calc(100% - 3.45px), 66.67% calc(100% - 0.71px), 64.58% calc(100% - 3.13px), 62.5% calc(100% - 0.58px), 60.42% calc(100% - 3.12px), 58.33% calc(100% - 0.9px), 56.25% calc(100% - 3.04px), 54.17% calc(100% - 0.98px), 52.08% calc(100% - 2.71px), 50.0% calc(100% - 0.56px), 47.92% calc(100% - 3.39px), 45.83% calc(100% - 0.82px), 43.75% calc(100% - 3.23px), 41.67% calc(100% - 0.57px), 39.58% calc(100% - 3.13px), 37.5% calc(100% - 0.68px), 35.42% calc(100% - 2.79px), 33.33% calc(100% - 0.36px), 31.25% calc(100% - 2.94px), 29.17% calc(100% - 0.82px), 27.08% calc(100% - 3.33px), 25.0% calc(100% - 0.41px), 22.92% calc(100% - 2.86px), 20.83% calc(100% - 0.34px), 18.75% calc(100% - 2.96px), 16.67% calc(100% - 1.15px), 14.58% calc(100% - 2.8px), 12.5% calc(100% - 1.04px), 10.42% calc(100% - 2.68px), 8.33% calc(100% - 0.69px), 6.25% calc(100% - 3.06px), 4.17% calc(100% - 0.63px), 2.08% calc(100% - 2.67px), 0.0% calc(100% - 0.44px));
+  filter: drop-shadow(0 0.5px 0.4px var(--contact-thin));
+  transform: rotate(0.6deg);
+}
+.slip__paper {
+  margin: 0; padding: 24px 24px 28px;
+  background-color: var(--stock-till);
+  background-image: radial-gradient(70% 40% at 30% 20%, var(--slip-mottle), transparent 70%), url("/img/grain-paper.webp");
+  background-size: 100% 100%, 128px 128px;
+  clip-path: var(--slip-clip);
+  color: var(--ink-ribbon);
+  font: 400 16px/22px var(--type);
+}
+@media (min-width: 48rem) { .slip__paper { padding: 30px 30px 32px; font-size: 17px; line-height: 24px; } }
+/* the slip's impact print is clean, for the same reason as the poster's lead (see .poster__lead) */
+.slip__paper dt { padding-bottom: 6px; margin-bottom: 10px; border-bottom: 1px dashed var(--ribbon-rule); text-transform: none; font-weight: 400; }
+.slip__paper dt:not(:first-child) { margin-top: 22px; }
+.slip__paper dd { margin: 0; }
+.slip__paper ul { margin: 0; padding: 0; list-style: none; }
+.slip__paper li { position: relative; padding-left: 2ch; text-wrap: pretty; }
+.slip__paper li + li { margin-top: 8px; }
+/* the till's asterisk is print, not words: empty alternative text, so a screen reader doesn't say "star" */
+.slip__paper li::before { content: "*"; content: "*" / ""; position: absolute; left: 0; }
+.need__side { display: grid; gap: 28px; align-content: start; }
+.need__card { margin: 0; }
+/* laid down a little off square; square on 1x to 1.5x screens, where a turned bar would resample unevenly */
+.need__card img { width: 400px; transform: rotate(-0.7deg); }
+@media (max-resolution: 1.5dppx) { .need__card img { transform: none; } }
+@media (min-width: 60rem) { .need__card { padding-top: 8px; } }
+.need__side p { max-width: 44ch; }
+
+/* the close */
+.close__grid { display: grid; gap: 48px; }
+@media (min-width: 64rem) { .close__grid { grid-template-columns: minmax(0, 1fr) 360px; gap: 64px; align-items: center; } }
+@media (min-width: 75rem) { .close__grid { grid-template-columns: minmax(0, 1fr) 392px; gap: 96px; } }
+.close__text p { max-width: 46ch; margin-bottom: 28px; }
+.close__app { justify-self: center; width: min(100%, 360px); }
+@media (min-width: 64rem) { .close__app { justify-self: end; width: 100%; } }
+
+/* footer */
+.foot { margin-top: var(--section); padding: 40px 0 48px; border-top: 1px solid var(--rule); font-size: 15px; line-height: 22px; color: var(--text-2); }
+.foot__grid { display: grid; gap: 28px; }
+@media (min-width: 60rem) { .foot__grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px 64px; } }
+.foot__rights { color: var(--text); font-size: 17px; line-height: 24px; }
+.foot__links { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; list-style: none; }
+.foot__links a { display: inline-flex; align-items: center; min-height: 40px; }
+@media (pointer: coarse) { .foot__links a { min-height: 44px; } }
+.foot__name { display: flex; gap: 16px; align-items: flex-start; max-width: 60ch; }
+@media (min-width: 60rem) { .foot__name { grid-column: 2; grid-row: 1 / span 2; } }
+/* the 404's short footer: the rights line left, the links right */
+@media (min-width: 60rem) { .foot--short .foot__grid { grid-template-columns: minmax(0, 1fr) auto; align-items: center; } }
+.foot__frame { flex: none; width: 56px; height: 42px; margin-top: 4px; color: var(--text-3); }
+
+/* ---------- the 404 ---------- */
+.lost { padding: 56px 0 0; min-height: 60vh; }
+@media (min-width: 48rem) { .lost { padding-top: 96px; } }
+.lost .tape { margin-bottom: 28px; }
+/* reading text, not print: Libre Franklin at the H3s' weight, untracked */
+.lost h1 { font: 600 32px/38px var(--sans); letter-spacing: 0; }
+@media (min-width: 48rem) { .lost h1 { font-size: 48px; line-height: 54px; } }
+.lost p { margin: 16px 0 32px; max-width: 40ch; }
+
+/* ---------- preferences ---------- */
+@media (prefers-contrast: more) {
+  .tape, .tape__part, .sheet, .slip__paper { background-image: none; }
+  .mark__ink, .poster h1, .tape, .tape__part { filter: none; }
+}
+@media (forced-colors: active) {
+  .tape, .tape__part, .sheet, .slip__paper { border: 1px solid CanvasText; forced-color-adjust: auto; }
+  .tape.tape--cut { border: 0; }
+  @media (min-width: 48rem) { .tape.tape--cut { border: 1px solid CanvasText; } .tape--cut > .tape__part { border: 0; } }
+  :focus-visible { outline-color: Highlight; }
+  /* the lit blocks keep a box, so the main action still looks like one */
+  .btn--lit, .item--lit, .skip { border: 1px solid ButtonText; }
+  .menu__list a:focus-visible, .menu__list a:hover { outline: 2px solid Highlight; outline-offset: -2px; }
+  .menu[open] > summary { outline: 1px solid ButtonText; }
+  .menu > summary::after { forced-color-adjust: none; background: ButtonText; }
 }

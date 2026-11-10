@@ -3,184 +3,204 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Open Matte, a small self-hosted cinema for friends</title>
-    <meta name="description" content="Publish a handful of films you think people should see, write a few lines on why, and send a friend a ticket: a link that opens the film in their browser. Free and open source." />
+    <title>Open Matte, a video shop you run yourself</title>
+    <meta name="description" content="Put the films you love on one shelf, write a few lines on why, and lend a friend the tape: a link that opens the film in their browser. Free and open source." />
     <link rel="canonical" href="https://openmatte.dev/" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://openmatte.dev/" />
     <meta property="og:title" content="Open Matte" />
-    <meta property="og:description" content="A small, self-hosted cinema for recommending films to friends. Send a ticket: a link that opens the film in their browser." />
-    <meta property="og:image" content="https://openmatte.dev/og.png" />
+    <meta property="og:description" content="A video shop you run yourself. Lend a friend a tape: a link that opens the film in their browser." />
+    <meta property="og:image" content="https://openmatte.dev/og-v2.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Open Matte. You should watch this film. A phone playing Sherlock Jr. from a ticket link." />
+    <meta property="og:image:alt" content="Open Matte. I think you should watch this film. Dr. Strangelove playing from a tape link." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="theme-color" content="#080101" />
+    <meta name="theme-color" content="#171513" />
     <meta name="color-scheme" content="dark" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="preload" href="/fonts/matte-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/LibreFranklin-400-700.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/Fraunces-800.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/MatteMono-Regular.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="./src/site.css" />
   </head>
   <body>
+    <svg class="defs" aria-hidden="true" focusable="false">
+      <defs>
+        <!-- printed ink: a hair of spread, an edge that follows the paper's fibres -->
+        <filter id="ink-print" x="-4%" y="-12%" width="108%" height="124%" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="1.15" numOctaves="2" seed="12" result="n" />
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="0.8" xChannelSelector="R" yChannelSelector="G" result="d" />
+          <feGaussianBlur in="d" stdDeviation="0.34" result="b" />
+          <feComponentTransfer in="b"><feFuncA type="linear" slope="1.5" intercept="-0.08" /></feComponentTransfer>
+        </filter>
+      </defs>
+    </svg>
+
     <a class="skip" href="#main">Skip to content</a>
 
-    <header class="slab">
-      <div class="container slab__row">
-        <a class="wordmark" href="/" aria-label="Open Matte home">
-          <svg class="mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true" focusable="false">
-            <rect x="4" y="8" width="24" height="16" rx="1.5" stroke-width="2" />
-            <path d="M14 12.5v7l6-3.5z" />
-          </svg>
-          <span>Open Matte</span>
-        </a>
-        <nav class="slab__nav" aria-label="Main">
-          <ul class="slab__links">
-            <li><a href="#how-it-works">How it works</a></li>
-            <li><a href="#what-you-need">What you need</a></li>
+    <header class="bar">
+      <div class="wrap bar__row">
+        <a class="mark" href="/" aria-label="Open Matte home"><span class="mark__ink"><span>O</span><span>p</span><span>e</span><span>n</span><span> </span><span>M</span><span>a</span><span>t</span><span>t</span><span>e</span></span></a>
+        <nav class="bar__nav" aria-label="Main">
+          <ul class="bar__items">
+            <li><a class="item" href="#how-it-works">How it works</a></li>
+            <li><a class="item" href="#what-you-need">What you need</a></li>
+            <li><a class="item item--lit" href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Install</a></li>
           </ul>
-          <details class="slab__menu">
-            <summary>Menu</summary>
-            <ul>
+          <details class="menu">
+            <summary class="item">Menu</summary>
+            <ul class="menu__list">
               <li><a href="#how-it-works">How it works</a></li>
               <li><a href="#what-you-need">What you need</a></li>
               <li><a href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Install guide</a></li>
             </ul>
           </details>
-          <a class="btn btn--quiet btn--nav" href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Install</a>
         </nav>
       </div>
     </header>
 
     <main id="main">
       <section class="hero" aria-labelledby="hero-title">
-        <div class="container hero__grid">
+        <div class="wrap hero__grid">
           <div class="hero__text">
-            <h1 id="hero-title">You should watch this film.</h1>
-            <p class="lead">A small, self-hosted cinema for recommending films to friends.</p>
-            <div class="actions">
-              <a class="btn btn--primary btn--large" href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Read the install guide</a>
-              <a class="btn btn--quiet btn--large" href="https://github.com/arthurclack/open-matte">See it on GitHub</a>
+            <div class="poster sheet">
+              <h1 id="hero-title">I think you should watch this film.</h1>
+              <p class="poster__lead">Open Matte is a video shop that you run yourself. It has one shelf, and every film on it is a staff pick.</p>
+            </div>
+            <div class="hero__under">
+              <p class="lead">Send a friend the film you keep telling them about, with a few lines on why they should see it.</p>
+              <div class="btns">
+                <a class="btn btn--lit" href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Open your shop</a>
+                <a class="btn btn--quiet" href="https://github.com/arthurclack/open-matte">See it on GitHub</a>
+              </div>
             </div>
           </div>
-          <figure class="hero__figure scene" data-scene="ticket" data-label="the ticket demo" data-ss-fill>
-            <picture>
-              <source data-start media="(scripting: enabled) and (prefers-reduced-motion: no-preference) and (max-width: 511.98px), (scripting: enabled) and (prefers-reduced-motion: no-preference) and (min-width: 64rem) and (max-width: 74.99rem)" srcset="/stage/ticket-start-compact.webp" width="358" height="500" />
-              <source data-start media="(scripting: enabled) and (prefers-reduced-motion: no-preference)" srcset="/stage/ticket-start.webp" width="540" height="700" />
-              <source media="(max-width: 511.98px), (min-width: 64rem) and (max-width: 74.99rem)" srcset="/stage/ticket-compact.webp" width="358" height="500" />
-              <img src="/stage/ticket.webp" width="540" height="700" fetchpriority="high" alt="A phone. In a conversation a friend writes: You should watch this film. Here’s the link. The link’s preview shows Sherlock Jr. (1924), a ticket from Back Row. Tapped, it opens the film’s page with its admit-one ticket, and after Play the film’s title card fills the player." />
-            </picture>
+          <figure class="hero__app app-crop">
+            <img src="/img/app-film-page.webp" width="390" height="667" fetchpriority="high" alt="Dr. Strangelove (1964) in The Lantern Room, as the friend sees it from the tape’s link: a plain sleeve, Arthur’s staff pick, “Peter Sellers plays three parts. Sixty years on, it’s still funny.”, the tape with a sticker saying start by Saturday 14 November, and Play, with one play left." />
           </figure>
         </div>
       </section>
 
-      <section id="how-it-works" class="how" aria-labelledby="how-title">
-        <div class="container">
-          <h2 id="how-title">How a ticket reaches a friend.</h2>
-          <div class="moments" data-moments>
-            <div class="moment is-current">
-              <div class="moment__text">
-                <h3>Pick a film</h3>
-                <p>Publish a film you’ve prepared, with your few lines on why it’s worth their evening.</p>
-              </div>
-              <div class="moment__plate plate plate--card keep-motion">
-                <div class="titlecard">
-                  <p class="titlecard__title">Sherlock Jr.</p>
-                  <p class="titlecard__by">Buster Keaton, 1924</p>
-                </div>
-              </div>
-            </div>
-            <div class="moment">
-              <div class="moment__text">
-                <h3>Send a ticket</h3>
-                <p>An admit-one link, with an optional screening limit, start-by date and days after first play. Revoke it and it stops at the next request.</p>
-                <p class="visually-hidden moment__desc">The Open Matte admin, on a film’s page: a ticket for anyone with the link, one screening, valid for 7 days after first play, has just been issued. Under the form: 1 ticket ready, for Sam, with its link and Copy link pressed, now saying Copied.</p>
-              </div>
-              <figure class="moment__plate plate plate--scene scene keep-motion" data-scene="issue" data-label="the admin demo" data-ss-fill>
-                <picture>
-                  <source data-start media="(scripting: enabled) and (prefers-reduced-motion: no-preference) and (max-width: 631.98px), (scripting: enabled) and (prefers-reduced-motion: no-preference) and (min-width: 640.01px) and (max-width: 647.98px), (scripting: enabled) and (prefers-reduced-motion: no-preference) and (min-width: 960px) and (max-width: 1220.5px)" srcset="/stage/issue-start-compact.webp" width="358" height="342" />
-                  <source data-start media="(scripting: enabled) and (prefers-reduced-motion: no-preference)" srcset="/stage/issue-start.webp" width="600" height="560" />
-                  <source media="(max-width: 631.98px), (min-width: 640.01px) and (max-width: 647.98px), (min-width: 960px) and (max-width: 1220.5px)" srcset="/stage/issue-compact.webp" width="358" height="342" />
-                  <img src="/stage/issue.webp" width="600" height="560" loading="lazy" alt="The Open Matte admin, on a film’s page: a ticket for anyone with the link, one screening, valid for 7 days after first play, has just been issued. Under the form: 1 ticket ready, for Sam, with its link and Copy link pressed, now saying Copied." />
-                </picture>
-              </figure>
-            </div>
-            <div class="moment">
-              <div class="moment__text">
-                <h3>They press Play</h3>
-                <p>Any current browser will do: phones, TVs and apps’ built-in browsers included. They need no account.</p>
-              </div>
-              <div class="moment__plate plate plate--figure keep-motion">
-                <p class="fig"><span class="fig__n">48</span> <span class="fig__unit">hours</span></p>
-                <p class="plate__line">by default, to pick up where they left off, on one device at a time.</p>
-              </div>
-            </div>
+      <section class="section story" aria-labelledby="story-title">
+        <div class="wrap">
+          <h2 class="tape tape--b tape--cut section__head" id="story-title"><span class="sr">The film they can’t find</span><span class="tape__part tape--b" aria-hidden="true"><span class="tape__c">T</span><span class="tape__c">h</span><span class="tape__c">e</span><span class="tape__c">&nbsp;</span><span class="tape__c">f</span><span class="tape__c">i</span><span class="tape__c">l</span><span class="tape__c tape__c--w">m</span><span class="tape__c">&nbsp;</span><span class="tape__c">t</span><span class="tape__c">h</span><span class="tape__c">e</span><span class="tape__c">y</span><span class="tape__c tape__gap">&nbsp;</span></span><span class="tape__part tape--c" aria-hidden="true"><span class="tape__c">c</span><span class="tape__c">a</span><span class="tape__c">n</span><span class="tape__c">’</span><span class="tape__c">t</span><span class="tape__c">&nbsp;</span><span class="tape__c">f</span><span class="tape__c">i</span><span class="tape__c">n</span><span class="tape__c">d</span></span></h2>
+          <div class="prose">
+            <p>In the 1990s, if you thought a friend should see a film, you lent them the tape.</p>
+            <p>Now I tell a friend about a film, they look for it, and it isn’t on anything they can stream. Even when it’s mine to share, sending it from my media server means an account for the sake of one film, a way into my home network, and hoping my upload speed holds up. So I tell them again the next time I see them, and they still haven’t seen it.</p>
+            <p class="story__end">Open Matte is the tape.</p>
           </div>
         </div>
       </section>
 
-      <section class="isnt" aria-labelledby="isnt-title">
-        <div class="container">
-          <div class="isnt__panel">
-            <h2 id="isnt-title">Not a media server.</h2>
-            <p>No library of everything you own. You prepare each film, and the server sends it as it is, never transcoding.</p>
+      <section id="how-it-works" class="section how" aria-labelledby="how-title">
+        <div class="wrap">
+          <h2 class="tape section__head" id="how-title"><span class="sr">How it works</span><span aria-hidden="true"><span class="tape__c">H</span><span class="tape__c">o</span><span class="tape__c tape__c--w">w</span><span class="tape__c">&nbsp;</span><span class="tape__c">i</span><span class="tape__c">t</span><span class="tape__c">&nbsp;</span><span class="tape__c tape__c--w">w</span><span class="tape__c">o</span><span class="tape__c">r</span><span class="tape__c">k</span><span class="tape__c">s</span></span></h2>
+          <ol class="steps">
+            <li class="step">
+              <div class="step__text">
+                <h3><span class="step__n">1</span>Put it on the shelf</h3>
+                <p>Prepare a film once on your own computer, and copy it to your server.</p>
+              </div>
+              <figure class="step__pic step__pic--sleeve"><img src="/img/obj-sleeve.webp" width="220" height="326" loading="lazy" alt="" /></figure>
+            </li>
+            <li class="step">
+              <div class="step__text">
+                <h3><span class="step__n">2</span>Write the staff pick</h3>
+                <p>Each film has its own page, with the poster, the details, and your few lines on why it’s worth their evening.</p>
+              </div>
+              <figure class="step__pic step__pic--pick"><img src="/img/obj-pick.webp" width="402" height="195" loading="lazy" alt="" /></figure>
+            </li>
+            <li class="step">
+              <div class="step__text">
+                <h3><span class="step__n">3</span>Lend a tape</h3>
+                <p>A tape is a link that opens the film in your friend’s browser. They don’t need an app or a password, and you don’t need to make them an account.</p>
+              </div>
+              <figure class="step__pic step__pic--office"><picture><source media="(min-width: 36rem)" srcset="/img/app-lend.webp" width="600" height="654" /><img src="/img/app-lend-compact.webp" width="358" height="519" loading="lazy" alt="The back office of The Lantern Room: a tape for anyone with the link, one play, 7 days after the first play, is ready. Under the form is its link, with Copy link pressed, now saying Copied." /></picture></figure>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section due" aria-labelledby="due-title">
+        <div class="wrap">
+          <h2 class="tape tape--c section__head" id="due-title"><span class="sr">Due back</span><span aria-hidden="true"><span class="tape__c">D</span><span class="tape__c">u</span><span class="tape__c">e</span><span class="tape__c">&nbsp;</span><span class="tape__c">b</span><span class="tape__c">a</span><span class="tape__c">c</span><span class="tape__c">k</span></span></h2>
+          <div class="due__grid">
+            <div class="prose">
+              <p>Anyone with the link can play the tape. To lend a tape to one person only, give them a membership card. They sign in with a passkey, not a password.</p>
+              <p>You can limit the number of plays, set a date to start by, or allow a number of days after the first play. Take a tape back and it stops working almost straight away.</p>
+            </div>
+            <figure class="due__pic" aria-hidden="true"><img src="/img/obj-dueback.webp" width="257" height="90" loading="lazy" alt="" /></figure>
+          </div>
+          <p class="due__clock"><b>Pressing Play starts the clock.</b> Your friend can pause and come back within 48 hours by default, on one device at a time. The picture adjusts to their connection, up to 4K HDR on screens that can show it, and they choose their audio and subtitles. Nobody has to rewind.</p>
+        </div>
+      </section>
+
+      <section class="section wont" aria-labelledby="wont-title">
+        <div class="wrap">
+          <h2 class="tape tape--d section__head" id="wont-title"><span class="sr">What it won’t do</span><span aria-hidden="true"><span class="tape__c tape__c--w">W</span><span class="tape__c">h</span><span class="tape__c">a</span><span class="tape__c">t</span><span class="tape__c">&nbsp;</span><span class="tape__c">i</span><span class="tape__c">t</span><span class="tape__c">&nbsp;</span><span class="tape__c tape__c--w">w</span><span class="tape__c">o</span><span class="tape__c">n</span><span class="tape__c">’</span><span class="tape__c">t</span><span class="tape__c">&nbsp;</span><span class="tape__c">d</span><span class="tape__c">o</span></span></h2>
+          <div class="prose">
+            <p>Open Matte isn’t a media server. There’s no library of everything you own, and the server never converts a film.</p>
+            <p>It doesn’t use DRM (copy protection), so anyone who can play a film could record it. The aim is private enough for friends.</p>
+            <p>It’s less than a media server and, for this one job, better.</p>
+            <p>Only share films you have the right to share.</p>
           </div>
         </div>
       </section>
 
-      <section id="what-you-need" class="need" aria-labelledby="need-title">
-        <div class="container">
-          <div class="need__head">
-            <h2 id="need-title">Your server, their browser.</h2>
-            <div class="need__figure">
-              <p class="fig"><span class="fig__n">38</span> <span class="fig__unit">GB</span></p>
-              <p class="need__line">at most, for a two-hour 4K HDR film with every rendition. Often much less.</p>
-            </div>
-          </div>
-          <div class="need__lists">
-            <div class="need__group">
-              <h3>Yours</h3>
-              <dl class="rows">
-                <div><dt>A Linux server</dt><dd>Docker and Docker Compose, a public IPv4 address, ports 80 and 443 open.</dd></div>
-                <div><dt>A domain</dt><dd>Caddy gets its certificate.</dd></div>
-                <div><dt>Prepared films</dt><dd>Encoded on your computer with <code>scripts/encode.mjs</code> (Node and ffmpeg).</dd></div>
-                <div><dt>A TMDB key</dt><dd>Optional, for details and artwork.</dd></div>
+      <section id="what-you-need" class="section need" aria-labelledby="need-title">
+        <div class="wrap">
+          <h2 class="tape tape--b section__head" id="need-title"><span class="sr">What you need</span><span aria-hidden="true"><span class="tape__c tape__c--w">W</span><span class="tape__c">h</span><span class="tape__c">a</span><span class="tape__c">t</span><span class="tape__c">&nbsp;</span><span class="tape__c">y</span><span class="tape__c">o</span><span class="tape__c">u</span><span class="tape__c">&nbsp;</span><span class="tape__c">n</span><span class="tape__c">e</span><span class="tape__c">e</span><span class="tape__c">d</span></span></h2>
+          <p class="need__intro">Setting up Open Matte takes some work. After that, lending a film is as casual as sending any other link.</p>
+          <div class="need__grid">
+            <div class="slip">
+              <dl class="slip__paper">
+                <dt>Yours</dt>
+                <dd>
+                  <ul>
+                    <li>A Linux server with Docker, a public IPv4 address, and ports 80 and 443 open</li>
+                    <li>A domain</li>
+                    <li>Films you prepare on your own computer, with Node and ffmpeg</li>
+                    <li>Disk space: up to about 38 GB for a two-hour 4K HDR film, often much less</li>
+                    <li>A TMDB key, if you want details and artwork</li>
+                  </ul>
+                </dd>
+                <dt>Theirs</dt>
+                <dd>
+                  <ul>
+                    <li>A browser</li>
+                    <li>A membership card, only if you give them one</li>
+                  </ul>
+                </dd>
               </dl>
             </div>
-            <div class="need__group">
-              <h3>Theirs</h3>
-              <dl class="rows">
-                <div><dt>A browser</dt><dd>No account needed.</dd></div>
-                <div><dt>A passkey</dt><dd>Only if you give them an account.</dd></div>
-              </dl>
+            <div class="need__side">
+              <figure class="need__card" aria-hidden="true"><img src="/img/obj-cardback.webp" width="400" height="256" loading="lazy" alt="" /></figure>
+              <p>Put Open Matte on a server away from home and your friends never touch your home network. Your home upload speed only matters when you copy a film across.</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="close" aria-labelledby="close-title">
-        <div class="container close__grid">
+      <section class="section close" aria-labelledby="close-title">
+        <div class="wrap close__grid">
           <div class="close__text">
-            <h2 id="close-title">Send your first ticket.</h2>
-            <p class="lead">The install guide runs from a fresh server to a ticket played.</p>
-            <div class="actions">
-              <a class="btn btn--primary btn--large" href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Read the install guide</a>
-              <a class="btn btn--quiet btn--large" href="https://github.com/arthurclack/open-matte">See it on GitHub</a>
+            <h2 class="tape tape--c section__head" id="close-title"><span class="sr">Here’s the link.</span><span aria-hidden="true"><span class="tape__c">H</span><span class="tape__c">e</span><span class="tape__c">r</span><span class="tape__c">e</span><span class="tape__c">’</span><span class="tape__c">s</span><span class="tape__c">&nbsp;</span><span class="tape__c">t</span><span class="tape__c">h</span><span class="tape__c">e</span><span class="tape__c">&nbsp;</span><span class="tape__c">l</span><span class="tape__c">i</span><span class="tape__c">n</span><span class="tape__c">k</span><span class="tape__c">.</span></span></h2>
+            <p class="lead">Open Matte is free and open source, under GPL-3.0-or-later. You run it yourself, so you’ll need a server and a domain, and those aren’t free.</p>
+            <div class="btns">
+              <a class="btn btn--lit" href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Read the install guide</a>
+              <a class="btn btn--quiet" href="https://github.com/arthurclack/open-matte">See it on GitHub</a>
             </div>
-            <p class="close__licence">Free and open source, GPL-3.0-or-later.</p>
           </div>
-          <figure class="close__figure">
-            <img src="/stage/playing.webp" width="358" height="500" loading="lazy" alt="The film playing on a friend’s phone: the Sherlock Jr. title card in the player, opened from a ticket link." />
+          <figure class="close__app app-crop">
+            <img src="/img/app-playing.webp" width="390" height="371" loading="lazy" alt="The film playing for the friend: a plain title card for Dr. Strangelove in the player, opened from a tape link." />
           </figure>
         </div>
       </section>
     </main>
 
     <footer class="foot">
-      <div class="container foot__grid">
-        <div class="foot__letter">
-          <p>Pick a film you love, say why in a few lines, and send the link.</p>
-          <p class="foot__signoff">Only share films you have the right to share.</p>
-        </div>
+      <div class="wrap foot__grid">
+        <p class="foot__rights">Only share films you have the right to share.</p>
         <ul class="foot__links">
           <li><a href="https://github.com/arthurclack/open-matte/blob/main/docs/installing.md">Install guide</a></li>
           <li><a href="https://github.com/arthurclack/open-matte">GitHub</a></li>
@@ -189,6 +209,13 @@
           <li><a href="https://github.com/arthurclack/open-matte/blob/main/LICENSE">Licence</a></li>
           <li><a href="/third-party-licenses.txt">Third-party licences</a></li>
         </ul>
+        <div class="foot__name">
+          <svg class="foot__frame" viewBox="0 0 56 42" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="10" y="9" width="36" height="24" />
+            <path d="M10 1v5M46 1v5M10 36v5M46 36v5M1 9h5M50 9h5M1 33h5M50 33h5" />
+          </svg>
+          <p>An open matte is a film transferred without its masking, so you see more of the frame than the cinema did. Plenty of films reached VHS that way, filling a 4:3 television and now and then showing a boom microphone nobody was meant to see.</p>
+        </div>
       </div>
     </footer>
 
