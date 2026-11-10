@@ -57,7 +57,7 @@ import './membershipCard.css';
 // to be looked at rather than handled: no back, no Turn over. The sign-in pages use it
 // as the button that signs in ("Show your card").
 
-const TURN_MS = 460;
+const TURN_MS = 800;
 const WRITE_MS = 560;
 // The longest the name waits for its pen before it's written on anyway, in whatever
 // the device has instead.

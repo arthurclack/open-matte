@@ -203,7 +203,7 @@ test('the account page shows the membership card, front up, and Turn over turns 
   });
 });
 
-test('the card turns over in 460 ms, and a second press mid-turn sends it back', async ({ page, context }, testInfo) => {
+test('the card turns over in 800 ms, and a second press mid-turn sends it back', async ({ page, context }, testInfo) => {
   await signedIn(context, testInfo);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/account');
@@ -213,7 +213,7 @@ test('the card turns over in 460 ms, and a second press mid-turn sends it back',
     const cs = getComputedStyle(el);
     return `${cs.transitionProperty} ${cs.transitionDuration} ${cs.transitionTimingFunction}`;
   });
-  expect(transition).toBe('transform 0.46s cubic-bezier(0.25, 0.46, 0.45, 0.94)');
+  expect(transition).toBe('transform 0.8s cubic-bezier(0.3, 0.1, 0.2, 1)');
   await button.click();
   await expect(page.locator('.mc')).toHaveClass(/is-turning/);
   // Both sides are drawn while it turns.
@@ -260,11 +260,11 @@ test('turning over, the card shows its thickness: a cut edge, turning with its f
     // The card's own settle timer would end the turn under a paused frame.
     await page.evaluate(() => {
       const st = window.setTimeout;
-      window.setTimeout = (fn, ms, ...a) => (ms === 710 ? 0 : st(fn, ms, ...a));
+      window.setTimeout = (fn, ms, ...a) => (ms === 1050 ? 0 : st(fn, ms, ...a));
     });
     await page.getByRole('button', { name: 'Turn over' }).click();
-    const running = await frozen(page, 140);
-    // Both faces, both shades and the fourteen strips, all on the same 460 ms.
+    const running = await frozen(page, 237);
+    // Both faces, both shades and the fourteen strips, all on the same 800 ms.
     expect(running.length).toBe(18);
     expect(new Set(running.map((a) => `${a.duration} ${a.time} ${a.progress}`)).size).toBe(1);
     const width = (await page.locator('.mc-stage').boundingBox()).width;
@@ -288,7 +288,7 @@ test('turning over, the card shows its thickness: a cut edge, turning with its f
     expect(back.length).toBe(18);
     expect(new Set(back.map((a) => `${a.duration} ${a.progress}`)).size).toBe(1);
     // Shortened alike: back from where it got to, not a whole turn's time.
-    expect(back[0].duration).toBeLessThan(460);
+    expect(back[0].duration).toBeLessThan(800);
     await page.evaluate(() => {
       for (const a of document.getAnimations()) a.play();
     });

@@ -50,8 +50,9 @@
   -webkit-backface-visibility: hidden;
   transform-origin: 50% 50% calc(var(--mc-t, 0px) * -0.5);
   will-change: transform;
-  /* edge-on at about 140 ms, then it settles; a press mid-turn reverses from where it got to */
-  transition: transform 460ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  /* the pace of a card turned in the hand: moving at once, edge-on at about 240 ms, then
+     settling over the rest; a press mid-turn reverses from where it got to */
+  transition: transform 800ms cubic-bezier(0.3, 0.1, 0.2, 1);
 }
 .mc:not(.is-turning) .mc-face[aria-hidden='true'] { visibility: hidden; }
 /* the cut edge: the card's own stock, a little darker than its faces (darker than a
@@ -74,7 +75,7 @@
     repeating-linear-gradient(0deg, transparent 0 11px, rgb(255 248 232 / 0.07) 11px 13px, transparent 13px 29px),
     repeating-linear-gradient(0deg, transparent 0 23px, rgb(50 38 24 / 0.06) 23px 26px, transparent 26px 53px),
     linear-gradient(90deg, #857860, #a99a7e 20%, #b5a68a 50%, #a89a7d 80%, #83765e);
-  transition: transform 460ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: transform 800ms cubic-bezier(0.3, 0.1, 0.2, 1);
 }
 .mc:not(.is-turning) .mc-edge { visibility: hidden; }
 /* each face darkens a little as it turns away from the light, and is lit again as it
@@ -86,7 +87,7 @@
   background: #170f07;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 460ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: opacity 800ms cubic-bezier(0.3, 0.1, 0.2, 1);
 }
 .mc-face[aria-hidden='true'] .mc-shade { opacity: 0.5; }
 .mc-ctl { display: flex; flex-wrap: wrap; gap: 12px; }
