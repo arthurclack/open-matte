@@ -108,7 +108,7 @@ export const admin = {
 // `submit` sends the form (a click, or Enter); the field has focus throughout.
 export async function signInAsAdmin(page, submit) {
   await page.exposeFunction('e2eAdminPassword', () => env('E2E_ADMIN_PASSWORD'));
-  await page.getByLabel('Admin password').evaluate(async (input) => {
+  await page.getByLabel('Back office password').evaluate(async (input) => {
     const value = await window.e2eAdminPassword();
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value);
     input.dispatchEvent(new Event('input', { bubbles: true }));

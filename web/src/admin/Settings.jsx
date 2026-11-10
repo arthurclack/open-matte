@@ -1,18 +1,43 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useId, useState } from 'react';
 import { api, formatBytes, formatDateTime, plural } from '../api.js';
+import { Line } from '../look/ui.jsx';
+import { askHost, pickedBy } from '../look/words.js';
 import Branding from './Branding.jsx';
-import { ErrorNote, clearedCounts, lastClearedText, useAction, useLoad } from './ui.jsx';
+import { AdminContext, DoneNote, ErrorNote, Head, Mark, TmdbCredit, clearedCounts, lastClearedText, useAction, useLoad } from './ui.jsx';
 
-// The main form holds only its own fields. The other cards (Branding, Film information)
-// save theirs separately: saving one of them leaves unsaved edits here alone, and saving
-// here can't send back an old copy of their values.
-const mainForm = (s) => ({ cinemaName: s.cinemaName, welcome: s.welcome, resumeWindowHours: String(s.resumeWindowHours), poweredBy: s.poweredBy, mediaSessionTitle: s.mediaSessionTitle });
+// The page's own index: each part is a box with this id.
+const PARTS = [
+  ['s-shop', 'The shop'],
+  ['s-colours', 'Colours and the card'],
+  ['s-logo', 'Logo'],
+  ['s-tmdb', 'Film information'],
+  ['s-passkeys', 'Members and passkeys'],
+  ['s-backups', 'Backups'],
+  ['s-records', 'Keeping records'],
+  ['s-everyone', 'Sign out everyone'],
+];
+
+// The main form holds only its own fields. The other parts (colours, logo, Film
+// information...) save theirs separately: saving one of them leaves unsaved edits here
+// alone, and saving here can't send back an old copy of their values.
+const mainForm = (s) => ({
+  cinemaName: s.cinemaName,
+  ownerName: s.ownerName ?? '',
+  welcome: s.welcome,
+  resumeWindowHours: String(s.resumeWindowHours),
+  poweredBy: s.poweredBy,
+  mediaSessionTitle: s.mediaSessionTitle,
+});
 
 export default function Settings() {
   const { data: settings, setData, error } = useLoad(() => api.get('/api/admin/settings'), []);
   const [form, setForm] = useState(null);
   const [notice, setNotice] = useState(null);
   const action = useAction();
+  const everyone = useAction();
+  const [everyoneNotice, setEveryoneNotice] = useState(null);
+  const { setSite } = useContext(AdminContext);
+  const id = useId();
 
   useEffect(() => {
     if (settings) setForm((f) => f ?? mainForm(settings));
@@ -23,87 +48,145 @@ export default function Settings() {
 
   async function save(e) {
     e.preventDefault();
+    setNotice(null);
     const r = await action.run(() => api.patch('/api/admin/settings', { ...form, resumeWindowHours: Number(form.resumeWindowHours) }));
     if (r) {
       setData(r);
       setForm(mainForm(r));
+      // The back office's brand shows the shop's name; a staff pick's hint, your name.
+      setSite((site) => ({ ...site, cinemaName: r.cinemaName, ownerName: r.ownerName }));
       setNotice('Saved.');
     }
   }
 
   async function expireAll() {
-    if (!window.confirm('Sign out every viewer and member? People will need to open their ticket link or sign in again. Tickets and screenings are not affected.')) return;
-    const r = await action.run(() => api.post('/api/admin/sessions/expire-all'));
+    if (!window.confirm('Sign out every friend and member? They\'ll need to open their tape link or sign in again. Tapes and plays are not affected.')) return;
+    setEveryoneNotice(null);
+    const r = await everyone.run(() => api.post('/api/admin/sessions/expire-all'));
     // The server counts only browsers that were still signed in.
-    if (r) setNotice(r.expired ? `Signed out ${plural(r.expired, 'browser')}.` : 'No browsers were signed in.');
+    if (r) setEveryoneNotice(r.expired ? `Signed out ${plural(r.expired, 'browser')}.` : 'No browsers were signed in.');
   }
+
+  const field = (k) => `${id}-${k}`;
 
   return (
     <>
-      <div className="page-head">
-        <h1>Settings</h1>
-      </div>
-      <ErrorNote error={action.error} />
-      {notice && <div className="notice good">{notice}</div>}
+      <Head title="Settings" />
+      <ul className="of-toc">
+        {PARTS.map(([part, name]) => (
+          <li key={part}>
+            <a href={`#${part}`}>{name}</a>
+          </li>
+        ))}
+      </ul>
 
-      <form className="card" onSubmit={save} style={{ maxWidth: 720 }}>
-        <label className="field">
-          <span>Cinema name</span>
-          <input value={form.cinemaName} onChange={(e) => setForm({ ...form, cinemaName: e.target.value })} maxLength={80} required />
-        </label>
-        <label className="field">
-          <span>Front page message</span>
-          <textarea value={form.welcome} onChange={(e) => setForm({ ...form, welcome: e.target.value })} rows={3} />
-          <small>Shown to visitors who don't hold a ticket.</small>
-        </label>
-        <label className="field" style={{ maxWidth: 260 }}>
-          <span>Resume window (hours)</span>
-          <input type="number" min="1" max="720" value={form.resumeWindowHours} onChange={(e) => setForm({ ...form, resumeWindowHours: e.target.value })} />
-          <small>How long a screening can be paused and resumed after it starts. Applies to screenings started from now on.</small>
-        </label>
-        <label className="check">
+      <form className="of-box of-w" id="s-shop" onSubmit={save} aria-labelledby={field('h')}>
+        <h2 className="of-h2" id={field('h')}>
+          The shop
+        </h2>
+        <ErrorNote error={action.error} />
+        <DoneNote>{notice}</DoneNote>
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor={field('name')}>
+            Shop name
+          </label>
+          <input id={field('name')} className="ui-input" value={form.cinemaName} onChange={(e) => setForm({ ...form, cinemaName: e.target.value })} maxLength={80} required />
+        </div>
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor={field('owner')}>
+            Your name <small>(optional)</small>
+          </label>
+          <input
+            id={field('owner')}
+            className="ui-input"
+            value={form.ownerName}
+            onChange={(e) => setForm({ ...form, ownerName: e.target.value })}
+            maxLength={80}
+            autoComplete="given-name"
+            aria-describedby={field('owner-h')}
+          />
+          <p className="ui-field__hint" id={field('owner-h')}>
+            Friends see it on your staff picks and wherever the pages say whom to ask: “{pickedBy(form)}”, “{askHost(form)}”.
+          </p>
+        </div>
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor={field('welcome')}>
+            Front page message
+          </label>
+          <textarea
+            id={field('welcome')}
+            className="ui-textarea"
+            value={form.welcome}
+            onChange={(e) => setForm({ ...form, welcome: e.target.value })}
+            rows={3}
+            aria-describedby={field('welcome-h')}
+          />
+          <p className="ui-field__hint" id={field('welcome-h')}>
+            Shown to visitors who don't have a tape.
+          </p>
+        </div>
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor={field('resume')}>
+            Time to come back (hours)
+          </label>
+          <input
+            id={field('resume')}
+            className="ui-input ui-input--num"
+            type="number"
+            min="1"
+            max="720"
+            value={form.resumeWindowHours}
+            onChange={(e) => setForm({ ...form, resumeWindowHours: e.target.value })}
+            aria-describedby={field('resume-h')}
+          />
+          <p className="ui-field__hint" id={field('resume-h')}>
+            How long after pressing Play a friend can pause and come back. Applies to plays started from now on.
+          </p>
+        </div>
+        <label className="ui-check">
           <input type="checkbox" checked={form.poweredBy} onChange={(e) => setForm({ ...form, poweredBy: e.target.checked })} />
-          Show “Powered by Open Matte” in the footer
+          <span>Show “Powered by Open Matte” in the footer</span>
         </label>
-        <label className="check top">
+        <label className="ui-check">
           <input type="checkbox" checked={form.mediaSessionTitle} onChange={(e) => setForm({ ...form, mediaSessionTitle: e.target.checked })} />
           <span>
             Show the film's title and poster on lock screens and media controls
-            <small className="faint" style={{ display: 'block', fontSize: '0.85rem' }}>
-              Off: they show the cinema's name only.
-            </small>
+            <small>Off: they show the shop's name only.</small>
           </span>
         </label>
-        <button className="btn primary" disabled={action.busy}>
-          Save settings
-        </button>
+        <div className="ui-btns of-gap-s">
+          <button className="ui-btn ui-btn--primary" disabled={action.busy}>
+            Save settings
+          </button>
+        </div>
       </form>
 
-      <h2>Branding</h2>
       <Branding settings={settings} onSaved={setData} />
 
-      <h2>Film information</h2>
       <TmdbSettings settings={settings} onSaved={setData} />
 
-      <h2>People and passkeys</h2>
       <Passkeys passkeys={settings.passkeys} />
 
-      <h2>Backups</h2>
       <Backups />
 
-      <h2>Keeping records</h2>
       <Retention settings={settings} onSaved={setData} />
 
-      <h2>Sessions</h2>
-      <div className="card" style={{ maxWidth: 720 }}>
-        <p className="dim">Sign out every viewer and member. Tickets keep working: people open their link or sign in again.</p>
-        <button className="btn danger" onClick={expireAll} disabled={action.busy}>
-          Sign out every viewer
-        </button>
-      </div>
+      <section className="of-box of-w" id="s-everyone" aria-labelledby={field('everyone')}>
+        <h2 className="of-h2" id={field('everyone')}>
+          Sign out everyone
+        </h2>
+        <ErrorNote error={everyone.error} />
+        <DoneNote>{everyoneNotice}</DoneNote>
+        <p className="of-p of-dim">Tapes keep working: people open their link or sign in again.</p>
+        <div className="ui-btns">
+          <button type="button" className="ui-btn ui-btn--danger" onClick={expireAll} disabled={everyone.busy}>
+            Sign out every friend and member
+          </button>
+        </div>
+      </section>
 
       {/* Which Open Matte this is, and the licences of the code the site sends to browsers (the build writes them). */}
-      <p className="faint" style={{ maxWidth: 720, margin: '2.5rem 0 0', fontSize: '0.85rem' }}>
+      <p className="of-foot">
         Open Matte {settings.version} · <a href="/third-party-licenses.txt">Licences</a>
       </p>
     </>
@@ -129,13 +212,14 @@ const LANGUAGES = [
   ['ko-KR', 'Korean'],
 ];
 
-// TMDb key and language. The key is checked with TMDb before it's saved,
+// TMDB's key and language. The key is checked with TMDB before it's saved,
 // and the server only ever shows its last four characters.
 function TmdbSettings({ settings, onSaved }) {
   const [key, setKey] = useState('');
   const [language, setLanguage] = useState(settings.metadataLanguage);
   const [notice, setNotice] = useState(null);
   const action = useAction();
+  const id = useId();
   const t = settings.tmdb;
   const languages = LANGUAGES.some(([code]) => code === language) ? LANGUAGES : [[language, language], ...LANGUAGES];
 
@@ -162,8 +246,11 @@ function TmdbSettings({ settings, onSaved }) {
   }
 
   return (
-    <form className="card" onSubmit={save} style={{ maxWidth: 720 }}>
-      <p>
+    <form className="of-box of-w" id="s-tmdb" onSubmit={save} aria-labelledby={`${id}-h`}>
+      <h2 className="of-h2" id={`${id}-h`}>
+        Film information
+      </h2>
+      <p className="of-p">
         Open Matte can fill in film details, posters and backdrops from{' '}
         <a href="https://www.themoviedb.org" target="_blank" rel="noreferrer">
           TMDB
@@ -171,59 +258,58 @@ function TmdbSettings({ settings, onSaved }) {
         , the database Jellyfin uses. New films are matched when the media folder is scanned, and you can pick a match by hand on any film.
       </p>
       <ErrorNote error={action.error} />
-      {notice && <div className="notice good">{notice}</div>}
-      <p>
-        {t.configured ? (
-          <span className="badge good">Connected</span>
-        ) : (
-          <span className="badge">Not set up</span>
-        )}{' '}
-        {t.source === 'env' && <span className="dim">The key comes from the server’s TMDB_API_KEY setting.</span>}
-        {t.source === 'settings' && <span className="dim">Key ending {t.hint}</span>}
+      <DoneNote>{notice}</DoneNote>
+      <p className="of-p">
+        {t.configured ? <Mark tone="done">Connected</Mark> : <Mark tone="off">Not set up</Mark>}{' '}
+        {t.source === 'env' && <span className="of-dim">The key comes from the server’s TMDB_API_KEY setting.</span>}
+        {t.source === 'settings' && <span className="of-dim">Key ending {t.hint}</span>}
       </p>
       {t.source !== 'env' && (
-        <label className="field">
-          <span>{t.configured ? 'Replace the key' : 'TMDB API key'}</span>
-          <input type="password" autoComplete="off" spellCheck={false} value={key} onChange={(e) => setKey(e.target.value)} placeholder="Paste the API Key or the API Read Access Token" />
-          <small>
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor={`${id}-key`}>
+            {t.configured ? 'Replace the key' : 'TMDB API key'}
+          </label>
+          <input
+            id={`${id}-key`}
+            className="ui-input"
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="Paste the API Key or the API Read Access Token"
+            aria-describedby={`${id}-key-h`}
+          />
+          <p className="ui-field__hint" id={`${id}-key-h`}>
             Free for personal use: create a TMDB account, then go to Settings → API and request a developer key. Either value on that page works.
-          </small>
-        </label>
+          </p>
+        </div>
       )}
-      <label className="field" style={{ maxWidth: 300 }}>
-        <span>Language for titles and synopses</span>
-        <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+      <div className="ui-field" style={{ maxWidth: 300 }}>
+        <label className="ui-field__label" htmlFor={`${id}-lang`}>
+          Language for titles and synopses
+        </label>
+        <select id={`${id}-lang`} className="ui-select" value={language} onChange={(e) => setLanguage(e.target.value)}>
           {languages.map(([code, name]) => (
             <option key={code} value={code}>
               {name}
             </option>
           ))}
         </select>
-      </label>
-      <div className="row">
-        <button className="btn primary" disabled={action.busy}>
+      </div>
+      <div className="ui-btns">
+        <button className="ui-btn ui-btn--primary" disabled={action.busy}>
           {action.busy ? 'Checking…' : 'Save'}
         </button>
         {t.source === 'settings' && (
-          <button type="button" className="btn danger" onClick={removeKey} disabled={action.busy}>
+          <button type="button" className="ui-btn ui-btn--danger" onClick={removeKey} disabled={action.busy}>
             Remove key
           </button>
         )}
       </div>
-      {/* TMDB's logo and notice, as on the site's footer (site.jsx), since the admin shows
-          TMDB's details and thumbnails too. The logo is TMDB's own file, unchanged, at its
-          own shape: only its height is set. */}
-      <p className="faint" style={{ fontSize: '0.8rem', margin: '1rem 0 0' }}>
-        <img
-          src="/tmdb.svg"
-          width="92"
-          height="12"
-          alt="TMDB"
-          style={{ display: 'inline-block', height: 12, width: 'auto', verticalAlign: 'middle', marginRight: '0.5em' }}
-        />
-        This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. Images are downloaded to your
-        server, so viewers’ browsers never contact TMDB.
-      </p>
+      {/* TMDB's logo and notice, as on the site's footer (site.jsx), since the back office
+          shows TMDB's details and thumbnails too. */}
+      <TmdbCredit>Images are downloaded to your server, so friends’ browsers never contact TMDB.</TmdbCredit>
     </form>
   );
 }
@@ -232,29 +318,32 @@ function TmdbSettings({ settings, onSaved }) {
 function Passkeys({ passkeys }) {
   if (!passkeys) return null;
   return (
-    <div className="card" style={{ maxWidth: 720 }}>
+    <section className="of-box of-w" id="s-passkeys" aria-labelledby="h-passkeys">
+      <h2 className="of-h2" id="h-passkeys">
+        Members and passkeys
+      </h2>
       {passkeys.problem && (
-        <div className="notice warn">
-          <strong>Passkeys aren't available.</strong> {passkeys.problem}
-        </div>
+        <Line kind="warn" lead="Passkeys aren't available.">
+          {passkeys.problem}
+        </Line>
       )}
       {passkeys.rpId && (
-        <p>
-          Passkeys here belong to <strong className="mono">{passkeys.rpId}</strong>. If the site ever moves to another domain, everyone will need a new
+        <p className="of-p">
+          Passkeys here belong to <b className="of-mono">{passkeys.rpId}</b>. If the shop ever moves to another domain, every member will need a new
           passkey.
         </p>
       )}
-      <p className="dim" style={{ margin: 0, fontSize: '0.9rem' }}>
+      <p className="of-p of-dim of-small">
         {passkeys.origin ? (
           <>
-            They work on <span className="mono">{passkeys.origin}</span> only.{' '}
+            They work on <span className="of-mono">{passkeys.origin}</span> only.{' '}
           </>
         ) : (
           !passkeys.problem && <>In development they work on localhost at any port, but not on 127.0.0.1. </>
         )}
         Set by WEBAUTHN_RP_ID and DOMAIN in deploy/.env: see docs/installing.md.
       </p>
-    </div>
+    </section>
   );
 }
 
@@ -263,16 +352,19 @@ function Backups() {
   const { data, setData, error } = useLoad(() => api.get('/api/admin/backups'), []);
   const [notice, setNotice] = useState(null);
   const action = useAction();
-  if (error) return <ErrorNote error={error} />;
-  if (!data) return null;
 
-  if (!data.enabled) {
-    return (
-      <div className="card" style={{ maxWidth: 720 }}>
-        <p style={{ margin: 0 }}>Backups are turned off on this server (BACKUP_DIR=off).</p>
-      </div>
-    );
-  }
+  const box = (children) => (
+    <section className="of-box of-w" id="s-backups" aria-labelledby="h-backups">
+      <h2 className="of-h2" id="h-backups">
+        Backups
+      </h2>
+      {children}
+    </section>
+  );
+
+  if (error) return box(<ErrorNote error={error} />);
+  if (!data) return box(null);
+  if (!data.enabled) return box(<p className="of-p">Backups are turned off on this server (BACKUP_DIR=off).</p>);
 
   async function backUpNow() {
     setNotice(null);
@@ -284,41 +376,48 @@ function Backups() {
   }
 
   const latest = data.backups[0];
-  return (
-    <div className="card" style={{ maxWidth: 720 }}>
+  return box(
+    <>
       <ErrorNote error={action.error} />
-      {notice && <div className="notice good">{notice}</div>}
-      {data.lastError && <div className="notice bad">The last backup failed: {data.lastError.message}</div>}
-      <p>
+      <DoneNote>{notice}</DoneNote>
+      {data.lastError && <ErrorNote error={`The last backup failed: ${data.lastError.message}`} />}
+      <p className="of-p">
         {latest ? (
           <>
-            Last backup <strong>{formatDateTime(latest.at)}</strong> ({formatBytes(latest.size)}).
+            Last backup <b>{formatDateTime(latest.at)}</b> ({formatBytes(latest.size)}).
           </>
         ) : (
           'No backups yet.'
         )}{' '}
-        The database is backed up every day at {String(data.hour).padStart(2, '0')}:00 UTC. Backups are kept for{' '}
-        {plural(data.keepDays, 'day')}, plus one a month for {plural(data.keepMonths, 'month')}. Downloaded posters are copied too.
+        The database is backed up every day at {String(data.hour).padStart(2, '0')}:00 UTC. Backups are kept for {plural(data.keepDays, 'day')}, plus one a
+        month for {plural(data.keepMonths, 'month')}. Downloaded posters are copied too.
       </p>
       {data.backups.length > 0 && (
-        <ul className="dim" style={{ margin: '0 0 1rem', paddingLeft: '1.1em', fontSize: '0.9rem' }}>
+        <ul className="ui-list of-backups">
           {data.backups.slice(0, 5).map((b) => (
             <li key={b.name}>
-              {formatDateTime(b.at)} <span className="faint">· {formatBytes(b.size)}</span>
+              <span className="ui-list__row">
+                <span className="ui-list__main ui-n">{formatDateTime(b.at)}</span>
+                <span className="ui-list__aside">{formatBytes(b.size)}</span>
+              </span>
             </li>
           ))}
-          {data.backups.length > 5 && <li className="faint">and {data.backups.length - 5} older</li>}
+          {data.backups.length > 5 && (
+            <li>
+              <span className="ui-list__row of-faint">and {data.backups.length - 5} older</span>
+            </li>
+          )}
         </ul>
       )}
-      <div className="row">
-        <button className="btn" onClick={backUpNow} disabled={action.busy}>
+      <div className="ui-btns">
+        <button type="button" className="ui-btn" onClick={backUpNow} disabled={action.busy}>
           {action.busy ? 'Backing up…' : 'Back up now'}
         </button>
-        <span className="faint" style={{ fontSize: '0.85rem' }}>
-          Saved in <span className="mono">{data.dir}</span> inside the app. See docs/deploying.md for where that is on the server, and how to restore.
-        </span>
       </div>
-    </div>
+      <p className="ui-field__hint of-gap-s">
+        Saved in <span className="of-mono">{data.dir}</span> inside the app. See docs/deploying.md for where that is on the server, and how to restore.
+      </p>
+    </>,
   );
 }
 
@@ -331,14 +430,25 @@ const retentionForm = (s) => Object.fromEntries(RETENTION.map(([k]) => [k, Strin
 const errorText = (e) => (typeof e === 'string' ? e : e?.message);
 
 // How long old activity and signed-out browsers are kept, and clearing them now. It
-// saves only its own three settings, like the cards above.
+// saves only its own three settings, like the parts above.
 function Retention({ settings, onSaved }) {
   const { data, setData, error, reload } = useLoad(() => api.get('/api/admin/retention'), []);
   const [form, setForm] = useState(() => retentionForm(settings));
   const [notice, setNotice] = useState(null);
   const action = useAction();
-  if (error) return <ErrorNote error={error} />;
-  if (!data) return null;
+  const id = useId();
+
+  const box = (children, props = {}) => (
+    <form className="of-box of-w" id="s-records" aria-labelledby={`${id}-h`} {...props}>
+      <h2 className="of-h2" id={`${id}-h`}>
+        Keeping records
+      </h2>
+      {children}
+    </form>
+  );
+
+  if (error) return box(<ErrorNote error={error} />);
+  if (!data) return box(null);
 
   const dirty = RETENTION.some(([k]) => form[k] !== String(settings[k] ?? ''));
   const p = data.preview;
@@ -357,7 +467,7 @@ function Retention({ settings, onSaved }) {
   }
 
   async function clearNow() {
-    if (!window.confirm(`Clear old records now? By the saved settings that's ${clearedCounts(p, 'signed-out browser')}. Tickets and screenings don't change.`)) return;
+    if (!window.confirm(`Clear old records now? By the saved settings that's ${clearedCounts(p, 'signed-out browser')}. Tapes and plays don't change.`)) return;
     setNotice(null);
     const r = await action.run(() => api.post('/api/admin/retention/run'));
     if (r) {
@@ -366,39 +476,52 @@ function Retention({ settings, onSaved }) {
     }
   }
 
-  return (
-    <form className="card" onSubmit={save} style={{ maxWidth: 720 }}>
-      <p className="dim">
-        Old activity is cleared every day, and a minute after the server starts. Clearing never changes a ticket: its screenings, limits, “finished”,
-        resume positions and deadlines are kept with the ticket. Backups keep what they had until they expire.
+  return box(
+    <>
+      <p className="of-p of-dim">
+        Old activity is cleared every day, and a minute after the server starts. Clearing never changes a tape: its plays, limits, “finished”, resume
+        positions and deadlines are kept with it. Backups keep what they had until they expire.
       </p>
       <ErrorNote error={action.error} />
-      {notice && <div className="notice good">{notice}</div>}
-      {data.lastError && <div className="notice bad">The last clean-up failed: {errorText(data.lastError)}</div>}
-      <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
+      <DoneNote>{notice}</DoneNote>
+      {data.lastError && <ErrorNote error={`The last clean-up failed: ${errorText(data.lastError)}`} />}
+      <div className="of-grid3">
         {RETENTION.map(([k, label, min, max, hint]) => (
-          <label className="field" key={k}>
-            <span>{label} (days)</span>
-            <input type="number" min={min} max={max} required value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
-            <small>{hint}</small>
-          </label>
+          <div className="ui-field" key={k}>
+            <label className="ui-field__label" htmlFor={`${id}-${k}`}>
+              {label} (days)
+            </label>
+            <input
+              id={`${id}-${k}`}
+              className="ui-input ui-input--num"
+              type="number"
+              min={min}
+              max={max}
+              required
+              value={form[k]}
+              onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+              aria-describedby={`${id}-${k}-h`}
+            />
+            <p className="ui-field__hint" id={`${id}-${k}-h`}>
+              {hint}
+            </p>
+          </div>
         ))}
       </div>
-      <p>
+      <p className="of-p">
         {nothing ? 'Nothing is old enough to clear right now.' : `Clearing now would delete ${clearedCounts(p, 'signed-out browser')}.`}
-        {dirty && <span className="dim"> That's by the saved settings: save to see what yours would clear.</span>}
+        {dirty && <span className="of-dim"> That's by the saved settings: save to see what yours would clear.</span>}
       </p>
-      <p className="dim" style={{ fontSize: '0.9rem' }}>
-        {lastClearedText(data.lastRun)}
-      </p>
-      <div className="row">
-        <button className="btn primary" disabled={!dirty || action.busy}>
+      <p className="of-p of-dim of-small">{lastClearedText(data.lastRun)}</p>
+      <div className="ui-btns">
+        <button className="ui-btn ui-btn--primary" disabled={!dirty || action.busy}>
           Save
         </button>
-        <button type="button" className="btn" onClick={clearNow} disabled={action.busy || nothing}>
+        <button type="button" className="ui-btn" onClick={clearNow} disabled={action.busy || nothing}>
           Clear now
         </button>
       </div>
-    </form>
+    </>,
+    { onSubmit: save },
   );
 }

@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useContext, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatAgo } from '../api.js';
-import { ErrorNote, useAction, useLoad } from './ui.jsx';
+import { Sleeve } from '../look/objects.jsx';
+import { Line } from '../look/ui.jsx';
+import { AdminContext, ErrorNote, Table, TmdbCredit, useAction, useLoad } from './ui.jsx';
 
 const FIELD_LABELS = {
   title: 'Title',
@@ -15,10 +17,12 @@ const FIELD_LABELS = {
 };
 
 const tmdbLink = (id) => `https://www.themoviedb.org/movie/${id}`;
+const SOURCE = { tmdb: 'From TMDB', folder: 'From the film folder' };
 
-// The "Film information" card on a film's admin page: what TMDb matched,
-// the artwork in use, and the search-and-choose flow.
+// "Film information" on a film's details: what TMDB matched, the artwork in use, and
+// the search-and-choose flow.
 export default function FilmInfo({ film, onChange }) {
+  const { site } = useContext(AdminContext);
   const meta = useLoad(() => api.get('/api/admin/metadata'), []);
   const [identifying, setIdentifying] = useState(false);
   const action = useAction();
@@ -26,12 +30,10 @@ export default function FilmInfo({ film, onChange }) {
   if (!meta.data) return null;
   if (!meta.data.configured) {
     return (
-      <div className="card">
-        <p style={{ margin: 0 }}>
-          Fill in details, posters and backdrops automatically from TMDB, as Jellyfin does. Add a free TMDB API key in{' '}
-          <Link to="/admin/settings">Settings</Link> to turn it on.
-        </p>
-      </div>
+      <Line kind="info">
+        Fill in details, posters and backdrops automatically from TMDB, as Jellyfin does. Add a free TMDB API key in <Link to="/admin/settings">Settings</Link>{' '}
+        to turn it on.
+      </Line>
     );
   }
 
@@ -42,7 +44,9 @@ export default function FilmInfo({ film, onChange }) {
 
   const s = film.tmdbStatus;
   let status;
+  let tone = 'info';
   if (s?.state === 'matched') {
+    tone = 'done';
     status = (
       <>
         Matched to{' '}
@@ -50,37 +54,37 @@ export default function FilmInfo({ film, onChange }) {
           {s.title}
           {s.year ? ` (${s.year})` : ''} on TMDB
         </a>{' '}
-        <span className="faint">
+        <span className="of-faint">
           {s.how === 'auto' ? 'automatically' : 'by you'}, {formatAgo(s.at)}
         </span>
       </>
     );
   } else if (s?.state === 'needs-choice') {
+    tone = 'warn';
     status = `Couldn't pick a match automatically: ${s.candidates} films on TMDB could be “${s.query}”. Choose the right one.`;
   } else if (s?.state === 'not-found') {
+    tone = 'warn';
     status = `Nothing on TMDB matched “${s.query}”. Try searching another way.`;
   } else if (s?.state === 'error') {
+    tone = 'bad';
     status = `The last lookup failed: ${s.message}`;
   } else {
     status = 'Not looked up yet. New films are matched when the media folder is scanned.';
   }
 
   return (
-    <div className="card">
+    <>
       <ErrorNote error={action.error} />
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <p style={{ margin: 0, flex: 1, minWidth: 240 }}>{status}</p>
+      <Line kind={tone}>
+        <p>{status}</p>
         {!identifying && (
-          <button className="btn" onClick={() => setIdentifying(true)}>
-            {s?.state === 'matched' ? 'Change match…' : 'Find details…'}
-          </button>
+          <div className="ui-btns">
+            <button type="button" className="ui-btn" onClick={() => setIdentifying(true)}>
+              {s?.state === 'matched' ? 'Change match…' : 'Find details…'}
+            </button>
+          </div>
         )}
-      </div>
-
-      <div className="row" style={{ marginTop: '1rem', alignItems: 'flex-start', gap: '1.5rem' }}>
-        <ArtworkTile label="Poster" url={film.posterUrl} source={film.artworkSource.poster} onReset={() => resetArtwork('poster')} tall />
-        <ArtworkTile label="Backdrop" url={film.backdropUrl} source={film.artworkSource.backdrop} onReset={() => resetArtwork('backdrop')} />
-      </div>
+      </Line>
 
       {identifying && (
         <Identify
@@ -92,28 +96,31 @@ export default function FilmInfo({ film, onChange }) {
           }}
         />
       )}
-    </div>
+
+      <div className="of-art">
+        <div>
+          <p className="ui-key">Poster</p>
+          <Sleeve film={film} seed={`art:${film.id}`} width={150} logo={site?.logo} />
+          <p className="of-src of-gap-s">{SOURCE[film.artworkSource.poster] || 'None'}</p>
+          {film.artworkSource.poster === 'tmdb' && <DontUse onClick={() => resetArtwork('poster')} />}
+        </div>
+        <div>
+          <p className="ui-key">Backdrop</p>
+          {film.backdropUrl && <img src={film.backdropUrl} alt="" className="of-art__backdrop" />}
+          <p className="of-src of-gap-s">{SOURCE[film.artworkSource.backdrop] || 'None'}</p>
+          {film.artworkSource.backdrop === 'tmdb' && <DontUse onClick={() => resetArtwork('backdrop')} />}
+        </div>
+      </div>
+      <TmdbCredit />
+    </>
   );
 }
 
-function ArtworkTile({ label, url, source, onReset, tall = false }) {
+function DontUse({ onClick }) {
   return (
-    <div style={{ width: tall ? 110 : 220 }}>
-      <div style={{ fontSize: '0.85rem' }}>{label}</div>
-      <div className="faint" style={{ fontSize: '0.78rem', marginBottom: '0.35rem' }}>
-        {source === 'tmdb' ? 'From TMDB' : source === 'folder' ? 'From the film folder' : 'None'}
-      </div>
-      {url ? (
-        <img src={url} alt="" className="poster" style={{ aspectRatio: tall ? '2 / 3' : '16 / 9', boxShadow: 'none' }} />
-      ) : (
-        <div className="poster placeholder" style={{ aspectRatio: tall ? '2 / 3' : '16 / 9', boxShadow: 'none' }} />
-      )}
-      {source === 'tmdb' && (
-        <button className="linklike" style={{ fontSize: '0.8rem', marginTop: '0.3rem' }} onClick={onReset}>
-          Don’t use TMDB’s
-        </button>
-      )}
-    </div>
+    <button type="button" className="ui-btn ui-btn--quiet ui-btn--small" onClick={onClick}>
+      Don’t use TMDB’s
+    </button>
   );
 }
 
@@ -123,6 +130,7 @@ function Identify({ film, onCancel, onApplied }) {
   const [results, setResults] = useState(null);
   const [chosen, setChosen] = useState(null);
   const action = useAction();
+  const id = useId();
 
   async function search(e) {
     e?.preventDefault();
@@ -137,55 +145,51 @@ function Identify({ film, onCancel, onApplied }) {
   }
 
   return (
-    <div style={{ marginTop: '1.2rem', borderTop: '1px solid var(--line)', paddingTop: '1.2rem' }}>
+    <div className="of-tmdb-choice">
       <ErrorNote error={action.error} />
       {!chosen && (
         <>
-          <form className="row" onSubmit={search} style={{ alignItems: 'flex-end' }}>
-            <label className="field" style={{ flex: 1, minWidth: 200, margin: 0 }}>
-              <span>Title</span>
-              <input value={query} onChange={(e) => setQuery(e.target.value)} />
-            </label>
-            <label className="field" style={{ width: 100, margin: 0 }}>
-              <span>Year</span>
-              <input type="number" value={year} onChange={(e) => setYear(e.target.value)} />
-            </label>
-            <button className="btn primary" disabled={action.busy || !query.trim()}>
-              Search TMDB
-            </button>
-            <button type="button" className="btn" onClick={onCancel}>
-              Cancel
-            </button>
+          <form className="of-inline" onSubmit={search}>
+            <div className="ui-field" style={{ flex: '1 1 240px' }}>
+              <label className="ui-field__label" htmlFor={`${id}-q`}>
+                Title
+              </label>
+              <input id={`${id}-q`} className="ui-input" value={query} onChange={(e) => setQuery(e.target.value)} />
+            </div>
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor={`${id}-y`}>
+                Year
+              </label>
+              <input id={`${id}-y`} className="ui-input ui-input--num" type="number" value={year} onChange={(e) => setYear(e.target.value)} />
+            </div>
+            <div className="ui-btns">
+              <button className="ui-btn ui-btn--primary" disabled={action.busy || !query.trim()}>
+                Search TMDB
+              </button>
+              <button type="button" className="ui-btn ui-btn--quiet" onClick={onCancel}>
+                Cancel
+              </button>
+            </div>
           </form>
-          {results && results.length === 0 && <p className="dim" style={{ marginTop: '1rem' }}>No films found. Try without the year, or another title.</p>}
+          {results && results.length === 0 && <p className="of-p of-dim of-gap">No films found. Try without the year, or another title.</p>}
           {results && results.length > 0 && (
-            <div style={{ display: 'grid', gap: '0.6rem', marginTop: '1rem' }}>
+            <div className="of-results">
               {results.map((r) => (
-                <div key={r.tmdbId} className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap', gap: '0.9rem' }}>
-                  {r.posterThumb ? (
-                    <img src={r.posterThumb} alt="" style={{ width: 54, borderRadius: 3, flexShrink: 0 }} />
-                  ) : (
-                    <div className="poster placeholder" style={{ width: 54, flexShrink: 0, boxShadow: 'none' }} />
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <strong>{r.title}</strong> {r.year && <span className="dim">({r.year})</span>}
-                    {r.originalTitle && r.originalTitle !== r.title && <span className="faint"> · {r.originalTitle}</span>}
-                    <div className="dim" style={{ fontSize: '0.88rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                      {r.overview}
-                    </div>
+                <div key={r.tmdbId} className="of-result">
+                  {r.posterThumb ? <img src={r.posterThumb} alt="" /> : <span className="of-result__none" />}
+                  <div style={{ minWidth: 0 }}>
+                    <b>{r.title}</b> {r.year && <span className="of-dim">({r.year})</span>}
+                    {r.originalTitle && r.originalTitle !== r.title && <span className="of-faint"> · {r.originalTitle}</span>}
+                    <p className="of-result__over">{r.overview}</p>
                   </div>
-                  <button className="btn small" onClick={() => choose(r.tmdbId)} disabled={action.busy}>
+                  <button type="button" className="ui-btn ui-btn--small" onClick={() => choose(r.tmdbId)} disabled={action.busy}>
                     Choose
                   </button>
                 </div>
               ))}
             </div>
           )}
-          {!results && (
-            <p className="faint" style={{ marginTop: '0.8rem', marginBottom: 0 }}>
-              Search, then choose the right film to see what would change.
-            </p>
-          )}
+          {!results && <p className="ui-field__hint of-gap-s">Search, then choose the right film to see what would change.</p>}
         </>
       )}
       {chosen && <ApplyChoice film={film} details={chosen} onBack={() => setChosen(null)} onApplied={onApplied} />}
@@ -208,66 +212,67 @@ function ApplyChoice({ film, details, onBack, onApplied }) {
   }
 
   async function apply() {
-    const r = await action.run(() =>
-      api.post(`/api/admin/films/${film.id}/metadata/apply`, { tmdbId: details.tmdbId, fields: [...fields], poster, backdrop }),
-    );
+    const r = await action.run(() => api.post(`/api/admin/films/${film.id}/metadata/apply`, { tmdbId: details.tmdbId, fields: [...fields], poster, backdrop }));
     if (r) onApplied(r.film);
   }
 
-  const show = (v) => (v == null || v === '' ? <span className="faint">–</span> : String(v));
+  const show = (v) => (v == null || v === '' ? <span className="of-faint">–</span> : String(v));
 
   return (
     <>
-      <div className="row" style={{ justifyContent: 'space-between', marginBottom: '0.8rem' }}>
-        <strong>
-          {details.fields.title} {details.fields.year && <span className="dim">({details.fields.year})</span>}{' '}
-          <a href={tmdbLink(details.tmdbId)} target="_blank" rel="noreferrer" className="faint" style={{ fontWeight: 400, fontSize: '0.85rem' }}>
-            view on TMDB
+      <div className="of-head">
+        <div>
+          <h3 className="of-h3">
+            {details.fields.title} {details.fields.year && <span className="of-dim">({details.fields.year})</span>}
+          </h3>
+          <a href={tmdbLink(details.tmdbId)} target="_blank" rel="noreferrer" className="of-small of-dim">
+            View on TMDB
           </a>
-        </strong>
-        <button className="btn small" onClick={onBack}>
-          ← Other results
-        </button>
+        </div>
+        <div className="ui-btns">
+          <button type="button" className="ui-btn ui-btn--small" onClick={onBack}>
+            ← Other results
+          </button>
+        </div>
       </div>
       <ErrorNote error={action.error} />
-      <div className="table-wrap">
-        <table className="stack">
-          <thead>
-            <tr>
-              <th style={{ width: 40 }}>Use</th>
-              <th>Field</th>
-              <th>Now</th>
-              <th>From TMDB</th>
+      <Table
+        head={
+          <>
+            <th className="of-use">Use</th>
+            <th>Field</th>
+            <th>Now</th>
+            <th>From TMDB</th>
+          </>
+        }
+      >
+        {Object.entries(FIELD_LABELS).map(([k, label]) => {
+          const value = details.fields[k];
+          const same = value === details.current[k];
+          return (
+            <tr key={k}>
+              <td data-label="Use TMDB's">
+                <span className="ui-check" style={{ padding: 0, minHeight: 0 }}>
+                  <input type="checkbox" checked={fields.has(k)} disabled={value == null || same} onChange={() => toggle(k)} aria-label={`Use TMDB's ${label}`} />
+                </span>
+              </td>
+              <td className="ui-title of-nowrap">{label}</td>
+              <td data-label="Now">{show(details.current[k])}</td>
+              <td data-label="From TMDB">{value != null && same ? <span className="of-faint">same</span> : show(value)}</td>
             </tr>
-          </thead>
-          <tbody>
-            {Object.entries(FIELD_LABELS).map(([k, label]) => {
-              const value = details.fields[k];
-              const same = value === details.current[k];
-              return (
-                <tr key={k}>
-                  <td data-label="Use TMDB's">
-                    <input type="checkbox" checked={fields.has(k)} disabled={value == null || same} onChange={() => toggle(k)} aria-label={`Use TMDB's ${label}`} />
-                  </td>
-                  <td className="nowrap card-title">{label}</td>
-                  <td style={{ maxWidth: 280 }} data-label="Now">{show(details.current[k])}</td>
-                  <td style={{ maxWidth: 360 }} data-label="From TMDB">{value != null && same ? <span className="faint">same</span> : show(value)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <p className="faint" style={{ fontSize: '0.85rem' }}>Your recommendation is never changed. Fields you tick replace what's there now.</p>
+          );
+        })}
+      </Table>
+      <p className="ui-field__hint of-gap-s">Your staff pick is never changed. Fields you tick replace what's there now.</p>
 
       <ImagePicker label="Poster" images={details.posters} value={poster} onChange={setPoster} hasCurrent={Boolean(film.posterUrl)} tall />
       <ImagePicker label="Backdrop" images={details.backdrops} value={backdrop} onChange={setBackdrop} hasCurrent={Boolean(film.backdropUrl)} />
 
-      <div className="row" style={{ marginTop: '1.2rem' }}>
-        <button className="btn primary" onClick={apply} disabled={action.busy || (!fields.size && !poster && !backdrop)}>
+      <div className="ui-btns of-gap">
+        <button type="button" className="ui-btn ui-btn--primary" onClick={apply} disabled={action.busy || (!fields.size && !poster && !backdrop)}>
           {action.busy ? 'Applying…' : 'Apply'}
         </button>
-        <button className="btn" onClick={onBack} disabled={action.busy}>
+        <button type="button" className="ui-btn" onClick={onBack} disabled={action.busy}>
           Back
         </button>
       </div>
@@ -277,30 +282,17 @@ function ApplyChoice({ film, details, onBack, onApplied }) {
 
 function ImagePicker({ label, images, value, onChange, hasCurrent, tall = false }) {
   if (!images.length) return null;
-  const width = tall ? 92 : 168;
-  const tile = (selected) => ({
-    width,
-    padding: 0,
-    border: `2px solid ${selected ? 'var(--accent)' : 'transparent'}`,
-    borderRadius: 6,
-    background: 'none',
-    cursor: 'pointer',
-    overflow: 'hidden',
-  });
+  const shape = tall ? 'of-pick of-pick--tall' : 'of-pick of-pick--wide';
   return (
-    <div style={{ marginTop: '1.2rem' }}>
-      <div style={{ marginBottom: '0.5rem' }}>{label}</div>
-      <div className="row" style={{ gap: '0.5rem', alignItems: 'stretch' }}>
-        <button
-          type="button"
-          onClick={() => onChange(null)}
-          style={{ ...tile(value === null), aspectRatio: tall ? '2 / 3' : '16 / 9', color: 'var(--text-dim)', fontSize: '0.8rem' }}
-        >
+    <div className="of-gap">
+      <p className="ui-key">{label}</p>
+      <div className="of-picker">
+        <button type="button" className={shape} aria-pressed={value === null} onClick={() => onChange(null)}>
           {hasCurrent ? 'Keep current' : 'None'}
         </button>
         {images.map((img) => (
-          <button type="button" key={img.path} onClick={() => onChange(img.path)} style={tile(value === img.path)} aria-label={`Use this ${label.toLowerCase()}`}>
-            <img src={img.thumb} alt="" style={{ width: '100%', aspectRatio: tall ? '2 / 3' : '16 / 9', objectFit: 'cover', display: 'block' }} />
+          <button type="button" key={img.path} className={shape} aria-pressed={value === img.path} onClick={() => onChange(img.path)} aria-label={`Use this ${label.toLowerCase()}`}>
+            <img src={img.thumb} alt="" />
           </button>
         ))}
       </div>

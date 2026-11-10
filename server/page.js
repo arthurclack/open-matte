@@ -137,7 +137,7 @@ export function createPage({ indexFile, settings, previews, site }) {
     if (preview) {
       const { film } = preview;
       og('og:title', film.year ? `${film.title} (${film.year})` : film.title);
-      og('og:description', `A ticket from ${s.cinemaName}.`);
+      og('og:description', `A tape from ${s.cinemaName}.`);
       // Only when /poster/<id>.<mac> would serve one: a folder's own needs the folder there.
       const poster = filmArtwork(film).poster?.file || (filmMedia(film).poster && film.media_status !== 'missing');
       if (poster) og('og:image', `${origin}${preview.poster}`);

@@ -115,7 +115,9 @@ describe('the policy on pages', () => {
       assert.equal(styles.length, 1, url);
       assert.match(styles[0][0], /^<style id="theme">/, url);
       const text = styles[0][1];
-      assert.match(text, /--accent:#4ab0e8/, url);
+      // The shop's background, and its colour in the lit blocks.
+      assert.match(text, /--bg:#0b1016/, url);
+      assert.match(text, /--ui-lit:#[0-9a-f]{6}/, url);
       const hash = `'sha256-${crypto.createHash('sha256').update(Buffer.from(text, 'utf8')).digest('base64')}'`;
       assert.deepEqual(policy['style-src'], ["'self'", hash], url);
       assert.doesNotMatch(policy['style-src'].join(' '), /unsafe/, url);

@@ -40,7 +40,7 @@ test('the name menu opens over the player, and Sign out there works', async ({ p
 
   await menu(page).click();
   // The menu opens downwards, over the video: each item has to be the thing a click lands on.
-  for (const name of ['Your tickets', 'Your account', 'Sign out']) {
+  for (const name of ['Your tapes', 'Your membership card', 'Sign out']) {
     const item = page.getByRole('menuitem', { name });
     const onTop = await item.evaluate((el) => {
       const r = el.getBoundingClientRect();
@@ -53,14 +53,14 @@ test('the name menu opens over the player, and Sign out there works', async ({ p
   await expect(menu(page)).toBeHidden();
 });
 
-test('after Play, the ticket panel tells of the open screening', async ({ page }, testInfo) => {
+test('after Play, the counter tells of the open play', async ({ page }, testInfo) => {
   const ticket = await admin.issueTicket({ label: unique('Panel', testInfo), screeningLimit: 3 });
   await page.goto(`/t/${ticket.code}`);
-  const panel = page.locator('.ticket-panel');
-  await expect(panel).toContainText('3 screenings left on this ticket.');
+  const panel = page.locator('.fl-counter');
+  await expect(panel).toContainText('3 plays left');
   expect((await pressPlay(page)).status()).toBe(200);
-  await expect(panel).toContainText('Your screening is open until');
-  await expect(panel).not.toContainText('Pressing Play starts a screening');
+  await expect(panel).toContainText('You can pick up where you left off until');
+  await expect(panel).not.toContainText('Once you press Play');
 });
 
 test('Play that fails for no reason the page knows says so', async ({ page }, testInfo) => {
@@ -70,7 +70,7 @@ test('Play that fails for no reason the page knows says so', async ({ page }, te
   // A proxy's answer while the app restarts during a deploy.
   await page.route(`**/api/films/${film.slug}/screenings`, (route) => route.fulfill({ status: 502, contentType: 'text/html', body: '<h1>502 Bad Gateway</h1>' }));
   await playButton(page).click();
-  await expect(page.locator('.notice')).toHaveText("Couldn't start playback. Try again in a moment.");
+  await expect(page.locator('.fl-message')).toHaveText("Couldn't start playback. Try again in a moment.");
   await expect(playButton(page)).toBeEnabled();
 });
 
@@ -111,8 +111,8 @@ test("a ticket's start-by deadline shows with its time, in the friend's time zon
   const ticket = await admin.issueTicket({ label: unique('Abroad', testInfo), startBy });
   const page = await (await newContext({ timezoneId: 'Asia/Tokyo', locale: 'en-GB' })).newPage();
   await page.goto(`/t/${ticket.code}`);
-  // Safari writes "15 Nov at 08:59" where the others write "15 Nov, 08:59".
-  await expect(page.locator('.ticket-panel')).toContainText(/Start watching by \d{1,2} \S+(,| at) 08:59\./);
+  // Safari writes "Sun 15 Nov at 08:59" where the others write "Sun 15 Nov, 08:59".
+  await expect(page.locator('.fl-counter')).toContainText(/Start watching by \S+ \d{1,2} \S+(,| at) 08:59\./);
 });
 
 test('a start-by deadline that has passed shows its year', async ({ newContext }, testInfo) => {
@@ -122,8 +122,8 @@ test('a start-by deadline that has passed shows its year', async ({ newContext }
   const ticket = await admin.issueTicket({ label: unique('Last year', testInfo), startBy });
   const page = await (await newContext({ timezoneId: 'UTC', locale: 'en-GB' })).newPage();
   await page.goto(`/t/${ticket.code}`);
-  await expect(page.locator('.ticket-panel')).toContainText(
-    new RegExp(`This ticket needed to be used by ${day.getUTCDate()} \\S+ ${day.getUTCFullYear()}(,| at) 23:59\\.`),
+  await expect(page.locator('.fl-counter')).toContainText(
+    new RegExp(`This tape needed to be started by ${day.getUTCDate()} \\S+ ${day.getUTCFullYear()}(,| at) 23:59\\.`),
   );
 });
 
@@ -139,7 +139,7 @@ test('the tab is named after the film on its page, and after the cinema again on
 test('a part of the app gone since a deploy: Play says to reload, and reloading resumes', async ({ page }, testInfo) => {
   const ticket = await admin.issueTicket({ label: unique('Deploy', testInfo) });
   await page.goto(`/t/${ticket.code}`);
-  await expect(playButton(page)).toHaveText('Play');
+  await expect(playButton(page)).toHaveAccessibleName('Play');
   // The player's file from the build this page came with, removed by a newer one.
   await page.route('**/assets/Player-*.js', (route) => route.fulfill({ status: 404, body: '' }));
   expect((await pressPlay(page)).status()).toBe(200);
@@ -149,19 +149,19 @@ test('a part of the app gone since a deploy: Play says to reload, and reloading 
 
   await page.unroute('**/assets/Player-*.js');
   await page.getByRole('button', { name: 'Reload' }).click();
-  await expect(playButton(page)).toHaveText(/^Resume/);
+  await expect(playButton(page)).toHaveAccessibleName(/^Resume/);
 });
 
 test('mangled links show the front page, or nothing showing, never a blank page', async ({ page }) => {
   await page.goto('/?notice=__proto__');
   await expect(page.getByRole('heading', { level: 1, name: cinemaName() })).toBeVisible();
-  await expect(page.locator('.notice')).toHaveCount(0);
+  await expect(page.locator('.fl-notice')).toHaveCount(0);
 
   // '../me' once decoded: it must be asked for as a film, not as /api/me.
   const asked = page.waitForRequest((r) => new URL(r.url()).pathname.startsWith('/api/films/'), { timeout: 10_000 });
   await page.goto('/..%2Fme');
   expect(new URL((await asked).url()).pathname).toBe('/api/films/..%2Fme');
-  await expect(page.getByRole('heading', { level: 1, name: 'Nothing showing here' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Nothing on the shelf here' })).toBeVisible();
 });
 
 test("the admin: a setup link's message, an open screening's last chance to resume, and Sign out when the server never heard", async ({ page, newContext }, testInfo) => {
@@ -173,12 +173,12 @@ test("the admin: a setup link's message, an open screening's last chance to resu
 
   await test.step("a ticket for someone with no passkey yet, and the setup link that opens it", async () => {
     await page.goto(`/admin/films/${film.id}`);
-    await page.getByRole('radio', { name: /Only a person, signed in/ }).check();
-    await page.getByRole('combobox', { name: 'Which person' }).selectOption({ label: name });
-    await page.getByRole('button', { name: `Issue ticket for ${name} only` }).click();
+    await page.getByRole('radio', { name: /Only one member, signed in/ }).check();
+    await page.getByRole('combobox', { name: 'Which member' }).selectOption({ label: name });
+    await page.getByRole('button', { name: `Lend a tape to ${name} only` }).click();
     await page.getByRole('button', { name: `Create a setup link that opens ${film.title}` }).click();
     // Inside the ticket's own notice, which has a Copy message of its own.
-    const created = page.locator('.notice.good').filter({ hasText: `Setup link for ${name}:` }).last();
+    const created = page.locator('.ui-line--done').filter({ hasText: `Setup link for ${name}:` }).last();
     await expect(created).toBeVisible();
     await created.getByRole('button', { name: 'Copy message' }).click();
     const message = await page.evaluate(() => window.__copied);
@@ -194,30 +194,30 @@ test("the admin: a setup link's message, an open screening's last chance to resu
     const guest = await (await newContext()).newPage();
     await guest.goto(`/t/${ticket.code}`);
     // Before Play, the friend isn't promised the 48 hours either.
-    await expect(guest.locator('.ticket-panel')).toContainText('You can pause and come back to it until the ticket expires.');
+    await expect(guest.locator('.fl-counter')).toContainText("you can pause and come back to it until it's due back.");
     expect((await pressPlay(guest)).status()).toBe(200);
     await page.goto(`/admin/tickets/${ticket.id}`);
     const expires = page.locator('dt:text-is("Expires") + dd');
     // A date and time, now that it has been played.
     await expect(expires).toHaveText(/\d:\d\d/);
     const until = await expires.textContent();
-    await expect(page.locator('dt:text-is("Open screening") + dd')).toContainText(`resumable until ${until}`);
-    await expect(page.locator('td[data-label="Resumable until"]')).toHaveText(until);
+    await expect(page.locator('dt:text-is("Now") + dd')).toContainText(`they can come back to it until ${until}`);
+    await expect(page.locator('td[data-label="Can come back until"]')).toHaveText(until);
   });
 
   await test.step('Sign out with the connection gone: still signed in, and told so', async () => {
     await page.route('**/api/admin/logout', (route) => route.abort('internetdisconnected'));
-    await page.locator('.admin-nav').getByRole('button', { name: 'Sign out', exact: true }).click();
-    await expect(page.locator('.admin-main > .notice.bad')).toHaveText("Couldn't sign out. Check your connection and try again.");
-    await expect(page.getByLabel('Admin password')).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Tickets', exact: true })).toBeVisible();
+    await page.getByRole('navigation', { name: 'Back office' }).getByRole('button', { name: 'Sign out', exact: true }).click();
+    await expect(page.locator('.admin-main [role="alert"]')).toHaveText("Couldn't sign out. Check your connection and try again.");
+    await expect(page.getByLabel('Back office password')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Tapes', exact: true })).toBeVisible();
   });
 
   await test.step('and once it can be reached, Sign out signs out', async () => {
     await page.unroute('**/api/admin/logout');
-    await page.locator('.admin-nav').getByRole('button', { name: 'Sign out', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Open Matte admin' })).toBeVisible();
+    await page.getByRole('navigation', { name: 'Back office' }).getByRole('button', { name: 'Sign out', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Sign in to the back office' })).toBeVisible();
     await page.goto('/admin');
-    await expect(page.getByRole('heading', { name: 'Open Matte admin' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sign in to the back office' })).toBeVisible();
   });
 });

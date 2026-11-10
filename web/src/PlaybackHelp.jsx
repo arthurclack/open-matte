@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { playbackItems, playbackSummary } from './playbackHelp.js';
 
 // What the player and this browser say about playback, read live while the panel is
-// open: for a viewer to read, or to copy and send to whoever runs the cinema when
+// open: for a viewer to read, or to copy and send to whoever runs the shop when
 // something isn't working. Opening it and copying record nothing and send nothing.
 
 // Seconds buffered ahead of the playhead, in the stretch it's in.
@@ -91,22 +91,23 @@ export default function PlaybackHelp({ id, panelRef, videoRef, hlsRef, errors, e
   }
 
   const { items, errors: problems } = playbackItems(info);
+  const headId = `${id}-h`;
+  // The panel names nobody (no shop, no film), as its summary doesn't: either may be
+  // shown or sent to someone else.
   return (
     <section
       id={id}
       ref={panelRef}
-      className="playback-help"
+      className="playback-help fl-help"
       tabIndex={-1}
-      aria-label="Playback help"
+      aria-labelledby={headId}
       onKeyDown={(e) => {
         if (e.key === 'Escape') onClose();
       }}
     >
-      <p>
-        What the player and this browser say about playback. If something isn't working, copy the summary and send it to whoever runs the cinema: it
-        leaves out addresses, names and the film's title. Nothing here is recorded or sent.
-      </p>
-      <dl className="kv">
+      <h2 id={headId}>Playback help</h2>
+      <p>If something isn't working, copy the summary and send it to whoever runs the shop: it leaves out addresses, names and the film's title. Nothing here is recorded or sent.</p>
+      <dl>
         {items.map(([name, value]) => (
           <Fragment key={name}>
             <dt>{name}</dt>
@@ -126,16 +127,18 @@ export default function PlaybackHelp({ id, panelRef, videoRef, hlsRef, errors, e
           )}
         </dd>
       </dl>
-      <div className="row">
-        <button type="button" className="btn small" onClick={copy}>
+      <div className="ui-btns">
+        <button type="button" className="ui-btn ui-btn--small" onClick={copy}>
           Copy summary
         </button>
-        <span role="status">{copied ? 'Copied' : ''}</span>
+        <span className="fl-help__done" role="status">
+          {copied ? 'Copied' : ''}
+        </span>
       </div>
       {manual && (
-        <label className="field">
-          <span>This browser wouldn't copy it. It's selected here: copy it with ⌘C or Ctrl+C.</span>
-          <textarea ref={manualRef} readOnly value={manual} rows={8} />
+        <label className="ui-field fl-help__manual">
+          <span className="ui-field__label">This browser wouldn't copy it. It's selected here: copy it with ⌘C or Ctrl+C.</span>
+          <textarea className="ui-textarea" ref={manualRef} readOnly value={manual} rows={8} />
         </label>
       )}
     </section>

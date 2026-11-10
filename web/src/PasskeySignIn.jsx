@@ -1,36 +1,63 @@
 import { useState } from 'react';
 import { api, formatDay } from './api.js';
+import { Line } from './look/ui.jsx';
+import { hostName } from './look/words.js';
+import MembershipCard from './MembershipCard.jsx';
 import { anotherBrowserMayHelp, browserProblem, serverProblem, signInWithPasskey, supportsPasskeys, useCeremonyOptions } from './passkeys.js';
 import { useSite } from './site.jsx';
+
+// A message from passkeys.js as a system line: its first sentence in bold, so the
+// colour is never the only sign. -> { lead, text }
+export function splitLead(message) {
+  const m = /^(.+?[.?!])\s+(.+)$/s.exec(String(message ?? ''));
+  return m ? { lead: m[1], text: m[2] } : { lead: String(message ?? ''), text: null };
+}
+export function Problem({ message, kind = 'bad' }) {
+  const { lead, text } = splitLead(message);
+  return (
+    <Line kind={kind} lead={lead} role="alert">
+      {text}
+    </Line>
+  );
+}
+
+// A key, drawn plain, for the button that signs in with a passkey.
+export function KeyMark() {
+  return (
+    <svg className="fl-key" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+      <circle cx="6.5" cy="10" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M10.1 10H18M15 10v3M17.6 10v2.4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 const fetchSignInOptions = () => api.post('/api/signin/options');
 
 // One button that signs this browser in with a passkey. Used by the sign-in page, a
-// ticket for one person and the keep panel on a film's page. onSignedIn gets the server's
+// tape for one member and the keep panel on a film's page. onSignedIn gets the server's
 // answer: { person, newPasskeys }. copyLabel names what Copy link copies: this page's
 // address. Leave it out where that address is no use in another browser (a film page,
-// which a link ticket's code has already left): after a refusal, people are then told
-// to open the link they were sent.
-export default function PasskeySignIn({ onSignedIn, copyLabel }) {
+// which a tape link's code has already left): after a refusal, people are then told
+// to open the link they were sent. `card`: the membership card's front is the button
+// ("Show your card"), with the words in a lit strip under it.
+export default function PasskeySignIn({ onSignedIn, copyLabel, card = false }) {
   const [supported] = useState(supportsPasskeys);
   if (!supported) return <OpenInBrowser copyLabel={copyLabel} />;
-  return <SignInButton onSignedIn={onSignedIn} copyLabel={copyLabel} />;
+  return <SignInButton onSignedIn={onSignedIn} copyLabel={copyLabel} card={card} />;
 }
 
 // Passkeys added since the one that just signed in was last used. The server says
 // so once, so every page that signs someone in shows them before moving on.
 export function NewPasskeys({ passkeys }) {
   const { site } = useSite();
-  const host = `whoever runs ${site?.cinemaName || 'this cinema'}`;
   return (passkeys || []).map((k) => (
-    <div key={`${k.addedAt}-${k.device}`} className="notice warn">
-      A passkey was added on {formatDay(k.addedAt)}
-      {k.device ? ` from ${k.device}` : ''}. Not you? Tell {host}.
-    </div>
+    <Line key={`${k.addedAt}-${k.device}`} kind="warn" lead={`A passkey was added on ${formatDay(k.addedAt)}${k.device ? ` from ${k.device}` : ''}.`}>
+      Not you? Tell {hostName(site)}.
+    </Line>
   ));
 }
 
-function SignInButton({ onSignedIn, copyLabel }) {
+function SignInButton({ onSignedIn, copyLabel, card }) {
   const { site } = useSite();
   const [done, setDone] = useState(false);
   const ceremony = useCeremonyOptions(fetchSignInOptions, { enabled: !done });
@@ -61,7 +88,7 @@ function SignInButton({ onSignedIn, copyLabel }) {
         if (answered) {
           // The server took this challenge whatever happened: the next try needs a new one.
           ceremony.reload({ spent: true });
-          setMessage(serverProblem(err, site?.cinemaName));
+          setMessage(serverProblem(err, hostName(site)));
         } else {
           setMessage(browserProblem(err));
           setRefusedHere(anotherBrowserMayHelp(err));
@@ -71,17 +98,31 @@ function SignInButton({ onSignedIn, copyLabel }) {
   }
 
   if (done) return null;
-  const fetchError = !options && ceremony.error && serverProblem(ceremony.error, site?.cinemaName);
+  const fetchError = !options && ceremony.error && serverProblem(ceremony.error, hostName(site));
 
   return (
-    <div className="passkey">
-      {(message || fetchError) && <div className="notice bad">{message || fetchError}</div>}
-      <div className="row">
-        <button className="btn primary big" onClick={signIn} disabled={!options || busy || ceremony.spent}>
-          {busy ? 'Signing in…' : 'Sign in with a passkey'}
-        </button>
+    <div className="fl-passkey">
+      {(message || fetchError) && <Problem message={message || fetchError} />}
+      <div className="ui-btns">
+        {card ? (
+          <button type="button" className="fl-cardbtn" onClick={signIn} disabled={!options || busy || ceremony.spent}>
+            {/* A picture of what the words say: the button's name is its words. */}
+            <span className="fl-cardbtn__card" aria-hidden="true">
+              <MembershipCard site={site} face="front" />
+            </span>
+            <span className="fl-cardbtn__label">
+              <KeyMark />
+              {busy ? 'Signing in…' : 'Sign in with a passkey'}
+            </span>
+          </button>
+        ) : (
+          <button type="button" className="ui-btn ui-btn--primary ui-btn--big" onClick={signIn} disabled={!options || busy || ceremony.spent}>
+            <KeyMark />
+            {busy ? 'Signing in…' : 'Sign in with a passkey'}
+          </button>
+        )}
         {fetchError && !ceremony.loading && (
-          <button className="btn" onClick={ceremony.reload}>
+          <button type="button" className="ui-btn" onClick={ceremony.reload}>
             Try again
           </button>
         )}
@@ -90,7 +131,7 @@ function SignInButton({ onSignedIn, copyLabel }) {
         (copyLabel ? (
           <OpenInBrowser copyLabel={copyLabel} refused />
         ) : (
-          <p className="dim">Inside an app? Its browser may not be able to use passkeys: open the link you were sent in Safari or Chrome, and sign in there.</p>
+          <p className="fl-passkey__note">Inside an app? Its browser may not be able to use passkeys: open the link you were sent in Safari or Chrome, and sign in there.</p>
         ))}
     </div>
   );
@@ -115,17 +156,18 @@ export function OpenInBrowser({ copyLabel = 'Copy link', link, refused = false }
     setTimeout(() => setCopied(false), 1500);
   }
   return (
-    <div className="notice warn">
-      <p style={{ marginBottom: '0.4em' }}>
-        <strong>{refused ? 'Inside an app? Open this in Safari or Chrome' : 'Open this in Safari or Chrome'}</strong>
-      </p>
-      <p className="dim">
-        {refused ? "The browsers built into apps often can't use passkeys." : "This browser can't use passkeys."} Copy the link, then paste it into Safari or
-        Chrome.{link ? '' : ' In an app, its menu may offer “Open in browser”.'}
-      </p>
-      <button className="btn" onClick={copy}>
-        {copied ? 'Copied' : copyLabel}
-      </button>
+    <div className="fl-openin">
+      <Line kind="warn" lead={refused ? 'Inside an app? Open this in Safari or Chrome' : 'Open this in Safari or Chrome'}>
+        <p>
+          {refused ? "The browsers built into apps often can't use passkeys." : "This browser can't use passkeys."} Copy the link, then paste it into Safari
+          or Chrome.{link ? '' : ' In an app, its menu may offer “Open in browser”.'}
+        </p>
+        <div className="ui-btns">
+          <button type="button" className="ui-btn" onClick={copy}>
+            {copied ? 'Copied' : copyLabel}
+          </button>
+        </div>
+      </Line>
     </div>
   );
 }

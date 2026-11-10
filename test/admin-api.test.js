@@ -251,6 +251,58 @@ describe('settings', () => {
     }
   });
 
+  // The owner's own name signs the staff picks ("Picked by Arthur") and "ask Arthur";
+  // empty, the pages use the shop's name instead.
+  test("the owner's name is optional: empty at first, saved without spaces round it, at most 80 characters, and shown to visitors", async () => {
+    const visitor = browser(s.base);
+    assert.equal((await a.get('/api/admin/settings')).data.ownerName, '');
+    assert.equal((await visitor.get('/api/site')).data.ownerName, '');
+    assert.equal((await visitor.get('/api/me')).data.site.ownerName, '');
+
+    const r = await a.patch('/api/admin/settings', { ownerName: '  Arthur  ' });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data.ownerName, 'Arthur');
+    assert.equal((await visitor.get('/api/site')).data.ownerName, 'Arthur');
+    assert.equal(JSON.parse(s.db.prepare("SELECT value FROM settings WHERE key = 'ownerName'").get().value), 'Arthur');
+
+    // 80 characters, and spaces round them, are fine; 81 are not, nor anything but text.
+    assert.equal((await a.patch('/api/admin/settings', { ownerName: ` ${'a'.repeat(80)} ` })).data.ownerName, 'a'.repeat(80));
+    for (const value of ['a'.repeat(81), 42, null, true, ['Arthur']]) {
+      const bad = await a.patch('/api/admin/settings', { ownerName: value });
+      assert.equal(bad.status, 400, JSON.stringify(value));
+      assert.equal(bad.data.error, 'Invalid value for ownerName');
+    }
+    assert.equal((await a.get('/api/admin/settings')).data.ownerName, 'a'.repeat(80), 'nothing refused was saved');
+
+    // Emptied again: back to no name of their own.
+    assert.equal((await a.patch('/api/admin/settings', { ownerName: '   ' })).data.ownerName, '');
+    assert.equal((await visitor.get('/api/site')).data.ownerName, '');
+  });
+
+  // Settings saves the front page message with every other field there, so a shop
+  // that never wrote one may have the old default stored, in the cinema's words.
+  test("a front page message still on the default from before 1.1.0 reads in the video shop's words; one of the owner's own is kept", async () => {
+    const OLD = 'This is a private cinema. If someone sent you a ticket, open the link they gave you.';
+    const NEW = 'This is a private video shop. If someone sent you a tape, open the link they gave you.';
+    const visitor = browser(s.base);
+    const store = s.db.prepare("INSERT INTO settings (key, value) VALUES ('welcome', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+    try {
+      store.run(JSON.stringify(OLD));
+      assert.equal((await visitor.get('/api/site')).data.welcome, NEW);
+      assert.equal((await a.get('/api/admin/settings')).data.welcome, NEW);
+      // Nothing is written until the owner saves.
+      assert.equal(JSON.parse(s.db.prepare("SELECT value FROM settings WHERE key = 'welcome'").get().value), OLD);
+      // Only the old default, word for word: anything else is the owner's.
+      for (const own of [`${OLD} Popcorn's on me.`, 'This is a private cinema.']) {
+        assert.equal((await a.patch('/api/admin/settings', { welcome: own })).data.welcome, own);
+        assert.equal((await visitor.get('/api/site')).data.welcome, own);
+      }
+    } finally {
+      s.db.prepare("DELETE FROM settings WHERE key = 'welcome'").run();
+    }
+    assert.equal((await visitor.get('/api/site')).data.welcome, NEW, 'and the default is the new one');
+  });
+
   test('a setting still saves, with a TMDB key alongside', async () => {
     const r = await a.patch('/api/admin/settings', { cinemaName: 'The Ritz', tmdbApiKey: GOOD_KEY });
     assert.equal(r.status, 200, JSON.stringify(r.data));

@@ -39,7 +39,7 @@ export default defineConfig({
 // itself, so a package added, dropped or tree-shaken away changes the file, with no
 // list here to keep up to date (except VENDORED, below). The file starts with Open
 // Matte's own copyright and licence, the GPL, and where its source is: package.json's
-// repository. The fonts the membership card is printed in, which the app serves from
+// repository. The fonts the app is set and printed in, which it serves from
 // web/public/fonts, come last, each with its licence (FONTS, below).
 
 export const LICENCES_FILE = 'third-party-licenses.txt';
@@ -210,14 +210,20 @@ function licenceId(json) {
 }
 
 // ------------------------------------------------------------ fonts
-// The membership card's fonts, served unchanged from web/public/fonts (they are in
-// public/, so no module imports them and the bundle can't list them). Each is under
-// the SIL Open Font License 1.1, not the GPL, and its licence, copyright line first,
-// is kept beside it as <family>-OFL.txt, which the licences file repeats in full.
+// The fonts the app is set and printed in, served unchanged from web/public/fonts
+// (they are in public/, so no module imports them and the bundle can't list them),
+// and declared once, in web/src/look/tokens.css. Each is under the SIL Open Font
+// License 1.1, not the GPL, and its licence, copyright line first, is kept beside it
+// as <family>-OFL.txt, which the licences file repeats in full. `use` finishes the
+// sentence "Used for ...".
 export const FONTS = [
-  { name: 'Fraunces', file: 'Fraunces-Variable.ttf', licenceFile: 'Fraunces-OFL.txt', use: "the shop's name and \"Membership card\", on the front" },
-  { name: 'Grape Nuts', file: 'GrapeNuts-Regular.ttf', licenceFile: 'GrapeNuts-OFL.txt', use: "the member's name, written on the back" },
-  { name: 'Courier Prime', file: 'CourierPrime-Regular.ttf', licenceFile: 'CourierPrime-OFL.txt', use: 'the typed month and year, and the membership number' },
+  { name: 'Fraunces', file: 'Fraunces-Variable.ttf', licenceFile: 'Fraunces-OFL.txt', use: "the shop's own printing: its name, \"Staff pick\" and \"Membership card\"" },
+  { name: 'Grape Nuts', file: 'GrapeNuts-Regular.ttf', licenceFile: 'GrapeNuts-OFL.txt', use: "the one hand: the member's name, written on the back of the membership card, and the staff pick" },
+  { name: 'Courier Prime', file: 'CourierPrime-Regular.ttf', licenceFile: 'CourierPrime-OFL.txt', use: "typed labels: a plain sleeve's, and the month, year and number on the membership card" },
+  { name: 'Libre Franklin', file: 'LibreFranklin-Variable.ttf', licenceFile: 'LibreFranklin-OFL.txt', use: 'headings, reading text, labels, help and errors' },
+  { name: 'IBM Plex Mono', file: 'IBMPlexMono-Regular.ttf', licenceFile: 'IBMPlexMono-OFL.txt', use: "the machine's words: menus, tabs, buttons, table heads, dates, times and counts" },
+  { name: 'IBM Plex Mono SemiBold', file: 'IBMPlexMono-SemiBold.ttf', licenceFile: 'IBMPlexMono-OFL.txt', use: "the machine's words where they are lit or stand out" },
+  { name: 'VT323', file: 'VT323-Regular.ttf', licenceFile: 'VT323-OFL.txt', use: "the blue screen of the shop's video machine: Play, Pause and its menu" },
 ];
 const FONTS_DIR = new URL('./web/public/fonts/', import.meta.url);
 
@@ -319,20 +325,20 @@ export function licenceNotices(packages, { source = null, fonts = [] } = {}) {
   }
   for (const f of fonts) {
     out.push('', RULE, `${f.name} (fonts/${f.file}), a font`, `Licence: ${f.licence}`, RULE, '');
-    out.push(...wrap(`Used for ${f.use} of the membership card. A font made by others, sent unchanged: it is under the SIL Open Font License, not the GPL.`), '');
+    out.push(...wrap(`Used for ${f.use}. A font made by others, sent unchanged: it is under the SIL Open Font License, not the GPL.`), '');
     out.push(f.text);
   }
   out.push('', RULE, 'End of licences');
   return `${out.join('\n')}\n`;
 }
 
-// "The membership card is printed in fonts made by others: Fraunces, Grape Nuts and
-// Courier Prime, ...".
+// "The app is set and printed in fonts made by others: Fraunces, Grape Nuts, ...". A
+// family in two files (IBM Plex Mono and its SemiBold) is named once.
 function fontsParagraph(fonts) {
-  const names = fonts.map((f) => f.name);
+  const names = [...new Set(fonts.map((f) => f.name.replace(/ SemiBold$/, '')))];
   const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
   return wrap(
-    `The membership card is printed in ${fonts.length === 1 ? 'a font' : 'fonts'} made by others: ${list}, in fonts/. ` +
+    `The app is set and printed in ${fonts.length === 1 ? 'a font' : 'fonts'} made by others: ${list}, in fonts/. ` +
       `${fonts.length === 1 ? 'It is' : 'They are'} under the SIL Open Font License, version 1.1, not the GPL, and ` +
       `${fonts.length === 1 ? 'its licence is' : 'their licences are'} given in full at the end of this file.`,
   );

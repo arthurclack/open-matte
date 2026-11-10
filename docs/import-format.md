@@ -81,11 +81,11 @@ Without a `film.json`, a folder with `hls/master.m3u8` still imports, with a
 warning, so you can preview a folder fresh from the encoder. The title comes from
 the folder name, and the standard layout above is used: `poster.jpg`,
 `backdrop.jpg` and `subtitles/<language>.vtt`. Write a `film.json` before you
-publish it.
+put it on the shelf.
 
 With [film information from TMDB](metadata.md) turned on, a minimal `film.json`
 is enough: `schemaVersion`, `title` (a year helps), `hls` and your
-`recommendation`. The rest, and the artwork, can come from TMDB.
+`recommendation` (the staff pick, on the film's page). The rest, and the artwork, can come from TMDB.
 
 ## What a scan checks
 
@@ -96,7 +96,7 @@ missing, unreadable, or empty while films are listed (storage that isn't mounted
 say), the scan reports that and changes nothing, rather than marking every film
 missing.
 
-**Errors** stop a film from being published (and make a published one unavailable):
+**Errors** stop a film from going on the shelf (and make one on the shelf unavailable):
 
 - `film.json` not valid JSON, wrong `schemaVersion`, invalid fields, or a `slug` that doesn't match the folder
 - a film's folder left with neither `film.json` nor `hls/master.m3u8`
@@ -128,7 +128,7 @@ playback on the devices your friends actually use.
 
 ## Rescans and your edits
 
-The first scan imports `film.json` into the database. After that the admin owns
+The first scan imports `film.json` into the database. After that the back office owns
 the metadata. Each later scan compares field by field:
 
 - a field you haven't edited follows `film.json`
@@ -140,11 +140,11 @@ the metadata. Each later scan compares field by field:
   filled in stays as it is)
 
 Media (playlists, artwork, subtitles) always follows the folder. New films are
-always unpublished. A film whose folder disappears is marked missing, not deleted.
+always off the shelf. A film whose folder disappears is marked missing, not deleted.
 
-Don't rename a film's folder once tickets are out. Tickets belong to the film,
-not its address, but a renamed folder imports as a new, unpublished film, and the
-old one (with its tickets) is marked missing. Renaming it back restores it, and
+Don't rename a film's folder once tapes are out. Tapes belong to the film,
+not its address, but a renamed folder imports as a new film, off the shelf, and the
+old one (with its tapes) is marked missing. Renaming it back restores it, and
 leaves the film created under the new name behind, marked missing.
 
 Symlinks inside a film folder are fine if they point to something in the same

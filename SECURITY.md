@@ -46,7 +46,7 @@ These are known, and [docs/access.md](docs/access.md) says so:
   sent.
 - If the app is down when someone opens a ticket link, Caddy's error log records the
   address, code included.
-- A site on another name under the cinema's parent domain can set cookies the
+- A site on another name under the shop's parent domain can set cookies the
   cinema receives. That's enough to stop a browser using the cinema, and to give a
   browser a session of that site's choosing: browsers keep only so many cookies for
   one parent domain, so by setting enough of its own, the site can crowd the

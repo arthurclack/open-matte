@@ -18,13 +18,13 @@ folder on your computer, copy it to the server, and scan. On your computer:
 rsync -av --partial-dir=.rsync-partial --progress media/arrival/ my-server:/srv/open-matte/media/arrival/
 ```
 
-Then press **Scan media folder** in the admin. If the scan reports missing segments,
+Then press **Scan media folder** in the back office. If the scan reports missing segments,
 the copy didn't finish: run the same `rsync` again. `--partial-dir` keeps a
 half-copied file out of sight until it's complete (plain `--partial` would leave it
 under its real name, where a scan could take it for a whole one). A new film is always
-a draft until you publish it.
+off the shelf until you put it on the shelf.
 
-To take a film down, press **Unpublish** on its page. Deleting its folder as well
+To take a film down, press **Take off the shelf** on its page. Deleting its folder as well
 frees the space: the next scan marks the film missing, keeping its tickets and
 activity, and it comes back if the folder does. Don't rename a film's folder once
 tickets are out ([import-format.md](import-format.md#rescans-and-your-edits)).
@@ -43,7 +43,7 @@ reads `deploy/.env` again. Two settings are for good: changing `DOMAIN` breaks t
 links you've sent, and changing `WEBAUTHN_RP_ID` every passkey
 ([Choices you make once](installing.md#choices-you-make-once)).
 
-A new `ADMIN_PASSWORD` signs every browser out of the admin, yours included, and only
+A new `ADMIN_PASSWORD` signs every browser out of the back office, yours included, and only
 the new password signs in.
 
 ## Updating
@@ -54,7 +54,7 @@ the new password signs in.
    run and the one you're updating to. A release with an **Upgrading** note needs
    more than new code: a backup first, a setting to choose, or a migration you can't
    go back from without a restore.
-2. **Back up.** In the admin, press **Settings → Backups → Back up now**.
+2. **Back up.** In the back office, press **Settings → Backups → Back up now**.
 3. **Copy that backup off the server.** **Back up now** writes to the same disk as the
    database, and the off-server copy (below) only runs once a day. On your computer,
    into a folder of its own rather than your copy of the code:
@@ -121,7 +121,7 @@ docker compose logs app | grep -E 'Passkeys|CSP|Error'
 A `CSP` line is something a browser blocked: see [What browsers
 blocked](#what-browsers-blocked) for which ones matter.
 
-**Status** in the admin shows the new version and the schema the database is on.
+**Status** in the back office shows the new version and the schema the database is on.
 
 A film page someone left open from before the update can't load the player from
 the new build. If they press Play there, the page says the site may have just been
@@ -156,14 +156,14 @@ server would be deleted. The changelog says when `compose.yml` or
 `deploy/caddy/Caddyfile` change, so you can check your additions still fit.
 
 The app sets its own security headers, and Caddy adds only HSTS. One of them, the
-Content-Security-Policy, differs from page to page (it names the cinema's colours by
+Content-Security-Policy, differs from page to page (it names the shop's colours by
 a hash of them) and is locked down for everything that isn't a page. If you put
 another proxy or a CDN in front, or change the Caddyfile, let the app's headers
 through as they are, and don't add a Content-Security-Policy there: browsers apply
 every policy they're sent, so a second one can only block more, such as the `blob:`
 addresses the player feeds the film through, and playback stops. Don't let it change
 the pages either: a script it adds from elsewhere (analytics, say) is blocked, and so
-are the cinema's colours if it rewrites the style that holds them.
+are the shop's colours if it rewrites the style that holds them.
 
 ### Keeping the images up to date
 
@@ -201,7 +201,7 @@ tests than on your computer.
 
 Nearly everything Open Matte knows lives in its database: films' details, tickets,
 screenings and activity, people and their passkeys, and settings (including a TMDB key
-saved in the admin, and the cinema's colours). The exceptions are two folders of
+saved in the back office, and the shop's colours). The exceptions are two folders of
 images in the data folder: posters and backdrops downloaded from TMDB (`artwork`), and
 the logo and tab icon you uploaded (`branding`). Backups copy both. The films
 themselves aren't backed up here: keep your originals and encodes elsewhere.
@@ -216,9 +216,8 @@ icon to `backups/branding`. Those two folders only grow, so an older backup's lo
 still there to restore. If the server was down at 04:00, a backup runs shortly after it
 starts.
 
-**Settings → Backups** in the admin lists the latest and has **Back up now**. **Status**
-(the projection booth) shows when the newest backup file was written and the last
-error.
+**Settings → Backups** in the back office lists the latest and has **Back up now**. **Status**
+shows when the newest backup file was written and the last error.
 
 `BACKUP_HOUR`, `BACKUP_KEEP_DAYS` and `BACKUP_KEEP_MONTHS` in `deploy/.env` change the
 timing and how many are kept. `BACKUP_KEEP_DAYS` is at least 1: with fewer than three,
@@ -246,7 +245,7 @@ yours alone too ([The folders](installing.md#the-folders)). If
 **Your settings aren't in the backups.** `deploy/.env`, and
 `deploy/compose.override.yml` if you have one, live only in
 `/srv/open-matte/app/deploy`. Keep a copy of them somewhere private off the server:
-`.env` holds the admin password, and the `WEBAUTHN_RP_ID` every passkey depends on.
+`.env` holds the back office password, and the `WEBAUTHN_RP_ID` every passkey depends on.
 
 ### Keeping a copy off the server
 
@@ -284,10 +283,10 @@ The copy is a mirror: a backup the app deletes is deleted from the copy at the n
 run. It only runs while the storage is mounted, so it never fills an empty mount
 point.
 
-**Seeing the copy in the admin (optional).** Set `BACKUP_COPY_DIR` in `deploy/.env` to
-the copy's folder as the app's container sees it, and the projection booth shows the
+**Seeing the copy in the back office (optional).** Set `BACKUP_COPY_DIR` in `deploy/.env` to
+the copy's folder as the app's container sees it, and Status shows the
 newest backup there and its time, so you can tell whether the timer is keeping up. The
-app only reads the folder. Like the rest of the booth, it says what it found, a file
+app only reads the folder. Like the rest of Status, it says what it found, a file
 and its time, and doesn't claim a restore from it would work.
 
 With the timer as shipped, the copy is inside the media folder, which the container
@@ -305,7 +304,7 @@ there. Then:
 BACKUP_COPY_DIR=/backup-copy
 ```
 
-Run `docker compose up -d` after either. Without `BACKUP_COPY_DIR`, the booth says the
+Run `docker compose up -d` after either. Without `BACKUP_COPY_DIR`, Status says the
 off-server copy isn't checked.
 
 Your hosting provider's own snapshots of the server or the storage are a good extra
@@ -379,33 +378,35 @@ deletes again whatever in the backup is older than you keep records for.
 ### After restoring an older backup
 
 The backup knows nothing of what happened since it was made, at the time in its
-name (UTC). Everything you did after that is undone, so check People and Tickets.
+name (UTC). Everything you did after that is undone, so check Members and Tapes.
 
-**Check People.** Passkeys you removed since (one by one, or with **Reset after
-loss**) are back and work again; browsers you signed out (with **Sign out
-everywhere**, **Disable** or a reset) are signed in again; someone you disabled is
-enabled again; and a link cancelled or used since then works again until it expires.
-Remove those passkeys again, use **Sign out everywhere** or **Disable** where needed,
+**Check Members.** Passkeys you removed since (one by one, or with **Lost phone: take
+back the keys**) are back and work again; browsers you signed out (with **Sign out
+everywhere**, **Turn the card off** or taking back the keys) are signed in again; a
+card you turned off is on again; and a link cancelled or used since then works again
+until it expires. Remove those passkeys again, use **Sign out everywhere** or **Turn
+the card off** where needed,
 and cancel any waiting link you didn't mean. Passkeys created since the backup are
 gone from the server, so those people can't sign in until you send them a new link.
 
-**Check Tickets.** A ticket you revoked since works again for anyone with its link,
-so revoke it again: if it was revoked because the link got out, this matters most. A
-ticket you gave to someone, or that someone kept, since is for anyone with the link
+**Check Tapes.** A tape you took back since works again for anyone with its link, so
+take it back again: if you took it back because the link got out, this matters most.
+A tape you gave to someone, or that someone kept, since is for anyone with the link
 again, and the browsers that opened it before have it back: give it to them again.
-Browsers you signed out of a ticket (**Sign out browsers**), and viewers signed out
-with **Sign out every viewer**, are signed in again. A film you unpublished since is
-published again, and one you published since is a draft. Tickets you issued since are
-gone, so their links no longer open anything.
+Browsers you signed out of a tape (**Sign out browsers**), and everyone signed out
+with **Sign out every friend and member**, are signed in again. A film you took off
+the shelf since is back on it, and one you put on the shelf since is off it. Tapes
+you lent since are gone, so their links no longer open anything.
 
 To see what to redo, look at the database as it was before the restore: the backup
 you made with **Back up now** first. Copy it to your computer and open it there, as in
-[Checking a backup](#checking-a-backup): its Tickets list shows which were revoked,
+[Checking a backup](#checking-a-backup): its Tapes list shows which were taken back,
 and who each was for.
 
-**Don't delete people, passkeys or links by hand** (with `sqlite3`, say). Use the admin
-instead: **Remove** for a passkey, **Reset after loss**, **Disable** for a person. They
-sign out the browsers concerned first and record what happened in Activity; deleting a
+**Don't delete people, passkeys or links by hand** (with `sqlite3`, say). Use the back office
+instead: **Remove** for a passkey, **Lost phone: take back the keys**, **Turn the card
+off** for a member. They sign out the browsers concerned first and record what
+happened in the Ledger; deleting a
 passkey's row by hand leaves every browser it signed in still signed in. People can't
 be deleted at all: the app's database connection refuses while anything refers to
 them, and the `sqlite3` command line, which doesn't check that unless told to, would
@@ -457,7 +458,7 @@ before the update:
    **Status** shows the older version.
 
 Screenings, events, people and tickets written since that backup are lost, and
-whatever you changed since is as it was: check People and Tickets, as [after
+whatever you changed since is as it was: check Members and Tapes, as [after
 restoring an older backup](#after-restoring-an-older-backup). When you update again,
 the migrations run again on the restored database.
 
@@ -476,7 +477,7 @@ sent stops working, and the same `WEBAUTHN_RP_ID`, or nobody's passkey works.
    don't start it. Use the same release the old server runs, and copy its
    `deploy/.env` across, and `deploy/compose.override.yml` if it has one (with
    `deploy.sh`, that's already in your copy of the code). The `.env` has the same
-   `DOMAIN` and `WEBAUTHN_RP_ID`, and the admin password.
+   `DOMAIN` and `WEBAUTHN_RP_ID`, and the back office password.
 3. **Copy the films** to the new server's media folder, from your computer as you
    added them, or from the old server.
 4. **On the old server, stop the app and the copy timer**, so nothing changes from here
@@ -528,13 +529,13 @@ Your settings aren't in the backup: they live only in `deploy/.env` (and
 password, and set `DOMAIN` and `WEBAUTHN_RP_ID` exactly as they were: the database
 doesn't record them, and a different `WEBAUTHN_RP_ID` leaves every passkey useless.
 If you're not sure of it, a passkey in your own password manager or keychain is listed
-under it. A TMDB key saved in the admin is in the backup; one set in `.env` is not.
-Then check People and Tickets, as after
+under it. A TMDB key saved in the back office is in the backup; one set in `.env` is not.
+Then check Members and Tapes, as after
 [restoring an older backup](#after-restoring-an-older-backup).
 
-## The projection booth and logs
+## Status and logs
 
-**Status** in the admin, the projection booth, answers two questions without a trip to
+**Status** in the back office answers two questions without a trip to
 the server. **Needs attention**: setup and recovery links still waiting, or expired
 unused in the last 7 days; tickets never played whose start-by date is close or just
 passed; and the media requests the app refused or couldn't answer since it started,
@@ -560,7 +561,7 @@ docker compose logs caddy                  # certificates and Caddy's errors
 The app logs its start and its first scan, clean-ups that deleted something, media
 requests ([below](#refused-media-requests)) and passkeys it refused, what browsers
 blocked under the pages' policy ([below](#what-browsers-blocked)), and errors. It never logs ticket codes, link tokens,
-cookies or the admin password. Caddy keeps no access log. Its error log can hold a
+cookies or the back office password. Caddy keeps no access log. Its error log can hold a
 ticket link's address if someone opens it while the app is down
 ([access.md](access.md#secrets-and-sessions)). Each container keeps at most 50 MB of
 logs (five files of 10 MB), set in `compose.yml`.
@@ -568,7 +569,7 @@ logs (five files of 10 MB), set in `compose.yml`.
 ### Refused media requests
 
 When the app refuses a request for a film's files, or can't answer it, it writes a
-line to its log, and the booth counts it:
+line to its log, and Status counts it:
 
 ```bash
 docker compose logs --since 24h app | grep media
@@ -602,7 +603,7 @@ media: 412 more refused requests with no session not logged in the minute before
 
 So someone with no session sending made-up requests can't push the lines about your
 viewers out of the log, though a browser with a ticket shares the allowance for
-sessions. The booth still counts every one. A ticket link's preview poster that the
+sessions. Status still counts every one. A ticket link's preview poster that the
 films' folder couldn't answer (`poster 503: ...`) shares the allowance for requests
 with no session.
 
@@ -632,12 +633,12 @@ element: `onclick=` and the like, or `style=`), as in `script-src-elem`,
 `style-src-elem`, `script-src-attr` and `style-src-attr`.
 
 `form-action`, `base-uri` and `frame-ancestors` mean a form or a `<base>` got into a
-page, or another site tried to show the cinema in a frame. Please report any of
-these, and any `script-src-attr` line: the cinema writes no script on an element, so
+page, or another site tried to show the shop in a frame. Please report any of
+these, and any `script-src-attr` line: the shop writes no script on an element, so
 it may mean someone found a way to add their own.
 
 Any other name, such as `frame-src`, `worker-src` or `manifest-src`, is
-something the cinema never uses, so it is almost always an extension or other
+something the shop never uses, so it is almost always an extension or other
 software on the visitor's device.
 
 What was blocked is an address's origin only, or a kind: `inline` (a script or style
@@ -645,18 +646,18 @@ written into the page), `eval`, `blob` or `data`. A ticket link's page shows as
 `/t/…`, and no line has a query or a ticket code. The same rule, origin, page and
 browser is logged once a minute at most, then a line says how many more there were.
 
-Look after an update, and when you try the cinema on a device or app it hasn't met
+Look after an update, and when you try the shop on a device or app it hasn't met
 before: an iPhone, an Android phone, a link opened inside WhatsApp or Instagram,
 AirPlay or a Chromecast. A line for something the site needs is a bug: please report
 it. Two kinds you can leave:
 
 - `style-src-attr inline` from Safari (or any browser on an iPhone or iPad), on a
-  page with a drop-down menu, such as the admin's Settings or a film's player.
+  page with a drop-down menu, such as the back office's Settings or a film's player.
   WebKit, the engine Safari is built on, holds the inside of its own menus against
   the policy; they look and work just the same. The same line from another browser,
   or on a page with no drop-down menu, is worth reporting. To be sure, open the page
   in another browser and see whether the line comes back.
-- Origins that aren't the cinema's, and kinds such as `chrome-extension`: a browser
+- Origins that aren't the shop's, and kinds such as `chrome-extension`: a browser
   extension, or other software on a visitor's device, trying to add to the page. The
   policy stopped it.
 
@@ -683,8 +684,8 @@ checks the setting when it starts. When all is well, the log says:
 Passkeys: RP ID example.com, origin https://cinema.example.com
 ```
 
-and **Settings → People and passkeys** in the admin says the same. Otherwise the log
-says `Passkeys unavailable:` and why, the admin's People and Settings pages show a
+and **Settings → Members and passkeys** in the back office says the same. Otherwise the log
+says `Passkeys unavailable:` and why, the back office's Members and Settings pages show a
 banner, setup links can't be created, and passkey requests answer 503
 `passkeys-unavailable`. Everything else, ticket links included, carries on as normal.
 To check after an update:
@@ -747,10 +748,10 @@ pressing a button in a loop:
 | Posters and backdrops downloaded from TMDB | 2000 requests that find nothing every 10 minutes, and 6000 for each IPv6 /48 |
 | Setting up a passkey from a setup or recovery link | 20 requests every 15 minutes |
 | Signing in with a passkey | 30 every 10 minutes |
-| Signing in to the admin | 10 tries every 15 minutes, and 30 for each IPv6 /48 |
+| Signing in to the back office | 10 tries every 15 minutes, and 30 for each IPv6 /48 |
 
 Over a limit, the API says to try again later. A ticket link's preview previews as
-the cinema instead, and its poster, like a poster or backdrop downloaded from TMDB,
+the shop instead, and its poster, like a poster or backdrop downloaded from TMDB,
 answers as if there were no such film. Only the requests for posters and backdrops
 that find nothing count, whether the film isn't there or the browser may not have it,
 so a household sharing one address loads as many as it likes, while someone guessing
@@ -760,7 +761,7 @@ The counts live in memory, so `docker compose restart app` clears them, should a
 household that shares one address get stuck.
 
 An IPv4 visitor counts by its address, an IPv6 visitor by its /64 (one household or
-server usually holds a whole one). Signing in to the admin, and posters and backdrops
+server usually holds a whole one). Signing in to the back office, and posters and backdrops
 downloaded from TMDB, also count each IPv6 /48 as one, across all its /64s: anyone
 can have a /48 for nothing from a tunnel broker, and with it tens of thousands of
 /64s. Only what the /64's own limit lets through counts towards it. There's
@@ -871,5 +872,5 @@ What's left behind, outside the server:
 | DNS | Delete the A and AAAA records for `DOMAIN` and every name in `REDIRECT_FROM`. A record pointing at an address you no longer have could one day lead to someone else's server. |
 | People's devices | Their passkeys stay in their password manager or keychain, listed under `WEBAUTHN_RP_ID`, until they delete them. They're harmless, since nothing answers them any more. Tell people they can delete them. |
 | Links you've sent | Ticket and setup links stop working. Nothing needs doing. |
-| TMDB | If you made a TMDB key for the cinema, delete it in your TMDB account's settings. |
-| Certificate logs | Every HTTPS certificate is listed in public Certificate Transparency logs, so the names the cinema used stay on record there. |
+| TMDB | If you made a TMDB key for the shop, delete it in your TMDB account's settings. |
+| Certificate logs | Every HTTPS certificate is listed in public Certificate Transparency logs, so the names the shop used stay on record there. |

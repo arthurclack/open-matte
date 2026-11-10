@@ -77,7 +77,7 @@ test('the name menu opens with Enter and closes with Escape, focus staying on it
   await page.keyboard.press('Enter');
   await expect(page.getByRole('menu')).toBeVisible();
   await expect(button).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByRole('menuitem')).toHaveText(['Your tickets', 'Your account', 'Sign out']);
+  await expect(page.getByRole('menuitem')).toHaveText(['Your tapes', 'Your membership card', 'Sign out']);
 
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu')).toBeHidden();
@@ -89,7 +89,7 @@ test('Escape from inside the name menu puts focus back on its button', async ({ 
   const button = await signedInFrontPage(page, context, testInfo);
   await tabTo(page, button);
   await page.keyboard.press('Enter');
-  await tabTo(page, page.getByRole('menuitem', { name: 'Your tickets' }), { max: 1 });
+  await tabTo(page, page.getByRole('menuitem', { name: 'Your tapes' }), { max: 1 });
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu')).toBeHidden();
   await expect(button).toBeFocused({ timeout: 2000 });
@@ -98,7 +98,7 @@ test('Escape from inside the name menu puts focus back on its button', async ({ 
 test('the admin sign-in and Settings work from the keyboard', async ({ page }, testInfo) => {
   await page.goto('/admin');
   // The password field has focus from the start, and Enter signs in.
-  await expect(page.getByLabel('Admin password')).toBeFocused();
+  await expect(page.getByLabel('Back office password')).toBeFocused();
   await signInAsAdmin(page, async () => {
     // Still there once the password is in. Asked of the page, not of a locator on the
     // field, which would copy the password into the call log (see signInAsAdmin).

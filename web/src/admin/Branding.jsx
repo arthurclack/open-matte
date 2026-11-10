@@ -1,10 +1,16 @@
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { api } from '../api.js';
-import { SiteName } from '../site.jsx';
-import { AdminContext, ErrorNote, useAction } from './ui.jsx';
+import MembershipCard from '../MembershipCard.jsx';
+import { ShopName } from '../look/objects.jsx';
+import { Line } from '../look/ui.jsx';
+import { AdminContext, DoneNote, ErrorNote, useAction } from './ui.jsx';
 
 const HEX = /^#[0-9a-f]{6}$/i;
-const DEFAULT_COLORS = { accentColor: '#e8b04a', backgroundColor: '#0d0c0f' };
+// Open Matte's own colours (server/theme.js): the accent, and the video shop's room.
+const DEFAULT_COLORS = { accentColor: '#e8b04a', backgroundColor: '#171513' };
+
+// The card in the preview: nobody's, so it says so in its caption.
+const SAMPLE = { name: 'Sam Example', membership: { number: '00000000000', since: Date.UTC(2026, 0, 15) } };
 
 // The server's own limits and words, so a wrong file is mostly refused before it's sent.
 // The server decides by the bytes, so the type is only checked here when the browser
@@ -17,84 +23,89 @@ const imageProblem = (file) => {
   return null;
 };
 
-// The cinema's background, as the header and link previews show the logo on it.
-const strip = { background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 8, padding: '0.9rem 1rem', marginBottom: '0.8rem' };
-
-// Colours, logo and tab icon. Each part saves on its own, so nothing here throws away
-// unsaved edits in another part (or in the main settings form).
+// Colours and the card, then the logo, the tab icon and link previews. Each part saves
+// on its own, so nothing here throws away unsaved edits in another part (or in the
+// shop's own settings).
 export default function Branding({ settings, onSaved }) {
   const { logo, icon } = settings;
   return (
-    <div className="card" style={{ maxWidth: 720 }}>
-      <h3>Colours</h3>
-      <Colors settings={settings} onSaved={onSaved} />
+    <>
+      <section className="of-box" id="s-colours" aria-labelledby="h-colours">
+        <h2 className="of-h2" id="h-colours">
+          Colours and the card
+        </h2>
+        <Colors settings={settings} onSaved={onSaved} />
+      </section>
 
-      <h3>Logo</h3>
-      <BrandImage
-        kind="logo"
-        noun="logo"
-        image={logo}
-        onSaved={onSaved}
-        removeText="Remove the logo? The header shows the cinema's name instead."
-        help="PNG, JPEG or WebP, up to 1 MB. Shown small at the top of every viewer page, sign-in and setup included, and in link previews."
-        preview={
-          logo ? (
-            <div className="row" style={{ ...strip, justifyContent: 'space-between', flexWrap: 'nowrap' }}>
-              <span className="site-name" style={{ minWidth: 0 }}>
-                <SiteName site={settings} />
-              </span>
-              <span className="faint nowrap" style={{ fontSize: '0.85rem' }}>
-                {logo.width} × {logo.height}
-              </span>
+      <section className="of-box" id="s-logo" aria-labelledby="h-logo">
+        <h2 className="of-h2" id="h-logo">
+          Logo
+        </h2>
+        <BrandImage
+          kind="logo"
+          noun="logo"
+          image={logo}
+          onSaved={onSaved}
+          removeText="Remove the logo? The header and the membership card show the shop's name instead."
+          help="PNG, JPEG or WebP, up to 1 MB. Shown small at the top of every page, sign-in and setup included, in link previews, and printed on the membership card."
+          preview={
+            logo ? (
+              <div className="of-strip">
+                <ShopName site={settings} />
+                <span className="ui-n of-faint">
+                  {logo.width} × {logo.height}
+                </span>
+              </div>
+            ) : (
+              <p className="of-p of-dim">No logo: the header and the membership card show the shop's name.</p>
+            )
+          }
+        >
+          <LogoWithName settings={settings} onSaved={onSaved} />
+        </BrandImage>
+
+        <h3 className="of-h3">Tab icon</h3>
+        <BrandImage
+          kind="icon"
+          noun="tab icon"
+          image={icon}
+          onSaved={onSaved}
+          removeText="Remove the tab icon? The tab shows Open Matte's icon in your colours instead."
+          help="Square, at least 32 × 32 pixels; 512 × 512 is best."
+          preview={
+            <div className="of-strip" style={{ justifyContent: 'flex-start' }}>
+              {/* The query only makes the browser fetch the icon again when the colours change. */}
+              <img
+                src={icon ? icon.url : `/favicon.svg?v=${settings.accentColor.slice(1)}${settings.backgroundColor.slice(1)}`}
+                width={32}
+                height={32}
+                alt=""
+              />
+              <span className="of-dim">{icon ? <span className="ui-n">{`${icon.width} × ${icon.height}`}</span> : "Open Matte's icon in your colours"}</span>
             </div>
-          ) : (
-            <p className="dim">No logo: the header shows the cinema's name.</p>
-          )
-        }
-      >
-        <LogoWithName settings={settings} onSaved={onSaved} />
-      </BrandImage>
+          }
+        />
 
-      <h3>Tab icon</h3>
-      <BrandImage
-        kind="icon"
-        noun="tab icon"
-        image={icon}
-        onSaved={onSaved}
-        removeText="Remove the tab icon? The tab shows Open Matte's icon in your colours instead."
-        help="Square, at least 32 × 32 pixels; 512 × 512 is best. Without one, the tab shows Open Matte's icon in your colours."
-        preview={
-          <div className="row" style={strip}>
-            {/* The query only makes the browser fetch the icon again when the colours change. */}
-            <img
-              src={icon ? icon.url : `/favicon.svg?v=${settings.accentColor.slice(1)}${settings.backgroundColor.slice(1)}`}
-              width={32}
-              height={32}
-              alt=""
-            />
-            <span className="dim" style={{ fontSize: '0.9rem' }}>
-              {icon ? `${icon.width} × ${icon.height}` : "Open Matte's icon in your colours"}
-            </span>
-          </div>
-        }
-      />
-
-      <h3>Link previews</h3>
-      <p className="dim" style={{ margin: 0 }}>
-        Apps that preview links, like WhatsApp and iMessage, show a ticket for anyone with its film's poster and title. Whoever fetches the preview
-        (the sender's phone, or for some apps their servers) learns which film was sent. A ticket for one person, and every other link, shows the cinema's name and logo.
-      </p>
-    </div>
+        <h3 className="of-h3">Link previews</h3>
+        <p className="of-p of-dim">
+          Apps that preview links, like WhatsApp and iMessage, show a tape for anyone with its film's poster and title. Whoever fetches the preview (the
+          sender's phone, or for some apps their servers) learns which film was sent. A tape for one member, and every other link, shows the shop's name
+          and logo.
+        </p>
+      </section>
+    </>
   );
 }
 
-// Accent and background. Shown on this page as they're picked, once the server has
-// checked them; a refused pair isn't shown, since it would make this page hard to read too.
+// Your colour and the background. Shown on this page as they're picked, once the
+// server has checked them; a refused pair isn't shown, since it would make this page
+// hard to read too. The membership card is printed in the colour as it's typed: its
+// ink is darkened until it reads on the card whatever the colour (membershipCard.js).
 function Colors({ settings, onSaved }) {
   const { signedOut } = useContext(AdminContext);
   const saved = { accentColor: settings.accentColor, backgroundColor: settings.backgroundColor };
   // Only the colours the admin has picked. The others follow the saved colours, so
-  // colours saved elsewhere (which come back with any other card's save) never show up
+  // colours saved elsewhere (which come back with any other part's save) never show up
   // here as an unsaved edit that Save colours would send back, even mid-edit.
   const [edit, setEdit] = useState(null);
   const colors = { ...saved, ...edit };
@@ -111,6 +122,8 @@ function Colors({ settings, onSaved }) {
   const unsaved = accentColor !== settings.accentColor || backgroundColor !== settings.backgroundColor;
   const isDefault = accentColor === DEFAULT_COLORS.accentColor && backgroundColor === DEFAULT_COLORS.backgroundColor;
   const refused = check?.key === key && check.problems?.length > 0;
+  const ink = HEX.test(accentColor) ? accentColor : settings.accentColor;
+  const card = { cinemaName: settings.cinemaName, accentColor: ink, logo: settings.logo, logoWithName: settings.logoWithName };
 
   useEffect(() => {
     // Back to the saved colours: they're what the page shows without a preview.
@@ -166,43 +179,47 @@ function Colors({ settings, onSaved }) {
 
   return (
     <form onSubmit={save}>
-      <p className="dim">This page shows the colours as you pick them. Viewers see them once they're saved.</p>
+      <p className="of-p of-dim">This page shows the colours as you pick them. Friends see them once they're saved.</p>
       <ErrorNote error={action.error} />
-      {notice && <div className="notice good">{notice}</div>}
-      <div className="grid-2">
+      <DoneNote>{notice}</DoneNote>
+      <figure className="of-cardpreview">
+        <MembershipCard site={card} name={SAMPLE.name} membership={SAMPLE.membership} />
+        <figcaption>A sample member's card.</figcaption>
+      </figure>
+      <div className="of-grid2">
         <ColorField
-          label="Accent"
+          label="Your colour"
           value={colors.accentColor}
           fallback={settings.accentColor}
           onChange={pick('accentColor')}
-          help="Buttons, links and highlights. It's used for small text, so it must stand out from the background."
+          help="Prints the membership card, colours the tab icon and tints what's selected. A pale colour prints darker, so it reads on the card."
         />
         <ColorField
           label="Background"
           value={colors.backgroundColor}
           fallback={settings.backgroundColor}
           onChange={pick('backgroundColor')}
-          help="Dark, so text stays easy to read. Panels, fields and lines are worked out from it."
+          help="Dark, so text stays easy to read."
         />
       </div>
       {check?.problems?.length > 0 && (
-        <div className="notice bad">
+        <Line kind="bad" role="alert" lead="Can't save these colours.">
           {check.problems.map((p) => (
-            <div key={p}>{p}</div>
+            <p key={p}>{p}</p>
           ))}
-        </div>
+        </Line>
       )}
       <ErrorNote error={check?.error} />
-      <div className="row">
-        <button className="btn primary" disabled={action.busy || !unsaved || !valid || refused}>
+      <div className="ui-btns">
+        <button className="ui-btn ui-btn--primary" disabled={action.busy || !unsaved || !valid || refused}>
           Save colours
         </button>
         {unsaved && (
-          <button type="button" className="btn" onClick={() => setEdit(null)} disabled={action.busy}>
+          <button type="button" className="ui-btn" onClick={() => setEdit(null)} disabled={action.busy}>
             Cancel
           </button>
         )}
-        <button type="button" className="btn" onClick={() => setEdit(DEFAULT_COLORS)} disabled={action.busy || isDefault}>
+        <button type="button" className="ui-btn" onClick={() => setEdit(DEFAULT_COLORS)} disabled={action.busy || isDefault}>
           Back to Open Matte's colours
         </button>
       </div>
@@ -213,24 +230,35 @@ function Colors({ settings, onSaved }) {
 // A colour picker and the same colour as text, for pasting one from elsewhere. The picker
 // can only hold a whole colour, so while the text is half-typed it shows the saved one.
 function ColorField({ label, value, fallback, onChange, help }) {
+  const id = useId();
   return (
-    <div className="field">
-      <span>{label}</span>
-      <div className="row" style={{ gap: '0.5rem', flexWrap: 'nowrap' }}>
-        <input type="color" value={HEX.test(value) ? value.toLowerCase() : fallback} onChange={(e) => onChange(e.target.value)} aria-label={label} />
+    <div className="ui-field">
+      <span className="ui-field__label" id={`${id}-l`}>
+        {label}
+      </span>
+      <div className="of-colour">
+        <input
+          type="color"
+          className="ui-color"
+          value={HEX.test(value) ? value.toLowerCase() : fallback}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={label}
+        />
         <input
           type="text"
-          className="mono"
+          className="ui-input"
           value={value}
           onChange={(e) => onChange(e.target.value.trim())}
           maxLength={7}
           spellCheck={false}
           autoComplete="off"
           aria-label={`${label}, as #rrggbb`}
-          style={{ maxWidth: '8.5em' }}
+          aria-describedby={`${id}-h`}
         />
       </div>
-      <small>{help}</small>
+      <p className="ui-field__hint" id={`${id}-h`}>
+        {help}
+      </p>
     </div>
   );
 }
@@ -267,12 +295,12 @@ function savedTheme(on) {
 }
 
 // After a save, this page takes the new colours as the server now writes them, so they
-// stay when the preview goes, on Settings and every other admin page, until a reload.
-// The page's Content-Security-Policy allows only the <style> the server wrote, by a hash
-// of its text, so a new <style>, or new text in that one, would be refused. The colours go
-// in through the CSSOM instead, which the policy doesn't cover, as the rule of the
-// server's style sheet. The server writes one into every page, empty when no colours
-// are set (page.js), so there is always one to use.
+// stay when the preview goes, on Settings and every other back office page, until a
+// reload. The page's Content-Security-Policy allows only the <style> the server wrote,
+// by a hash of its text, so a new <style>, or new text in that one, would be refused.
+// The colours go in through the CSSOM instead, which the policy doesn't cover, as the
+// rule of the server's style sheet. The server writes one into every page, empty when
+// no colours are set (page.js), so there is always one to use.
 function adoptTheme(theme, backgroundColor) {
   const css = Object.entries(theme)
     .map(([name, value]) => `${name}:${value}`)
@@ -325,22 +353,20 @@ function BrandImage({ kind, noun, image, onSaved, removeText, help, preview, chi
   return (
     <>
       <ErrorNote error={action.error} />
-      {notice && <div className="notice good">{notice}</div>}
+      <DoneNote>{notice}</DoneNote>
       {preview}
-      <div className="row">
-        <label className="btn">
+      <div className="ui-btns">
+        <label className="ui-btn">
           {uploading ? 'Uploading…' : image ? `Replace the ${noun}` : `Upload a ${noun}`}
-          <input type="file" accept={IMAGE_TYPES.join(',')} className="visually-hidden" onChange={upload} disabled={action.busy} />
+          <input type="file" accept={IMAGE_TYPES.join(',')} onChange={upload} disabled={action.busy} />
         </label>
         {image && (
-          <button type="button" className="btn danger" onClick={remove} disabled={action.busy}>
+          <button type="button" className="ui-btn ui-btn--danger" onClick={remove} disabled={action.busy}>
             Remove
           </button>
         )}
       </div>
-      <p className="faint" style={{ fontSize: '0.85rem', margin: '0.6rem 0 0' }}>
-        {help}
-      </p>
+      <p className="ui-field__hint of-gap-s">{help}</p>
       {children}
     </>
   );
@@ -356,12 +382,12 @@ function LogoWithName({ settings, onSaved }) {
   }
 
   return (
-    <div style={{ marginTop: '1rem' }}>
+    <>
       <ErrorNote error={action.error} />
-      <label className="check" style={{ margin: 0 }}>
+      <label className="ui-check">
         <input type="checkbox" checked={settings.logoWithName} onChange={toggle} disabled={action.busy} />
-        Show the cinema's name next to the logo
+        <span>Show the shop's name next to the logo</span>
       </label>
-    </div>
+    </>
   );
 }

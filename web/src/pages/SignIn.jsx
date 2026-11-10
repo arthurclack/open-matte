@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { hostName } from '../look/words.js';
 import PasskeySignIn, { NewPasskeys } from '../PasskeySignIn.jsx';
 import { useSite } from '../site.jsx';
+import { NarrowPage } from './tape.jsx';
 
 // Only a path on this site: one leading slash, not // or /\ (another site), and no
 // control characters, which URL parsing drops (so /<tab>/evil.example would be //evil.example).
@@ -19,14 +21,15 @@ const safeNext = (next) => {
 // thumbnails (server/app.js, sendPage).
 const ownPage = (next) => /^\/admin(\/|$|\?|#)/i.test(next);
 
-// /signin: one button. Nobody signs up here; accounts are made by whoever runs the cinema.
+// /signin: "Show your card", one button. Nobody signs up here: cards are given out by
+// whoever runs the shop.
 export default function SignIn() {
   const { me, site, refresh } = useSite();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const next = safeNext(params.get('next'));
   const [result, setResult] = useState(null);
-  const host = `whoever runs ${site?.cinemaName || 'this cinema'}`;
+  const host = hostName(site);
   const go = () => (ownPage(next) ? window.location.replace(next) : navigate(next, { replace: true }));
 
   async function signedIn(r) {
@@ -40,13 +43,15 @@ export default function SignIn() {
 
   if (result?.newPasskeys?.length) {
     return (
-      <div className="narrow" style={{ paddingTop: '15vh' }}>
-        <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Signed in as {result.person.name}</h1>
+      <NarrowPage>
+        <h1>Signed in as {result.person.name}</h1>
         <NewPasskeys passkeys={result.newPasskeys} />
-        <button className="btn primary" onClick={go}>
-          Continue
-        </button>
-      </div>
+        <div className="ui-btns">
+          <button type="button" className="ui-btn ui-btn--primary" onClick={go}>
+            Continue
+          </button>
+        </div>
+      </NarrowPage>
     );
   }
 
@@ -54,26 +59,35 @@ export default function SignIn() {
 
   if (me.person) {
     return (
-      <div className="narrow" style={{ paddingTop: '15vh' }}>
-        <h1 style={{ fontSize: '2rem', marginBottom: '0.8rem' }}>Signed in</h1>
-        <p className="dim">You're signed in as {me.person.name}.</p>
-        <Link to={next} reloadDocument={ownPage(next)} className="btn primary">
-          Continue
-        </Link>
-      </div>
+      <NarrowPage>
+        <h1>Signed in</h1>
+        <p>You're signed in as {me.person.name}.</p>
+        <div className="ui-btns">
+          <Link to={next} reloadDocument={ownPage(next)} className="ui-btn ui-btn--primary">
+            Continue
+          </Link>
+        </div>
+      </NarrowPage>
     );
   }
 
   return (
-    <div className="narrow" style={{ paddingTop: '15vh' }}>
-      <h1 style={{ fontSize: '2rem', marginBottom: '1.2rem' }}>Sign in</h1>
-      <PasskeySignIn onSignedIn={signedIn} copyLabel="Copy link" />
-      <div className="dim" style={{ marginTop: '2rem', fontSize: '0.92rem' }}>
+    <div className="fl-signin ui-w">
+      <div className="fl-signin__head">
+        <h1>Show your card</h1>
+      </div>
+      <div className="fl-signin__card">
+        <PasskeySignIn onSignedIn={signedIn} copyLabel="Copy link" card />
+      </div>
+      <div className="fl-help-lines fl-signin__act">
         <p>
-          <strong>No account?</strong> Accounts here are set up by {host}. You don't need one to watch: open the ticket link you were sent.
+          <b>No membership card?</b> Cards here are given out by {host}. You don't need one to watch: open the tape link you were sent.
         </p>
         <p>
-          <strong>No passkey found?</strong> If your passkey is on another phone or computer, choose “Use a phone or tablet”. Lost it? Ask {host}.
+          <b>Your passkey is on another phone?</b> When your browser asks, choose “Use a phone or tablet”, then scan the code it shows with that phone.
+        </p>
+        <p>
+          <b>Lost a phone, or had it stolen?</b> Ask {host}: they'll take back your keys and send you a link to make a new one.
         </p>
       </div>
     </div>

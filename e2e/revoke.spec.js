@@ -9,7 +9,7 @@ import { admin, expect, film, heartbeats, media, playButton, playbackSupport, te
 
 // What the player says when the server refuses it: the ticket is gone (a
 // progress report), or the media itself (a playlist or segment).
-const STOPPED = /This ticket is no longer valid\.|Playback stopped: this browser is no longer allowed to stream this film\./;
+const STOPPED = /has taken this tape back\.|This tape is no longer valid\.|Playback stopped: this browser is no longer allowed to stream this film\./;
 
 test('revoking a ticket mid-film stops the player and refuses its media', async ({ page }, testInfo) => {
   const ticket = await admin.issueTicket({ label: unique('Revoke', testInfo) });
@@ -43,7 +43,7 @@ test('revoking a ticket mid-film stops the player and refuses its media', async 
       expect.stringMatching(STOPPED),
     );
     // Then the film page asks again, and the ticket is gone from this browser.
-    await expect(page.getByRole('heading', { name: 'Nothing showing here' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Nothing on the shelf here' })).toBeVisible();
   });
 
   await test.step('a media request from this browser now gets 403', async () => {
@@ -80,13 +80,13 @@ test('giving a screening back mid-film stops the player, which says the screenin
     else v.pause();
   });
   await expect.poll(() => reports.filter((r) => r.status !== 200).map((r) => r.status)).toContain(409);
-  await expect.poll(() => page.evaluate(() => window.__playerMessages)).toContain('This screening has ended.');
-  expect(await page.evaluate(() => window.__playerMessages)).not.toContain('This ticket is no longer valid.');
+  await expect.poll(() => page.evaluate(() => window.__playerMessages)).toContain('This play has ended.');
+  expect(await page.evaluate(() => window.__playerMessages)).not.toContainEqual(expect.stringMatching(/taken this tape back|no longer valid/));
   expect(await page.evaluate((url) => fetch(url).then((r) => r.status), masterUrl)).toBe(403);
   // The ticket is still good: the page offers a new screening, and Play starts it,
   // from the beginning.
-  await expect(page.getByText('Pressing Play starts a screening.', { exact: false })).toBeVisible();
-  await expect(playButton(page)).toHaveText('Play');
+  await expect(page.getByText('Once you press Play, you can pause and come back to it', { exact: false })).toBeVisible();
+  await expect(playButton(page)).toHaveAccessibleName('Play');
   await expect(playButton(page)).toBeEnabled();
   const again = page.waitForResponse((r) => r.url().endsWith(`/api/films/${film.slug}/screenings`) && r.request().method() === 'POST');
   await playButton(page).click();
@@ -97,6 +97,6 @@ test('giving a screening back mid-film stops the player, which says the screenin
   expect(position).toBe(0);
   await media.playedPast(page, 1);
   // Playing again, the panel tells of the new screening and offers no Play.
-  await expect(page.locator('.ticket-panel')).toContainText('Your screening is open until');
+  await expect(page.locator('.fl-counter')).toContainText('You can pick up where you left off until');
   await expect(playButton(page)).toHaveCount(0);
 });

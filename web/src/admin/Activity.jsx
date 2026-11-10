@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, formatDateTime } from '../api.js';
-import { ErrorNote, describeEvent, keptFor, useAction, useLoad } from './ui.jsx';
+import { TapeStrip } from '../look/objects.jsx';
+import { ErrorNote, Mark, Table, describeEvent, isSecurityEvent, keptFor, useAction, useLoad } from './ui.jsx';
 
 // How many events each page (and each Show older) brings.
 const PAGE = 100;
@@ -8,11 +9,11 @@ const PAGE = 100;
 const KINDS = [
   ['', 'All'],
   ['viewing', 'Viewing'],
-  ['accounts', 'Accounts and links'],
+  ['accounts', 'Cards, passkeys and links'],
 ];
 
 // The filters live in the address (?film=&person=&ticket=&kind=&heartbeats=1), so a
-// filtered view can be linked to and survives a reload. A ticket's page links here
+// filtered view can be linked to and survives a reload. A tape's page links here
 // with ?ticket=.
 export default function Activity() {
   const [params, setParams] = useSearchParams();
@@ -30,7 +31,7 @@ export default function Activity() {
   if (person) query.set('person', person);
   if (ticket) query.set('ticket', ticket);
   if (kind) query.set('kind', kind);
-  // Accounts and links have no progress reports to show.
+  // Cards, passkeys and links have no progress reports to show.
   if (heartbeats && kind !== 'accounts') query.set('heartbeats', '1');
   query.set('limit', String(PAGE));
 
@@ -46,12 +47,14 @@ export default function Activity() {
 
   return (
     <>
-      <div className="page-head">
+      <div className="of-head">
         <div>
-          <h1>Activity</h1>
-          <p className="dim" style={{ margin: 0, maxWidth: '46em' }}>
-            Ticket opens, plays and finishes, and people's sign-ins, passkeys and links, newest first. This is what browsers reported, not proof anyone
-            was watching.
+          {/* The shop's ledger, its name on a strip of label tape. */}
+          <h1 className="of-ledger-head">
+            <TapeStrip text="Ledger" seed="ledger" />
+          </h1>
+          <p className="of-lede">
+            This is what browsers reported, not proof anyone was watching.
             {s?.retainProgressDays && s?.retainEventsDays && (
               <>
                 {' '}
@@ -62,8 +65,8 @@ export default function Activity() {
         </div>
       </div>
 
-      <div className="row" style={{ gap: '0.5rem', marginBottom: '1rem' }}>
-        <select aria-label="Film" className={`filter-select${film ? ' on' : ''}`} value={film} onChange={(e) => setFilter('film', e.target.value)}>
+      <div className="of-filters">
+        <select aria-label="Film" className={`ui-select${film ? ' is-on' : ''}`} value={film} onChange={(e) => setFilter('film', e.target.value)}>
           <option value="">Every film</option>
           {films.data?.map((f) => (
             <option key={f.id} value={String(f.id)}>
@@ -71,24 +74,24 @@ export default function Activity() {
             </option>
           ))}
         </select>
-        <select aria-label="Person" className={`filter-select${person ? ' on' : ''}`} value={person} onChange={(e) => setFilter('person', e.target.value)}>
+        <select aria-label="Member" className={`ui-select${person ? ' is-on' : ''}`} value={person} onChange={(e) => setFilter('person', e.target.value)}>
           <option value="">Everyone</option>
           {people.data?.map((p) => (
             <option key={p.id} value={String(p.id)}>
               {p.name}
-              {p.disabled ? ' (disabled)' : ''}
+              {p.disabled ? ' (card turned off)' : ''}
             </option>
           ))}
         </select>
         {KINDS.map(([value, label]) => (
-          <button key={value} type="button" className={`btn small${kind === value ? ' on' : ''}`} aria-pressed={kind === value} onClick={() => setFilter('kind', value)}>
+          <button key={value} type="button" className="ui-btn ui-btn--small" aria-pressed={kind === value} onClick={() => setFilter('kind', value)}>
             {label}
           </button>
         ))}
         {ticket && <TicketChip id={ticket} onRemove={() => setFilter('ticket', '')} />}
-        <label className="check" style={{ margin: 0 }}>
+        <label className="ui-check">
           <input type="checkbox" checked={heartbeats && kind !== 'accounts'} disabled={kind === 'accounts'} onChange={(e) => setFilter('heartbeats', e.target.checked ? '1' : '')} />
-          Show progress reports
+          <span>Show progress reports</span>
         </label>
       </div>
 
@@ -98,13 +101,13 @@ export default function Activity() {
   );
 }
 
-// The ticket a view is filtered to, with a way to see every ticket again.
+// The tape a view is filtered to, with a way to see every tape again.
 function TicketChip({ id, onRemove }) {
   const { data: t } = useLoad(() => api.get(`/api/admin/tickets/${encodeURIComponent(id)}`), [id]);
-  const name = t ? `${t.label || t.person?.name || 'Unnamed ticket'} · ${t.film.title}` : `Ticket ${id}`;
+  const name = t ? `${t.label || t.person?.name || 'Unnamed tape'} · ${t.film.title}` : `Tape ${id}`;
   return (
-    <button type="button" className="btn small on" onClick={onRemove} title="Show every ticket">
-      Ticket: {name} <span aria-hidden="true">×</span>
+    <button type="button" className="ui-btn ui-btn--small" aria-pressed="true" onClick={onRemove} title="Show every tape">
+      Tape: {name} <span aria-hidden="true">×</span>
       <span className="visually-hidden">(remove)</span>
     </button>
   );
@@ -121,57 +124,71 @@ function Events({ query, filtered }) {
 
   if (error) return <ErrorNote error={error} />;
   if (!data) return null;
-  if (data.events.length === 0) return <p className="dim">{filtered ? 'Nothing like that.' : 'Nothing yet.'}</p>;
+  if (data.events.length === 0) return <p className="of-p of-dim">{filtered ? 'Nothing like that.' : 'Nothing yet.'}</p>;
 
   return (
     <>
-      <div className="table-wrap">
-        <table className="stack">
-          <thead>
-            <tr>
-              <th>When</th>
-              <th>Who</th>
-              <th>Film</th>
-              <th>What happened</th>
-              <th>Device</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.events.map((e) => (
-              <tr key={e.id}>
-                <td className="nowrap faint" data-label="When">{formatDateTime(e.at)}</td>
-                <td data-label="Who">
-                  <Who event={e} />
-                </td>
-                <td data-label="Film">{e.filmId ? <Link to={`/admin/films/${e.filmId}`}>{e.filmTitle}</Link> : '–'}</td>
-                <td className="card-title">{describeEvent(e)}</td>
-                <td className="faint" data-label="Device">{e.device || '–'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Table
+        className="of-ledger"
+        head={
+          <>
+            <th className="of-c-when">When</th>
+            <th>Who</th>
+            <th>Film</th>
+            <th>What happened</th>
+            <th className="of-c-device">Device</th>
+          </>
+        }
+      >
+        {data.events.map((e) => (
+          <tr key={e.id}>
+            <td className="ui-when" data-label="When">
+              {formatDateTime(e.at)}
+            </td>
+            <td className="of-td-left" data-label="Who">
+              <Who event={e} />
+            </td>
+            <td className="of-td-left" data-label="Film">
+              {e.filmId ? <Link to={`/admin/films/${e.filmId}`}>{e.filmTitle}</Link> : '–'}
+            </td>
+            <td className="ui-title">
+              {isSecurityEvent(e) ? (
+                <span className="of-sec">
+                  <Mark tone="bad">
+                    <b>Security.</b> {describeEvent(e)}
+                  </Mark>
+                </span>
+              ) : (
+                describeEvent(e)
+              )}
+            </td>
+            <td className="of-faint" data-label="Device">
+              {e.device || '–'}
+            </td>
+          </tr>
+        ))}
+      </Table>
       <ErrorNote error={older.error} />
       {data.next && (
-        <p style={{ marginTop: '1rem' }}>
-          <button className="btn" onClick={showOlder} disabled={older.busy}>
+        <div className="ui-btns of-gap">
+          <button type="button" className="ui-btn" onClick={showOlder} disabled={older.busy}>
             {older.busy ? 'Loading…' : 'Show older'}
           </button>
-        </p>
+        </div>
       )}
     </>
   );
 }
 
-// The signed-in person when there is one, otherwise the ticket's label.
+// The signed-in member when there is one, otherwise the tape's label.
 function Who({ event: e }) {
-  const ticket = e.ticketId ? <Link to={`/admin/tickets/${e.ticketId}`}>{e.ticketLabel || 'Unnamed ticket'}</Link> : null;
+  const ticket = e.ticketId ? <Link to={`/admin/tickets/${e.ticketId}`}>{e.ticketLabel || 'Unnamed tape'}</Link> : null;
   if (!e.personId) return ticket || '–';
   // One element, so the narrow-screen card layout keeps it together.
   return (
     <span>
       <Link to={`/admin/people/${e.personId}`}>{e.personName}</Link>
-      {ticket && <span className="faint"> · {ticket}</span>}
+      {ticket && <span className="of-faint"> · {ticket}</span>}
     </span>
   );
 }

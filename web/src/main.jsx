@@ -8,8 +8,19 @@ import Film from './pages/Film.jsx';
 import Home from './pages/Home.jsx';
 import SignIn from './pages/SignIn.jsx';
 import TicketOpen from './pages/TicketOpen.jsx';
+import { installDevicePixels } from './look/devicePixels.js';
 import { SiteProvider } from './site.jsx';
+// The look, in order: its tokens and fonts, the app's base and older classes, the
+// interface layer, the printed objects and the machine, then the friend's pages.
+// The back office's own (look/office.css) comes with it (admin/AdminApp.jsx).
+import './look/tokens.css';
 import './styles.css';
+import './look/ui.css';
+import './look/objects.css';
+import './look/friend.css';
+
+// The raster and the blue screen's scanlines in whole device pixels.
+installDevicePixels();
 
 // The admin is only for the owner; viewers never download it.
 const AdminApp = lazyPart(() => import('./admin/AdminApp.jsx'));

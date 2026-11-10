@@ -1,7 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { formatClock, formatDateTime, plural } from '../api.js';
+import { Line } from '../look/ui.jsx';
 
-export const AdminContext = createContext({ signedOut: () => {} });
+// signedOut: back to the sign-in. site: the shop's name and logo for the brand, and
+// setSite to change them there once Settings has saved new ones. facts: the films
+// and the booth as the back office last read them (the status line, the attention
+// strip and the still 12:00), and refreshFacts to read them again.
+export const AdminContext = createContext({ signedOut: () => {}, site: null, setSite: () => {}, facts: {}, refreshFacts: () => {} });
 
 // Loads data for a page; a 401 anywhere sends the admin back to sign-in.
 export function useLoad(fn, deps) {
@@ -50,30 +56,105 @@ export function useAction() {
   return { run, busy, error, setError };
 }
 
+// ------------------------------------------------------------ the office's pieces
+
+// An error, as a system line (look/ui.jsx Line): the words are the server's or the
+// page's own sentence, which says what went wrong.
 export function ErrorNote({ error }) {
-  return error ? <div className="notice bad">{error}</div> : null;
+  return error ? (
+    <Line kind="bad" role="alert">
+      {error}
+    </Line>
+  ) : null;
+}
+
+// Something just done ("Saved."), as a system line with the solid block.
+export function DoneNote({ children }) {
+  return children ? (
+    <Line kind="done" role="status">
+      {children}
+    </Line>
+  ) : null;
+}
+
+// A state in words, with the interface's 8px block before it: solid for done or on,
+// a half block for under way, amber for a warning, warm red for an error, a short
+// dash for off. The words always say it; the block only helps the eye down a column.
+export function Mark({ tone = 'done', children }) {
+  return (
+    <span className={`of-mark of-mark--${tone}`}>
+      <span>{children}</span>
+    </span>
+  );
+}
+
+// A plain fact beside a title ("Shown to members"): no block, it isn't a state.
+export function Fact({ children }) {
+  return <span className="of-fact">{children}</span>;
+}
+
+// The way back to the list a page came from: "← Films", named "Back to Films" (the
+// menu has a link named Films).
+export function Back({ to, children }) {
+  return (
+    <Link to={to} className="of-back" aria-label={`Back to ${children}`}>
+      <span aria-hidden="true">←</span>
+      {children}
+    </Link>
+  );
+}
+
+// A screen's heading: the title, a line or two under it, and its buttons on the right.
+export function Head({ title, lede, actions, children }) {
+  return (
+    <div className="of-head">
+      <div>
+        <h1>{title}</h1>
+        {lede && <p className="of-lede">{lede}</p>}
+        {children}
+      </div>
+      {actions && <div className="ui-btns">{actions}</div>}
+    </div>
+  );
+}
+
+// A table in the interface's rules: a ruled table, cards on a phone.
+export function Table({ head, children, className = '' }) {
+  return (
+    <div className="ui-table-wrap">
+      <table className={`ui-table ui-table--stack${className ? ` ${className}` : ''}`}>
+        {head && (
+          <thead>
+            <tr>{head}</tr>
+          </thead>
+        )}
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  );
 }
 
 export function MediaBadge({ status }) {
-  const map = { ok: ['good', 'Media OK'], warning: ['warn', 'Media warnings'], error: ['bad', 'Media errors'], missing: ['bad', 'Folder missing'] };
-  const [tone, label] = map[status] || ['', status];
-  return <span className={`badge ${tone}`}>{label}</span>;
+  const map = { ok: ['done', 'Media OK'], warning: ['warn', 'Media warnings'], error: ['bad', 'Media errors'], missing: ['bad', 'Folder missing'] };
+  const [tone, label] = map[status] || ['off', status];
+  return <Mark tone={tone}>{label}</Mark>;
 }
 
+// Where a tape is, as the back office sees it (the friend's side has its own words).
 export function TicketBadge({ ticket }) {
   const t = ticket;
-  if (t.state === 'revoked') return <span className="badge bad">Revoked</span>;
-  if (t.state === 'expired') return <span className="badge">Expired</span>;
-  if (t.state === 'used_up') return <span className="badge">Used up</span>;
-  if (t.state === 'unpublished') return <span className="badge warn">Film unpublished</span>;
-  if (t.state === 'unavailable') return <span className="badge bad">Film unavailable</span>;
-  if (t.openScreening?.playingNow) return <span className="badge accent">Playing now</span>;
-  if (t.firstPlayedAt) return <span className="badge good">Active</span>;
-  if (t.firstOpenedAt) return <span className="badge good">Opened</span>;
-  return <span className="badge">Not opened yet</span>;
+  if (t.state === 'revoked') return <Mark tone="bad">Taken back</Mark>;
+  if (t.state === 'expired') return <Mark tone="off">Expired</Mark>;
+  if (t.state === 'used_up') return <Mark tone="off">Used up</Mark>;
+  if (t.state === 'unpublished') return <Mark tone="warn">Film off the shelf</Mark>;
+  if (t.state === 'unavailable') return <Mark tone="bad">Film unavailable</Mark>;
+  if (t.openScreening?.playingNow) return <Mark tone="info">Playing now</Mark>;
+  if (t.firstPlayedAt) return <Mark tone="done">Active</Mark>;
+  if (t.firstOpenedAt) return <Mark tone="info">Opened</Mark>;
+  return <Mark tone="off">Not opened yet</Mark>;
 }
 
-export function CopyButton({ text, label = 'Copy', className = 'btn small' }) {
+export function CopyButton({ text, label = 'Copy', className = 'ui-btn ui-btn--small' }) {
   const [done, setDone] = useState(false);
   async function copy() {
     try {
@@ -91,15 +172,27 @@ export function CopyButton({ text, label = 'Copy', className = 'btn small' }) {
   );
 }
 
+// A link to copy: the address in the machine's face, and its two buttons.
+export function LinkBox({ link, message }) {
+  return (
+    <div className="of-linkbox">
+      <code>{link}</code>
+      <CopyButton text={link} label="Copy link" />
+      {message && <CopyButton text={message} label="Copy message" />}
+    </div>
+  );
+}
+
+// How far playback got: a bar of whole pixels and the share in figures.
 export function Progress({ seconds, duration }) {
-  if (!duration || seconds == null) return <span className="faint">–</span>;
+  if (!duration || seconds == null) return <span className="of-faint">–</span>;
   const pct = Math.min(100, Math.round((seconds / duration) * 100));
   return (
-    <span className="row" style={{ gap: '0.5rem', flexWrap: 'nowrap' }} title={`${formatClock(seconds)} of ${formatClock(duration)}`}>
-      <span className="progress" style={{ width: 70 }}>
-        <div style={{ width: `${pct}%` }} />
+    <span className="of-progress" title={`${formatClock(seconds)} of ${formatClock(duration)}`}>
+      <span className="of-progress__bar" aria-hidden="true">
+        <span style={{ width: `${pct}%` }} />
       </span>
-      <span className="faint nowrap">{pct}%</span>
+      <span className="ui-n">{pct}%</span>
     </span>
   );
 }
@@ -136,6 +229,10 @@ export function lastClearedText(lastRun) {
 
 const signedOutOf = (n) => (n ? `signed out of ${plural(n, 'browser')}` : 'no browsers were signed in');
 
+// A sign-in refused because the passkey's counter went backwards: the one event the
+// ledger marks as a security matter (a copied passkey, perhaps).
+export const isSecurityEvent = (e) => e.type === 'sign-in-refused' && e.detail?.reason !== 'disabled';
+
 export function describeEvent(e) {
   const at = e.position != null ? ` at ${formatClock(e.position)}` : '';
   const d = e.detail || {};
@@ -143,12 +240,12 @@ export function describeEvent(e) {
     case 'opened':
       return 'Opened the film page';
     case 'play':
-      return e.detail?.resumed ? `Resumed the screening${at}` : 'Started a new screening';
+      return e.detail?.resumed ? `Resumed${at}` : 'Started a new play';
     case 'heartbeat':
       return `Watching${at}`;
     case 'finished':
       return 'Reached the end';
-    // People and passkeys. Events you caused say "you".
+    // Members and passkeys. Events you caused say "you".
     case 'signed-in':
       return 'Signed in with a passkey';
     case 'signed-out':
@@ -162,29 +259,44 @@ export function describeEvent(e) {
     case 'link-created':
       if (d.purpose !== 'recovery') return `You created a setup link (works ${linkLifetime(d.hours)})`;
       if (d.reset) {
-        return `You created a recovery link after a loss (works ${linkLifetime(d.hours)}): removed ${plural(d.passkeysRemoved ?? 0, 'passkey')}, ${signedOutOf(d.browsersSignedOut)}`;
+        return `You took back their keys and created a recovery link (works ${linkLifetime(d.hours)}): removed ${plural(d.passkeysRemoved ?? 0, 'passkey')}, ${signedOutOf(d.browsersSignedOut)}`;
       }
-      return `You created a recovery link to add a sign-in method (works ${linkLifetime(d.hours)})`;
+      return `You created a recovery link to add a passkey (works ${linkLifetime(d.hours)})`;
     case 'link-cancelled':
       return 'You cancelled the waiting link';
     case 'person-disabled':
-      return `You disabled them: ${signedOutOf(d.signedOut)}`;
+      return `You turned their card off: ${signedOutOf(d.signedOut)}`;
     case 'person-enabled':
-      return 'You enabled them';
-    // Keeping, giving and releasing tickets: the event names the person whose account it went into or left.
+      return 'You turned their card back on';
+    // Keeping, giving and releasing tapes: the event names the member whose card it went onto or left.
     case 'ticket-kept':
-      return 'Kept a ticket from a link in their account';
+      return 'Kept a tape from a link on their card';
     case 'ticket-given':
-      return d.from === 'person' ? "You gave them a ticket that was someone else's" : 'You gave them a ticket that was for anyone with the link';
+      return d.from === 'person' ? "You gave them a tape that was someone else's" : 'You gave them a tape that was for anyone with the link';
     case 'ticket-released':
-      return d.to === 'person' ? 'You gave their ticket to someone else' : 'You let anyone with the link use their ticket again';
+      return d.to === 'person' ? 'You gave their tape to someone else' : 'You let anyone with the link use their tape again';
     case 'sign-in-refused': {
       const key = d.device ? ` (the passkey added from ${d.device})` : '';
       return d.reason === 'disabled'
-        ? `Sign-in refused: they're disabled${key}`
+        ? `Sign-in refused: their card is turned off${key}`
         : `Sign-in refused: the passkey's counter went backwards, which can mean it was copied${key}`;
     }
     default:
       return e.type;
   }
+}
+
+// TMDB's logo and its notice, as one credit, wherever the back office shows TMDB's
+// details: word for word as TMDB's terms give it, with "product" for "website" as the
+// back office has always said (docs/metadata.md). The logo is TMDB's own file, at its
+// own shape: only its height is set.
+export function TmdbCredit({ children }) {
+  return (
+    <p className="tmdb-credit">
+      <img src="/tmdb.svg" width="92" height="12" alt="TMDB" />
+      <span>
+        This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.{children ? <> {children}</> : null}
+      </span>
+    </p>
+  );
 }

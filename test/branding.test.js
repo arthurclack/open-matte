@@ -13,14 +13,16 @@ import { isDeepStrictEqual } from 'node:util';
 import { softAuthenticator } from './softauth.js';
 import { adminBrowser, browser, enroll, makeFilm, newPerson, pngImage, setupLink, startServer, tempDir } from './helpers.js';
 
-const { DEFAULT_ACCENT, DEFAULT_BACKGROUND, check, contrast, faviconSvg, palette } = await import('../server/theme.js');
+const { DEFAULT_ACCENT, DEFAULT_BACKGROUND, check, contrast, faviconSvg, palette, themeColor } = await import('../server/theme.js');
 const { imageInfo } = await import('../server/images.js');
 const { createApp } = await import('../server/app.js');
 
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 // ====================================================================== colours
-const DEFAULTS = { accentColor: '#e8b04a', backgroundColor: '#0d0c0f' };
+const DEFAULTS = { accentColor: '#e8b04a', backgroundColor: '#171513' };
+// The default background before 1.1.0, which a shop that never chose one may still have stored.
+const LEGACY = { accentColor: '#e8b04a', backgroundColor: '#0d0c0f' };
 // web/public/favicon.svg as it is today, final newline and all: a default cinema's
 // drawn tab icon, to the byte.
 const FAVICON =
@@ -31,10 +33,11 @@ const FAVICON =
 const ACCENT = '#4fb3d9';
 const BACKGROUND = '#0a131c';
 const BG_THEME = {
-  // The five surfaces.
+  // The six surfaces.
   '--bg': '#0a131c',
   '--bg-raised': '#141c25',
   '--bg-sunk': '#070d14',
+  '--bg-high': '#1d252e',
   '--line': '#272f37',
   '--line-strong': '#373f46',
   // The background and the raised surface as r, g, b, for the shades over a backdrop.
@@ -51,14 +54,22 @@ const BG_THEME = {
   '--poster-from': '#212932',
   '--poster-to': '#0f1821',
 };
-const ACCENT_THEME = { '--accent': '#4fb3d9', '--accent-ink': '#091418', '--accent-hover': '#72c2e1' };
+// The lit blocks with 22% of the accent mixed in (OKLab), which keeps the room's
+// colour readable on them. Since 1.1.0 nothing draws the accent itself as a colour of
+// the page (the card and the tab icon take it from the settings), so it has no
+// variable of its own.
+const ACCENT_THEME = {
+  '--ui-lit': '#cbd6ce',
+  '--ui-lit-hover': '#dae3de',
+  '--ui-lit-press': '#c1ccc4',
+};
 const THEME = { ...BG_THEME, ...ACCENT_THEME };
 // The drawn icon's rounded square on BACKGROUND: mixed with 2% white.
 const FAVICON_SQUARE = '#0f1821';
 
 const NUMBER = String.raw`\d+(?:\.\d+)?`;
 const TOO_LIGHT = new RegExp(String.raw`^That background is too light: .+ would be hard to read on it \(${NUMBER}:1; it needs ${NUMBER}:1\)\. Choose a darker colour\.$`);
-const TOO_CLOSE = new RegExp(String.raw`^That accent colour is too close to the background to read \(${NUMBER}:1; it needs 4\.5:1\)\.$`);
+const TOO_CLOSE = new RegExp(String.raw`^Your colour is too close to the background for the tab icon to show up \(${NUMBER}:1; it needs 4\.5:1\)\. Choose a lighter colour\.$`);
 
 // WCAG 2 relative luminance and contrast, from sRGB.
 const channels = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -79,7 +90,7 @@ const mix = (a, b, t) => toHex(channels(a).map((v, i) => Math.round(v + (channel
 const close = (a, b) => channels(a).every((v, i) => Math.abs(v - channels(b)[i]) <= 1);
 // Too near the line to say which side the implementation's arithmetic puts it.
 const borderline = (r, need) => Math.abs(r - need) / need < 0.02;
-const raisedOf = (bg) => (bg === DEFAULTS.backgroundColor ? '#17151b' : mix(bg, '#ffffff', 0.04));
+const raisedOf = (bg) => (bg === DEFAULTS.backgroundColor ? '#1f1c19' : mix(bg, '#ffffff', 0.04));
 function hsl(h, s, l) {
   const f = (n) => {
     const k = (n + h / 30) % 12;
@@ -91,9 +102,9 @@ function hsl(h, s, l) {
 const STATUS = { good: '#7fc28b', warn: '#e8b04a', bad: '#e5776d' };
 // What text and status colours need on the background and the raised surface.
 const FOREGROUNDS = [
-  ['text', '#ece8e1', 7],
-  ['dim text', '#a59f97', 4.5],
-  ['faint text', '#8a847a', 4.5],
+  ['text', '#e9dfc9', 7],
+  ['dim text', '#b4ac9b', 4.5],
+  ['faint text', '#9a9284', 4.5],
   ['good', '#7fc28b', 4.5],
   ['warn', '#e8b04a', 4.5],
   ['bad', '#e5776d', 4.5],
@@ -102,9 +113,47 @@ const FOREGROUNDS = [
 describe('colours', () => {
   test("Open Matte's own colours need no theme, and pass every check", () => {
     assert.equal(DEFAULT_ACCENT, '#e8b04a');
-    assert.equal(DEFAULT_BACKGROUND, '#0d0c0f');
+    assert.equal(DEFAULT_BACKGROUND, '#171513');
     assert.deepEqual(palette(DEFAULTS), {});
     assert.deepEqual(check(DEFAULTS), []);
+  });
+
+  test('a shop still on the default background from before 1.1.0 gets the room, as a new one does', () => {
+    assert.deepEqual(palette(LEGACY), {});
+    assert.deepEqual(check(LEGACY), []);
+    assert.equal(themeColor(LEGACY), DEFAULT_BACKGROUND);
+    assert.equal(faviconSvg(LEGACY), FAVICON);
+    assert.deepEqual(palette({ ...LEGACY, accentColor: ACCENT }), ACCENT_THEME);
+  });
+
+  // The room's text colours replaced 1.0's (#ece8e1, #a59f97, #8a847a). A shop that
+  // chose its background then keeps it, so every one the old check allowed must still
+  // pass the new one: no shop's words get harder to read, and Branding still saves.
+  test('every background allowed before 1.1.0 is still allowed, so no shop that chose one ends up with text hard to read', () => {
+    const OLD = [
+      ['text', '#ece8e1', 7],
+      ['dim text', '#a59f97', 4.5],
+      ['faint text', '#8a847a', 4.5],
+      ['good', STATUS.good, 4.5],
+      ['warn', STATUS.warn, 4.5],
+      ['bad', STATUS.bad, 4.5],
+      ['the accent', DEFAULTS.accentColor, 4.5],
+    ];
+    const backgrounds = [];
+    for (let v = 0; v <= 0x40; v++) backgrounds.push(toHex([v, v, v]));
+    for (let h = 0; h < 360; h += 15) for (let l = 0.01; l <= 0.2; l += 0.01) for (const s of [0.2, 0.5, 0.9]) backgrounds.push(hsl(h, s, l));
+    let allowed = 0;
+    for (const backgroundColor of backgrounds) {
+      if (backgroundColor === DEFAULTS.backgroundColor || backgroundColor === LEGACY.backgroundColor) continue;
+      const surfaces = [backgroundColor, mix(backgroundColor, '#ffffff', 0.04)];
+      const ratios = OLD.flatMap(([, colour, need]) => surfaces.map((s) => [ratio(colour, s), need]));
+      if (ratios.some(([r, need]) => borderline(r, need))) continue;
+      if (ratios.some(([r, need]) => r < need)) continue;
+      allowed++;
+      assert.deepEqual(check({ accentColor: DEFAULTS.accentColor, backgroundColor }), [], backgroundColor);
+      for (const [what, colour, need] of FOREGROUNDS) for (const s of surfaces) assert.ok(ratio(colour, s) >= need, `${what} on ${s}, from ${backgroundColor}`);
+    }
+    assert.ok(allowed > 100, `${allowed} backgrounds the old check allowed: enough to mean something`);
   });
 
   test('contrast is the WCAG 2 ratio, whichever way round', () => {
@@ -147,20 +196,20 @@ describe('colours', () => {
     assert.deepEqual(palette(DEFAULTS), {});
   });
 
-  test('a custom accent derives its ink and its hover, and nothing of the surfaces', () => {
+  test('a custom accent tints the lit blocks, and nothing of the surfaces', () => {
     assert.deepEqual(palette({ accentColor: ACCENT, backgroundColor: DEFAULTS.backgroundColor }), ACCENT_THEME);
     assert.deepEqual(check({ accentColor: ACCENT, backgroundColor: DEFAULTS.backgroundColor }), []);
   });
 
-  test('both custom: all eighteen variables, and they pass', () => {
+  test('both custom: all nineteen variables, and they pass', () => {
     assert.deepEqual(palette({ accentColor: ACCENT, backgroundColor: BACKGROUND }), THEME);
     assert.deepEqual(check({ accentColor: ACCENT, backgroundColor: BACKGROUND }), []);
   });
 
   test('a background too light for the text or the status colours is refused, saying why', () => {
-    // #3a3a3a: the dim text and "bad" fail. #1a1a1a: the faint text passes on it, but
+    // #3a3a3a: the dim text and "bad" fail. #242424: the faint text passes on it, but
     // not on the raised surface derived from it.
-    for (const backgroundColor of ['#3a3a3a', '#1a1a1a']) {
+    for (const backgroundColor of ['#3a3a3a', '#242424']) {
       const problems = check({ accentColor: DEFAULTS.accentColor, backgroundColor });
       assert.ok(problems.length, backgroundColor);
       for (const p of problems) assert.match(p, TOO_LIGHT, backgroundColor);
@@ -172,19 +221,19 @@ describe('colours', () => {
     }
   });
 
-  test('an accent too close to the background is refused, saying why: it is used for small text', () => {
-    // #7a7a7a passes on the background but not on the raised surface.
-    for (const accentColor of ['#3a3040', '#5c4a2a', '#0d0c0f', '#7a7a7a']) {
+  test('an accent too close to the background is refused, saying why: the tab icon draws it there', () => {
+    // #818181 passes on the background but not on the raised surface.
+    for (const accentColor of ['#3a3040', '#5c4a2a', '#0d0c0f', '#818181']) {
       const problems = check({ accentColor, backgroundColor: DEFAULTS.backgroundColor });
       assert.ok(problems.some((p) => TOO_CLOSE.test(p)), `${accentColor}: ${JSON.stringify(problems)}`);
       assert.ok(!problems.some((p) => TOO_LIGHT.test(p)), `${accentColor}: the background is fine`);
     }
-    // Readable on Open Matte's background, not on a lighter one's raised surface.
-    assert.deepEqual(check({ accentColor: '#818181', backgroundColor: DEFAULTS.backgroundColor }), []);
-    assert.ok(check({ accentColor: '#818181', backgroundColor: BACKGROUND }).some((p) => TOO_CLOSE.test(p)));
+    // Readable on a black background, not on the room's raised surface, which is lighter.
+    assert.deepEqual(check({ accentColor: '#7d7d7d', backgroundColor: '#000000' }), []);
+    assert.ok(check({ accentColor: '#7d7d7d', backgroundColor: DEFAULTS.backgroundColor }).some((p) => TOO_CLOSE.test(p)));
   });
 
-  test('every accent readable at 4.5:1 passes and gets ink readable on it; every other one is refused', () => {
+  test('every accent readable at 4.5:1 passes and tints the lit blocks readably; every other one is refused', () => {
     const accents = [];
     for (let h = 0; h < 360; h += 15) for (const s of [0.35, 0.7, 1]) for (const l of [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]) accents.push(hsl(h, s, l));
     let passed = 0;
@@ -204,20 +253,35 @@ describe('colours', () => {
         }
         assert.deepEqual(problems, [], what);
         const theme = palette({ accentColor, backgroundColor });
-        const ink = theme['--accent-ink'];
-        assert.equal(theme['--accent'], accentColor, what);
-        assert.ok(ratio(ink, accentColor) >= 4.5, `${what}: ink ${ink} is ${ratio(ink, accentColor).toFixed(2)}:1`);
-        // The accent darkened, or black when that isn't readable enough.
-        const darkened = mix(accentColor, '#000000', 0.89);
-        if (!borderline(ratio(darkened, accentColor), 4.5)) {
-          if (ratio(darkened, accentColor) >= 4.5) assert.ok(close(ink, darkened), `${what}: ink ${ink}, not ${darkened}`);
-          else assert.equal(ink, '#000000', what);
-        }
-        assert.ok(close(theme['--accent-hover'], mix(accentColor, '#ffffff', 0.2)), `${what}: hover ${theme['--accent-hover']}`);
+        // The lit blocks take a little of it, never so much that the room's colour
+        // stops reading on them at 7:1.
+        for (const k of ['--ui-lit', '--ui-lit-hover', '--ui-lit-press']) assert.ok(ratio(theme[k], backgroundColor) >= 7 - 0.05, `${what}: ${k} ${theme[k]} is ${ratio(theme[k], backgroundColor).toFixed(2)}:1`);
         passed++;
       }
     }
     assert.ok(passed > 100 && refused > 100, `${passed} passed, ${refused} refused: enough of each to mean something`);
+  });
+
+  test('every accent 1.0 refused as too dark for the words on its buttons is still refused', () => {
+    // 1.0 refused an accent on which even black words fell short of 4.5:1. That check
+    // went with the buttons, but every such accent is too close to any background the
+    // text allows, so it is refused all the same, and saying so.
+    let dark = 0;
+    const backgrounds = [DEFAULTS.backgroundColor, BACKGROUND, '#000000', '#1a1a1a', hsl(220, 0.35, 0.11), hsl(10, 0.35, 0.14)];
+    for (let h = 0; h < 360; h += 10) {
+      for (const sat of [0.35, 0.7, 1]) {
+        for (let l = 0.02; l < 0.6; l += 0.02) {
+          const accentColor = hsl(h, sat, l);
+          if (ratio('#000000', accentColor) >= 4.5) continue;
+          dark++;
+          for (const backgroundColor of backgrounds) {
+            const problems = check({ accentColor, backgroundColor });
+            assert.ok(problems.some((p) => TOO_CLOSE.test(p)), `${accentColor} on ${backgroundColor}: ${JSON.stringify(problems)}`);
+          }
+        }
+      }
+    }
+    assert.ok(dark > 500, `${dark} dark accents tried`);
   });
 
   test('every background is checked for the text, the status colours and the accent, on it and on its raised surface', () => {
@@ -618,7 +682,7 @@ function asCinema(p, { name = 'Open Matte', logo = null } = {}) {
   assert.equal(p.meta['og:type'], 'website');
   assert.equal(p.meta['og:title'], name);
   assert.equal(p.meta['og:image'], logo ? srv.base + logo.url : undefined);
-  assert.doesNotMatch(p.html, /\/poster|A ticket from/, 'nothing about a ticket');
+  assert.doesNotMatch(p.html, /\/poster|A tape from/, 'nothing about a tape');
   for (const word of FILM_WORDS) assert.ok(!p.html.includes(word), `nothing about ${word}`);
 }
 
@@ -630,7 +694,7 @@ function asFilm(p, t, { title = 'Arrival (2016)', name = 'Open Matte', poster = 
   assert.equal(p.meta['og:site_name'], name);
   assert.equal(p.meta['og:type'], 'website');
   assert.equal(p.meta['og:title'], title);
-  assert.equal(p.meta['og:description'], `A ticket from ${name}.`);
+  assert.equal(p.meta['og:description'], `A tape from ${name}.`);
   assert.equal(p.meta['twitter:card'], 'summary');
   for (const directive of ['private', 'no-cache']) assert.match(p.headers.get('cache-control'), new RegExp(directive));
   assert.ok(!p.html.toLowerCase().includes(t.code), 'the code is nowhere in the page');
@@ -682,8 +746,8 @@ async function member(name = uniq('Sam')) {
 
 // ====================================================================== settings
 describe('colours, logo and icon in Settings', () => {
-  test("a new cinema has Open Matte's colours, no logo or icon, and the name beside the logo", async () => {
-    const expected = { accentColor: '#e8b04a', backgroundColor: '#0d0c0f', logoWithName: true, logo: null, icon: null };
+  test("a new shop has Open Matte's colours, no logo or icon, and the name beside the logo", async () => {
+    const expected = { accentColor: '#e8b04a', backgroundColor: '#171513', logoWithName: true, logo: null, icon: null };
     const pick = (o) => Object.fromEntries(Object.keys(expected).map((k) => [k, o[k]]));
     assert.deepEqual(pick((await fresh().get('/api/site')).data), expected);
     assert.deepEqual(pick((await fresh().get('/api/me')).data.site), expected);
@@ -692,6 +756,22 @@ describe('colours, logo and icon in Settings', () => {
     await page('/');
     await fetchFile('/favicon.svg');
     assert.equal(fs.existsSync(brandingDir), false);
+  });
+
+  // The admin saves both colours together, so a shop that never chose a background
+  // has the default from before 1.1.0 stored. It is drawn in today's room, and the
+  // admin's fields show the room's colour.
+  test('a shop with the old default background stored gets the room: the same settings, no theme and the room as theme-color', async () => {
+    srv.db.prepare("INSERT INTO settings (key, value) VALUES ('backgroundColor', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(LEGACY.backgroundColor));
+    try {
+      assert.equal((await adminSettings()).backgroundColor, DEFAULTS.backgroundColor);
+      assert.equal((await fresh().get('/api/site')).data.backgroundColor, DEFAULTS.backgroundColor);
+      const p = await page('/');
+      assert.equal(themeOf(p.html), null);
+      assert.equal(p.meta['theme-color'], DEFAULTS.backgroundColor);
+    } finally {
+      srv.db.prepare("DELETE FROM settings WHERE key = 'backgroundColor'").run();
+    }
   });
 
   test('colours are saved in lower case, and reach every viewer through /api/site and /api/me', async () => {
@@ -726,10 +806,10 @@ describe('colours, logo and icon in Settings', () => {
       [{ backgroundColor: '#808080' }, TOO_LIGHT],
       [{ backgroundColor: '#3a3a3a' }, TOO_LIGHT],
       // Fine on itself; too light once raised.
-      [{ backgroundColor: '#1a1a1a' }, TOO_LIGHT],
+      [{ backgroundColor: '#242424' }, TOO_LIGHT],
       [{ accentColor: '#3a3040' }, TOO_CLOSE],
       // Fine on the background; too close to the raised surface.
-      [{ accentColor: '#7a7a7a' }, TOO_CLOSE],
+      [{ accentColor: '#818181' }, TOO_CLOSE],
     ];
     for (const [patch, reason] of cases) {
       const r = await admin.patch('/api/admin/settings', { cinemaName: 'Never saved', logoWithName: false, ...patch });
@@ -741,7 +821,7 @@ describe('colours, logo and icon in Settings', () => {
   });
 
   test('the colours are checked as they would be saved: together, with whichever one is not being changed', async () => {
-    // #818181 is readable on Open Matte's background, not on BACKGROUND's raised surface.
+    // #818181 is too close to BACKGROUND's raised surface.
     await save({ backgroundColor: BACKGROUND });
     const r = await admin.patch('/api/admin/settings', { accentColor: '#818181' });
     assert.equal(r.status, 400);

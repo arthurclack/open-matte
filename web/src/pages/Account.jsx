@@ -2,28 +2,35 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, formatAgo, formatDay, formatDayTime } from '../api.js';
 import { enrollLink } from '../enrollLink.js';
+import { Line } from '../look/ui.jsx';
+import { hostName } from '../look/words.js';
 import MembershipCard from '../MembershipCard.jsx';
 import { confirmSignOut, useSite } from '../site.jsx';
+import { NarrowPage } from './tape.jsx';
 
-const Page = ({ children }) => <div className="narrow account">{children}</div>;
+// What kind of key each is, which the person can't see from here.
+const KIND = {
+  synced: "Saved to your Apple Account, Google account or password manager, so it's on every device signed in to that.",
+  device: "Kept by the one phone, computer or security key that made it. If that's lost, this key goes with it.",
+};
 
-// /account: the signed-in person's membership card, their passkeys and the browsers
-// signed in as them, with Sign out and Sign out everywhere. Adding or removing passkeys is for
-// whoever runs the cinema, so nothing here changes them.
+// /account: the signed-in member's membership card, the keys to it (their passkeys) and
+// the browsers signed in as them, with Sign out and Sign out everywhere. Adding or taking
+// back keys is for whoever runs the shop, so nothing here changes them.
 export default function Account() {
   const { me, site, refresh, signOut } = useSite();
   const navigate = useNavigate();
   const [data, setData] = useState(undefined); // undefined = loading, null = not signed in
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const host = `whoever runs ${site?.cinemaName || 'this cinema'}`;
+  const host = hostName(site);
 
   const load = useCallback(
     () =>
       api
         .get('/api/account')
         .then(setData)
-        .catch((err) => (err.status === 401 ? setData(null) : setError("Couldn't load your account. Try again in a moment."))),
+        .catch((err) => (err.status === 401 ? setData(null) : setError({ lead: "Couldn't load your card.", text: 'Try again in a moment.' }))),
     [],
   );
   // Again whenever who is signed in here changes (signing out from the menu, say).
@@ -33,7 +40,7 @@ export default function Account() {
   }, [load, person]);
 
   useEffect(() => {
-    if (site?.cinemaName) document.title = `Your account · ${site.cinemaName}`;
+    if (site?.cinemaName) document.title = `Your membership card · ${site.cinemaName}`;
   }, [site?.cinemaName]);
 
   async function signOutHere() {
@@ -41,14 +48,14 @@ export default function Account() {
     setBusy(true);
     setError(null);
     try {
-      if (!(await signOut())) setError("Couldn't sign out. Check your connection and try again.");
+      if (!(await signOut())) setError({ lead: "Couldn't sign out.", text: 'Check your connection and try again.' });
     } finally {
       setBusy(false);
     }
   }
 
   async function signOutEverywhere() {
-    const forgets = me?.linkTickets?.length ? ' This browser also forgets the tickets you opened from links here; the links still work.' : '';
+    const forgets = me?.linkTickets?.length ? ' This browser also forgets the tapes you opened from links here; the links still work.' : '';
     if (!window.confirm(`Every browser signed in as you is signed out, this one included, and playback stops on them. Your passkeys still work.${forgets}`)) return;
     setBusy(true);
     setError(null);
@@ -59,22 +66,29 @@ export default function Account() {
       await refresh();
       navigate('/');
     } catch {
-      setError("Couldn't sign out everywhere. Check your connection and try again.");
+      setError({ lead: "Couldn't sign out everywhere.", text: 'Check your connection and try again.' });
     } finally {
       setBusy(false);
     }
   }
 
-  if (data === undefined) return error ? <Page><div className="notice bad">{error}</div></Page> : null;
+  const problem = error && (
+    <Line kind="bad" lead={error.lead} role="alert">
+      {error.text}
+    </Line>
+  );
+  if (data === undefined) return error ? <NarrowPage>{problem}</NarrowPage> : null;
   if (data === null) {
     return (
-      <Page>
-        <h1>Your account</h1>
-        <p className="dim">Sign in to see your passkeys and where you're signed in.</p>
-        <Link to="/signin?next=%2Faccount" className="btn primary">
-          Sign in
-        </Link>
-      </Page>
+      <NarrowPage>
+        <h1>Your membership card</h1>
+        <p>Sign in to see your card and where you're signed in.</p>
+        <div className="ui-btns">
+          <Link to="/signin?next=%2Faccount" className="ui-btn ui-btn--primary">
+            Sign in
+          </Link>
+        </div>
+      </NarrowPage>
     );
   }
 
@@ -87,71 +101,74 @@ export default function Account() {
   const signedIn = (b) => (data.browsers.some((o) => o !== b && sameDay(o, b)) ? formatDayTime(b.signedInAt) : formatDay(b.signedInAt));
 
   return (
-    <Page>
-      <h1>{data.person.name}</h1>
-      <p className="dim">Your account at {site?.cinemaName || 'this cinema'}. Your tickets are on the front page.</p>
-      {error && <div className="notice bad">{error}</div>}
+    <div className="fl-account ui-w">
+      <h1>Your membership card</h1>
+      {problem}
+      <div className="fl-account__grid">
+        {data.membership && (
+          <div className="fl-account__card">
+            <MembershipCard site={site} name={data.person.name} membership={data.membership} />
+          </div>
+        )}
+        <div className="fl-account__main">
+          <h2>Keys to your card</h2>
+          <p className="fl-account__intro">Your card opens with these passkeys.</p>
+          <ul className="fl-list">
+            {data.passkeys.map((k) => (
+              <li key={k.addedAt}>
+                <div className="fl-list__row">
+                  <b>{k.synced ? 'Synced' : 'This device only'}</b>
+                  {k.current && <span className="badge">Used to sign in here</span>}
+                </div>
+                <p className="fl-list__kind">{k.synced ? KIND.synced : KIND.device}</p>
+                <p className="fl-list__meta">
+                  Added {formatDay(k.addedAt)}
+                  {k.addedFrom ? ` from ${k.addedFrom}` : ''}
+                  {k.viaLink === 'recovery' ? ', with a recovery link' : k.viaLink === 'setup' ? ', with your setup link' : ''}
+                  {k.lastUsedAt ? `. Last used ${formatAgo(k.lastUsedAt)}.` : '.'}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <p className="fl-list__meta">On a new computer, you can also sign in with the passkey on your phone: choose “Use a phone or tablet”.</p>
 
-      {data.membership && (
-        <section className="account-card" aria-labelledby="your-card">
-          <h2 id="your-card">Your membership card</h2>
-          <MembershipCard site={site} name={data.person.name} membership={data.membership} />
-        </section>
-      )}
+          <h2>Signed in on</h2>
+          <ul className="fl-list">
+            {data.browsers.map((b) => (
+              <li key={`${b.signedInAt}-${b.device}`}>
+                <div className="fl-list__row">
+                  <b>{device(b)}</b>
+                  {b.current && <span className="badge good">This browser</span>}
+                </div>
+                <p className="fl-list__meta">
+                  Signed in {signedIn(b)}. Last seen {formatAgo(b.lastSeenAt)}.
+                </p>
+              </li>
+            ))}
+          </ul>
 
-      <h2>Passkeys</h2>
-      <p className="dim">
-        You sign in with these. Your phone, computer or password manager keeps each one and unlocks it with Face ID, a fingerprint or your screen lock.
-      </p>
-      <ul className="account-list">
-        {data.passkeys.map((k) => (
-          <li key={k.addedAt}>
-            <div>
-              <strong>{k.synced ? 'Synced' : 'This device only'}</strong>
-              {k.current && <span className="badge" style={{ marginLeft: 8 }}>Signed in here with this</span>}
-            </div>
-            <div className="dim">
-              Added {formatDay(k.addedAt)}
-              {k.addedFrom ? ` from ${k.addedFrom}` : ''}
-              {k.viaLink === 'recovery' ? ', with a recovery link' : k.viaLink === 'setup' ? ', with your setup link' : ''}
-              {k.lastUsedAt ? `. Last used ${formatAgo(k.lastUsedAt)}.` : '.'}
-            </div>
-          </li>
-        ))}
-      </ul>
-      <p className="dim" style={{ fontSize: '0.875rem' }}>
-        Synced passkeys are on every device signed in to the same Apple ID, Google account or password manager. On a new computer, you can also sign in
-        with the passkey on your phone: choose “Use a phone or tablet”. To add a passkey or remove a lost one, ask {host}.
-      </p>
+          <Line kind="info" className="fl-account__lost">
+            <p>
+              <b>Got a new phone?</b> If your passkey is synced, it's already on it; if not, ask {host} for a link. <b>Lost a phone, or had it stolen?</b>{' '}
+              Ask {host}: they'll take back your keys and send you a link to make a new one.
+            </p>
+          </Line>
 
-      <h2>Signed in on</h2>
-      <ul className="account-list">
-        {data.browsers.map((b) => (
-          <li key={`${b.signedInAt}-${b.device}`}>
-            <div>
-              <strong>{device(b)}</strong>
-              {b.current && <span className="badge good" style={{ marginLeft: 8 }}>This browser</span>}
-            </div>
-            <div className="dim">
-              Signed in {signedIn(b)}. Last seen {formatAgo(b.lastSeenAt)}.
-            </div>
-          </li>
-        ))}
-      </ul>
-
-      <div className="row" style={{ marginTop: '1.5rem' }}>
-        <button className="btn" onClick={signOutHere} disabled={busy}>
-          Sign out
-        </button>
-        <button className="btn" onClick={signOutEverywhere} disabled={busy}>
-          Sign out everywhere
-        </button>
+          <div className="ui-btns fl-account__out">
+            <button type="button" className="ui-btn" onClick={signOutHere} disabled={busy}>
+              Sign out
+            </button>
+            <button type="button" className="ui-btn" onClick={signOutEverywhere} disabled={busy}>
+              Sign out everywhere
+            </button>
+          </div>
+          <p className="fl-list__meta">
+            {others
+              ? `Sign out everywhere also signs out the ${others === 1 ? 'other browser' : `${others} other browsers`} above. Don't recognise one? Sign out everywhere, then tell ${host}.`
+              : `Don't recognise a passkey? Tell ${host}.`}
+          </p>
+        </div>
       </div>
-      <p className="dim" style={{ fontSize: '0.875rem', marginTop: '0.8rem' }}>
-        {others
-          ? `Sign out everywhere also signs out the ${others === 1 ? 'other browser' : `${others} other browsers`} above. Don't recognise one? Sign out everywhere, then tell ${host}.`
-          : `Don't recognise a passkey? Tell ${host}.`}
-      </p>
-    </Page>
+    </div>
   );
 }

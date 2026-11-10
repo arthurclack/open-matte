@@ -1,0 +1,280 @@
+/* =====================================================================
+   look/friend.css: the friend's pages (web/src/pages/*, Player.jsx,
+   PlaybackHelp.jsx, PasskeySignIn.jsx) in take 2's look: the front page and
+   its shelf, the film page (the counter: sleeve, staff pick, label tape and
+   sticker, the Play tile), the player and its paused strip, a tape's link,
+   signing in, setting up and the membership card's page.
+
+   Loaded on every page by main.jsx, after tokens.css, styles.css, ui.css
+   and objects.css, so it can build on them. Owned by the friend's side:
+   see README.md (FILE OWNERSHIP). Every class here starts fl-, or is an
+   older shared class (.theatre, .player-bar, .cue-style, .playback-help,
+   .player-message) restyled only under a friend's page (.fl-page).
+   ===================================================================== */
+
+/* ---------- a page with one thing to say (pages/tape.jsx NarrowPage) ---------- */
+.ui80 .fl-narrow { max-width: calc(600px + 2 * var(--gutter)); padding-top: 96px; padding-bottom: 96px; }
+.ui80 .fl-narrow h1 { font: 600 32px/38px var(--sans); letter-spacing: -0.01em; margin: 0 0 12px; text-wrap: balance; overflow-wrap: anywhere; }
+.ui80 .fl-narrow > p { color: var(--text-2); margin: 0 0 20px; max-width: 54ch; }
+.ui80 .fl-narrow > p[role='status'] { color: var(--text-2); }
+.ui80 .fl-narrow .ui-line { margin: 0 0 20px; }
+.ui80 .fl-narrow .ui-btns { margin-top: 8px; }
+.ui80 .fl-small { margin: 20px 0 0; font-size: 14px; line-height: 20px; color: var(--text-3); max-width: 54ch; }
+@media (max-width: 767px) {
+  .ui80 .fl-narrow { padding-top: 40px; padding-bottom: 56px; }
+  .ui80 .fl-narrow h1 { font-size: 28px; line-height: 32px; }
+}
+
+/* signing in: "Show your card", the button, and what to do when it doesn't work */
+.ui80 .fl-help-lines { display: grid; gap: 14px; margin-top: 32px; max-width: 54ch; }
+.ui80 .fl-help-lines p { margin: 0; font-size: 15px; line-height: 22px; color: var(--text-2); }
+.ui80 .fl-help-lines b { color: var(--text); font-weight: 600; }
+.ui80 .fl-passkey { display: grid; gap: 16px; justify-items: start; }
+.ui80 .fl-passkey .ui-line { margin: 0; }
+.ui80 .fl-passkey__note { margin: 0; font-size: 15px; line-height: 22px; color: var(--text-2); max-width: 54ch; }
+.ui80 .fl-openin { margin: 16px 0 0; }
+.ui80 .fl-openin .ui-line { margin: 0; }
+.ui80 .fl-openin .ui-line p { color: var(--text-2); margin-top: 4px; }
+.fl-key { width: 18px; height: 18px; flex: none; }
+@media (max-width: 767px) { .ui80 .fl-show .fl-passkey .ui-btn--big { width: 100%; } }
+
+/* "Show your card": the words and the help on the left, the card's front (the button) on
+   the right; one column on a phone, the card under the heading */
+.ui80 .fl-signin {
+  display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 360px); grid-template-areas: 'head card' 'act card';
+  grid-template-rows: auto 1fr; gap: 28px 88px; align-items: start; padding-top: 56px; padding-bottom: 80px;
+}
+.ui80 .fl-signin__head { grid-area: head; min-width: 0; }
+.ui80 .fl-signin__head h1 { font: 600 36px/40px var(--sans); letter-spacing: -0.015em; margin: 0 0 12px; overflow-wrap: anywhere; }
+.ui80 .fl-signin__head p { color: var(--text-2); margin: 0; max-width: 50ch; }
+.ui80 .fl-signin__card { grid-area: card; min-width: 0; padding-top: 8px; }
+.ui80 .fl-signin__act { grid-area: act; margin-top: 0; }
+.ui80 .fl-signin .fl-passkey .ui-btns { width: 100%; }
+@media (max-width: 899px) {
+  .ui80 .fl-signin { grid-template-columns: minmax(0, 560px); grid-template-areas: 'head' 'card' 'act'; grid-template-rows: auto; row-gap: 24px; padding-top: 20px; padding-bottom: 48px; }
+  .ui80 .fl-signin__card { padding-top: 0; }
+  .ui80 .fl-signin__head h1 { font-size: 28px; line-height: 32px; }
+}
+/* the card's front as a button: the card, and the words in a lit strip under it */
+.ui80 .fl-cardbtn {
+  display: grid; gap: 16px; width: min(100%, 360px); padding: 0; border: 0; border-radius: 0; background: none; color: inherit; font: inherit;
+  text-align: left; cursor: pointer; touch-action: manipulation; -webkit-user-select: none; user-select: none;
+}
+.ui80 .fl-cardbtn__card { display: block; min-width: 0; }
+.ui80 .fl-cardbtn__card .mc { width: 100%; }
+.ui80 .fl-cardbtn__label {
+  display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; padding: 0 20px;
+  background: var(--ui-lit); color: var(--ui-lit-ink); font: 500 16px/22px var(--ui-face); font-variant-ligatures: none;
+}
+.ui80 .fl-cardbtn:active:not(:disabled) .fl-cardbtn__label { background: var(--ui-lit-press); }
+@media (hover: hover) and (pointer: fine) { .ui80 .fl-cardbtn:hover:not(:disabled) .fl-cardbtn__label { background: var(--ui-lit-hover); } }
+.ui80 .fl-cardbtn:disabled { cursor: not-allowed; }
+.ui80 .fl-cardbtn:disabled .fl-cardbtn__label { background: transparent; color: var(--ui-fg-3); border: 1px dashed rgb(154 146 132 / 0.7); }
+@media (max-width: 899px) { .ui80 .fl-cardbtn { width: min(100%, 420px); } }
+@media (forced-colors: active) { .ui80 .fl-cardbtn__label { border: 1px solid ButtonText; } }
+
+/* ---------- the front page (pages/Home.jsx) ---------- */
+.ui80 .fl-home { padding-top: 40px; padding-bottom: 72px; }
+.ui80 .fl-home > h1 { font: 600 36px/40px var(--sans); letter-spacing: -0.015em; margin: 0 0 8px; overflow-wrap: anywhere; }
+.ui80 .fl-home > .ui-line { margin: 16px 0 0; }
+.ui80 .fl-lede { color: var(--text-2); margin: 8px 0 0; max-width: 60ch; }
+.ui80 .fl-lede b { color: var(--text); font-weight: 600; }
+.ui80 .fl-home > h1 + .fl-shelf, .ui80 .fl-home > .ui-line + .fl-shelf { margin-top: 32px; }
+.ui80 .fl-sec { margin-top: 48px; }
+.ui80 .fl-sec > h2 { font: 600 22px/28px var(--sans); margin: 0 0 20px; }
+@media (max-width: 767px) {
+  .ui80 .fl-home { padding-top: 20px; padding-bottom: 48px; }
+  .ui80 .fl-home > h1 { font-size: 28px; line-height: 32px; }
+  .ui80 .fl-sec { margin-top: 36px; }
+  .ui80 .fl-home > h1 + .fl-shelf, .ui80 .fl-home > .ui-line + .fl-shelf { margin-top: 24px; }
+}
+/* a shelf of sleeves, face out */
+.ui80 .fl-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 200px)); gap: 36px 40px; margin: 0; padding: 0; list-style: none; }
+.ui80 .fl-facing { min-width: 0; }
+.ui80 .fl-facing__sleeve { position: relative; display: block; text-decoration: none; color: inherit; }
+.ui80 .fl-facing__sleeve > .ob { --w: 100%; }
+/* the sticker on the sleeve's corner, as the shop's gun put it there */
+.ui80 .fl-facing__stk { position: absolute; right: -10px; bottom: 14px; z-index: 3; max-width: calc(100% + 10px); }
+.ui80 .fl-facing__t { font: 600 17px/22px var(--sans); margin: 14px 0 2px; overflow-wrap: anywhere; letter-spacing: 0; }
+.ui80 .fl-facing__t a { text-decoration: none; }
+@media (hover: hover) and (pointer: fine) { .ui80 .fl-facing__t a:hover { text-decoration: underline; text-underline-offset: 3px; } }
+.ui80 .fl-facing p { margin: 0; font: 400 14px/20px var(--ui-face); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ui80 .fl-facing p + p { margin-top: 2px; }
+@media (max-width: 767px) {
+  .ui80 .fl-shelf { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 16px; }
+  /* on a phone a date and time is wider than a sleeve: the sticker may hang a little past
+     either edge, into the gap and the gutter, never past the screen */
+  .ui80 .fl-facing__stk { left: -6px; right: -6px; bottom: 10px; max-width: none; display: flex; justify-content: flex-end; }
+}
+/* at 320 the gun's line is set a little smaller, so a date and time still fits the sleeve */
+@media (max-width: 359px) { .ui80 .fl-facing__stk .stk__v { font-size: 16px; line-height: 20px; } }
+
+/* ---------- the film page (pages/Film.jsx) ---------- */
+/* the wall (the sleeve, the staff pick lying against it) on the left; the film and the counter on the right */
+.ui80 .fl-film {
+  display: grid; grid-template-columns: 260px 420px 64px minmax(0, 1fr);
+  grid-template-areas: 'sleeve pick . info' 'sleeve pick . about' 'sleeve pick . counter';
+  grid-template-rows: auto auto 1fr; align-items: start; padding-top: 40px; padding-bottom: 72px;
+}
+/* no staff pick, no pick card, and no room kept for one */
+.ui80 .fl-film--nopick { grid-template-columns: 260px 64px minmax(0, 1fr); grid-template-areas: 'sleeve . info' 'sleeve . about' 'sleeve . counter'; }
+.ui80 .fl-sleeve { grid-area: sleeve; position: relative; z-index: 2; }
+.ui80 .fl-sleeve > .ob { --w: 260px; }
+.ui80 .fl-pickcell { grid-area: pick; margin: 44px 0 0 -20px; position: relative; z-index: 1; min-width: 0; }
+/* the card's words start clear of the sleeve lying over its edge */
+@media (min-width: 1100px) { .ui80 .fl-pickcell .ob--pick > .ob__body > .ob__sheet > .ob__ink { padding-left: 42px; } }
+.ui80 .fl-info { grid-area: info; min-width: 0; }
+.ui80 .fl-info h1 { font: 600 36px/40px var(--sans); letter-spacing: -0.015em; margin: 0 0 8px; text-wrap: balance; overflow-wrap: anywhere; }
+.ui80 .fl-original { margin: 0 0 4px; color: var(--text-2); font-style: italic; }
+.ui80 .fl-meta { margin: 0; color: var(--text-2); }
+.ui80 .fl-about { grid-area: about; margin-top: 16px; min-width: 0; }
+.ui80 .fl-synopsis { margin: 0; color: var(--text-2); max-width: 46ch; white-space: pre-line; }
+/* the content note: always shown, in plain type */
+.ui80 .fl-note { margin: 10px 0 0; font-size: 14px; line-height: 20px; color: var(--text-2); max-width: 52ch; white-space: pre-line; }
+.ui80 .fl-synopsis + .fl-note { margin-top: 10px; }
+.ui80 .fl-about > .fl-note:first-child { margin-top: 0; }
+
+/* the counter: the tape, Play, and the words that go with them */
+.ui80 .fl-counter { grid-area: counter; margin-top: 36px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-content: start; min-width: 0; }
+.ui80 .fl-counter > * { min-width: 0; }
+.ui80 .fl-counter .ui-line { margin: 0; }
+.ui80 .fl-tapeline { display: grid; justify-items: start; gap: 6px; min-height: 34px; min-width: 0; }
+.ui80 .fl-playrow { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; }
+.ui80 .fl-left { margin: 0; font: 400 15px/22px var(--ui-face); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ui80 .fl-clock { margin: 0; color: var(--text-2); max-width: 52ch; }
+.ui80 .fl-keep { margin: 0; max-width: 52ch; }
+.ui80 .fl-privacy { margin: 4px 0 0; font-size: 14px; line-height: 20px; color: var(--text-3); max-width: 56ch; }
+.ui80 .fl-keepoffer { display: grid; gap: 12px; justify-items: start; }
+.ui80 .fl-keepoffer p { margin: 0; max-width: 52ch; }
+.ui80 .fl-keepoffer .ui-line { margin: 0; }
+.ui80 .fl-keepoffer .ui-btns { margin: 0; }
+/* a button that reads as part of a sentence: "Sign in and keep it" */
+.ui80 .fl-linklike { display: inline; padding: 0; border: 0; background: none; color: var(--text); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgb(233 223 201 / 0.5); touch-action: manipulation; }
+@media (hover: hover) and (pointer: fine) { .ui80 .fl-linklike:hover { text-decoration-color: currentColor; } }
+
+@media (min-width: 768px) and (max-width: 1099px) {
+  .ui80 .fl-film { grid-template-columns: 200px 40px minmax(0, 1fr); grid-template-areas: 'sleeve . info' 'sleeve . about' 'sleeve . counter' 'pick pick pick'; }
+  .ui80 .fl-film--nopick { grid-template-areas: 'sleeve . info' 'sleeve . about' 'sleeve . counter'; }
+  .ui80 .fl-sleeve > .ob { --w: 200px; }
+  .ui80 .fl-pickcell { margin: 48px 0 0; }
+}
+@media (max-width: 767px) {
+  .ui80 .fl-film, .ui80 .fl-film--nopick {
+    grid-template-columns: 96px minmax(0, 1fr); column-gap: 16px;
+    grid-template-areas: 'sleeve info' 'about about' 'pick pick' 'counter counter'; grid-template-rows: auto;
+    padding-top: 16px; padding-bottom: 48px;
+  }
+  .ui80 .fl-sleeve > .ob { --w: 96px; }
+  .ui80 .fl-info h1 { font-size: 28px; line-height: 32px; margin-bottom: 6px; }
+  .ui80 .fl-meta, .ui80 .fl-original { font-size: 15px; line-height: 22px; }
+  .ui80 .fl-pickcell { margin: 24px 0 0; }
+  .ui80 .fl-counter { margin-top: 28px; }
+}
+
+/* ---------- the player (Player.jsx): the picture, untouched, then the bar under it ---------- */
+.ui80 .fl-page .theatre.fl-theatre { width: 100%; margin: 0; background: var(--deep); border-bottom: 1px solid var(--rule); }
+.ui80 .fl-stage { width: min(100%, calc(82vh * 16 / 9)); margin: 0 auto; }
+.ui80 .fl-stage__wait { aspect-ratio: 16 / 9; background: #000; }
+.ui80 .fl-picture { position: relative; background: #000; }
+.ui80 .fl-page .theatre video { max-height: none; }
+/* why it stopped, over the stopped picture: plain words, never the blue */
+.ui80 .fl-page .player-message.fl-halt { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; background: rgb(16 14 13 / 0.86); text-align: center; }
+.ui80 .fl-halt > div { max-width: 46ch; display: grid; gap: 14px; justify-items: center; }
+.ui80 .fl-halt p { margin: 0; font-size: 17px; line-height: 24px; color: var(--text); }
+/* a browser that can't play the film has no picture: the words on black */
+.ui80 .fl-page .player-message.fl-halt--black { background: #000; }
+
+/* playing: one quiet row of the machine's words under the picture */
+.ui80 .fl-page .player-bar.fl-bar { background: none; border: 0; padding: 12px 0; gap: 12px 20px; font: 400 14px/20px var(--ui-face); color: var(--text-2); font-variant-ligatures: none; }
+.ui80 .fl-bar label { gap: 8px; }
+.ui80 .fl-page .fl-bar .ui-select { width: auto; max-width: 100%; min-height: 36px; padding: 6px 36px 6px 10px; font: 400 14px/20px var(--ui-face); color: var(--text); }
+.ui80 .fl-page .fl-bar .cue-style-button { min-height: 36px; padding: 0 10px; font: 600 14px/20px var(--ui-face); background: var(--deep); }
+.ui80 .fl-page .cue-style-panel { background: var(--surface); padding: 12px 14px; font: 400 14px/20px var(--sans); }
+.ui80 .fl-page .cue-style-panel legend { font: 500 13px/18px var(--ui-face); color: var(--text-2); }
+.ui80 .fl-page .cue-style-panel label { display: inline-flex; gap: 8px; align-items: center; color: var(--text); }
+.ui80 .fl-page .cue-style-panel p { font-size: 13px; line-height: 18px; color: var(--text-2); }
+.ui80 .fl-page .fl-bar .badge { align-self: center; }
+@media (pointer: coarse), (max-width: 520px) {
+  .ui80 .fl-page .fl-bar .ui-select { font-size: 16px; min-height: 44px; }
+  .ui80 .fl-page .fl-bar .cue-style-button { min-height: 44px; min-width: 44px; }
+}
+@media (max-width: 767px) { .ui80 .fl-page .player-bar.fl-bar { padding: 8px 16px; } }
+/* on a phone the bar is rows (styles.css): Playback help takes a row of its own, at the left */
+@media (max-width: 520px) { .ui80 .fl-page .player-bar.fl-bar > .fl-helpbtn { grid-column: 1 / -1; justify-self: start; } }
+
+/* paused: the machine's strip under the picture, then Aa and Playback help */
+.ui80 .fl-bar--osd { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 0 0 8px; }
+.ui80 .fl-bar__ctl { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px 20px; font: 400 14px/20px var(--ui-face); color: var(--text-2); }
+.ui80 .fl-bar__ctl .cue-style-panel { left: auto; right: 0; }
+.ui80 .fl-bar__ctl .cue-style-button { min-height: 36px; padding: 0 10px; font: 600 14px/20px var(--ui-face); background: var(--deep); }
+@media (max-width: 767px) {
+  .ui80 .fl-bar__ctl { justify-content: flex-start; padding: 0 16px; }
+  .ui80 .fl-bar--osd .cue-style { position: static; }
+  .ui80 .fl-bar--osd .cue-style-panel { left: 16px; right: 16px; width: auto; }
+}
+
+/* Playback help: plain words, the machine's face for the readings */
+.ui80 .fl-page .playback-help.fl-help { padding: 16px 0 24px; background: none; border-top: 1px solid var(--rule); border-bottom: 0; font-size: 15px; line-height: 22px; }
+.ui80 .fl-help h2 { font: 600 20px/28px var(--sans); margin: 0 0 6px; }
+.ui80 .fl-help > p { margin: 0 0 16px; color: var(--text-2); max-width: 72ch; }
+.ui80 .fl-help dl { display: grid; grid-template-columns: 220px minmax(0, 1fr); margin: 0 0 16px; border-top: 1px solid var(--rule); }
+.ui80 .fl-help dt, .ui80 .fl-help dd { margin: 0; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.ui80 .fl-help dt { font: 500 14px/20px var(--sans); color: var(--text-2); padding-right: 16px; }
+.ui80 .fl-help dd { font: 400 14px/20px var(--ui-face); color: var(--text); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; min-width: 0; }
+.ui80 .fl-help .ui-btns { gap: 16px; }
+.ui80 .fl-help__done { font: 400 14px/20px var(--ui-face); color: var(--text-2); }
+.ui80 .fl-help__manual { margin: 16px 0 0; }
+.ui80 .fl-help__manual textarea { font: 400 14px/20px var(--ui-face); }
+@media (max-width: 767px) {
+  .ui80 .fl-page .playback-help.fl-help { padding-left: 16px; padding-right: 16px; }
+  .ui80 .fl-help dl { grid-template-columns: minmax(0, 1fr); }
+  .ui80 .fl-help dt { border-bottom: 0; padding-bottom: 0; }
+  .ui80 .fl-help dd { padding-top: 2px; }
+}
+
+/* ---------- the membership card's pages (Enroll.jsx done, Account.jsx) ---------- */
+.ui80 .fl-cardpage {
+  display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 440px); grid-template-areas: 'head card' 'act card';
+  grid-template-rows: auto 1fr; gap: 28px 88px; align-items: start; padding-top: 56px; padding-bottom: 80px;
+}
+.ui80 .fl-cardpage__head { grid-area: head; min-width: 0; }
+.ui80 .fl-cardpage__head h1 { font: 600 40px/44px var(--sans); letter-spacing: -0.015em; margin: 0 0 12px; text-wrap: balance; overflow-wrap: anywhere; }
+.ui80 .fl-cardpage__head p { margin: 0; color: var(--text-2); max-width: 50ch; }
+.ui80 .fl-cardpage__card { grid-area: card; min-width: 0; padding-top: 8px; }
+.ui80 .fl-cardpage__act { grid-area: act; min-width: 0; }
+@media (max-width: 899px) {
+  .ui80 .fl-cardpage { grid-template-columns: minmax(0, 560px); grid-template-areas: 'head' 'card' 'act'; grid-template-rows: auto; row-gap: 24px; padding-top: 20px; padding-bottom: 48px; }
+  .ui80 .fl-cardpage__card { padding-top: 0; }
+  .ui80 .fl-cardpage__head h1 { font-size: 28px; line-height: 32px; }
+}
+
+.ui80 .fl-account { padding-top: 56px; padding-bottom: 80px; }
+.ui80 .fl-account > h1 { font: 600 40px/44px var(--sans); letter-spacing: -0.015em; margin: 0 0 32px; }
+.ui80 .fl-account > .ui-line { margin: 0 0 24px; }
+.ui80 .fl-account__grid { display: grid; grid-template-columns: minmax(0, 440px) minmax(0, 640px); gap: 40px 88px; align-items: start; }
+.ui80 .fl-account__card { min-width: 0; }
+.ui80 .fl-account__main { min-width: 0; }
+.ui80 .fl-account__main h2 { font: 600 20px/28px var(--sans); margin: 40px 0 8px; }
+.ui80 .fl-account__main h2:first-child { margin-top: 0; }
+.ui80 .fl-account__intro { color: var(--text-2); margin: 0 0 16px; max-width: 58ch; }
+.ui80 .fl-account__lost { margin: 32px 0 0; max-width: 58ch; }
+.ui80 .fl-account__lost p { color: var(--text-2); }
+.ui80 .fl-account__lost b { color: var(--text); }
+.ui80 .fl-account__out { margin-top: 28px; }
+.ui80 .fl-list { list-style: none; margin: 0 0 14px; padding: 0; border-top: 1px solid var(--hair); }
+.ui80 .fl-list li { padding: 14px 0; border-bottom: 1px solid var(--hair); }
+.ui80 .fl-list__row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.ui80 .fl-list__row b { font-weight: 600; overflow-wrap: anywhere; }
+.ui80 .fl-list__kind { margin: 4px 0 0; color: var(--text-2); font-size: 15px; line-height: 22px; max-width: 58ch; }
+.ui80 .fl-list__meta { margin: 4px 0 0; color: var(--text-3); font-size: 14px; line-height: 20px; max-width: 60ch; }
+@media (max-width: 1023px) { .ui80 .fl-account__grid { grid-template-columns: minmax(0, 560px); } }
+@media (max-width: 767px) {
+  .ui80 .fl-account { padding-top: 20px; padding-bottom: 48px; }
+  .ui80 .fl-account > h1 { font-size: 28px; line-height: 32px; margin-bottom: 20px; }
+  .ui80 .fl-account__main h2 { margin-top: 32px; }
+}
+
+/* ---------- forced colours: the system's own; the printed things keep their shapes ---------- */
+@media (forced-colors: active) {
+  .ui80 .fl-page .player-message.fl-halt { background: Canvas; }
+}

@@ -1,11 +1,14 @@
-import { COLOR, DEFAULT_ACCENT, DEFAULT_BACKGROUND, check } from './theme.js';
+import { COLOR, DEFAULT_ACCENT, DEFAULT_BACKGROUND, LEGACY_BACKGROUND, check } from './theme.js';
 
 // Per-installation settings, stored in the database and edited in the admin.
 // Everything in DEFAULT_SETTINGS is safe to show viewers; secrets are kept
 // apart and never leave the server.
 export const DEFAULT_SETTINGS = {
   cinemaName: 'Open Matte',
-  welcome: 'This is a private cinema. If someone sent you a ticket, open the link they gave you.',
+  // The owner's own name, to sign the staff picks ("Picked by Arthur") and for
+  // "No tape yet: ask Arthur". Optional: empty, the shop's name is used instead.
+  ownerName: '',
+  welcome: 'This is a private video shop. If someone sent you a tape, open the link they gave you.',
   poweredBy: true,
   // How long a screening can be resumed, counted from when it started.
   resumeWindowHours: 48,
@@ -14,10 +17,10 @@ export const DEFAULT_SETTINGS = {
   // Branding. The colours are checked together (see theme.js).
   accentColor: DEFAULT_ACCENT,
   backgroundColor: DEFAULT_BACKGROUND,
-  // Show the cinema's name next to the logo.
+  // Show the shop's name next to the logo.
   logoWithName: true,
   // Lock screens and media controls show the film's title and poster while it
-  // plays. Off: only the cinema's name, for when the title is part of the surprise.
+  // plays. Off: only the shop's name, for when the title is part of the surprise.
   mediaSessionTitle: true,
   // How long records are kept, in days (retention.js). Progress reports are the
   // heartbeat events; every other event (opened, play, finished, sign-ins,
@@ -32,8 +35,14 @@ export const DEFAULT_SETTINGS = {
   icon: null,
 };
 
+// The front page message's default before 1.1.0, in the cinema's words. The admin's
+// Settings saves the message with every other field there, so a shop that never wrote
+// one of its own may have this stored: it reads as today's default (get()).
+export const LEGACY_WELCOME = 'This is a private cinema. If someone sent you a ticket, open the link they gave you.';
+
 const RULES = {
   cinemaName: (v) => typeof v === 'string' && v.trim().length > 0 && v.length <= 80,
+  ownerName: (v) => typeof v === 'string' && v.trim().length <= 80,
   welcome: (v) => typeof v === 'string' && v.length <= 2000,
   poweredBy: (v) => typeof v === 'boolean',
   resumeWindowHours: (v) => Number.isInteger(v) && v >= 1 && v <= 24 * 30,
@@ -67,9 +76,14 @@ export function createSettings(db) {
 
   // Object.hasOwn rather than `in` throughout: `in` also finds what every object
   // inherits, so names like toString or constructor would pass as settings.
+  // A background still on the default from before 1.1.0 was never chosen (the admin
+  // saves both colours together), so it reads as today's default: the room. A front
+  // page message still word for word the old default reads as today's too.
   function get() {
     const out = { ...DEFAULT_SETTINGS };
     for (const { key, value } of all.all()) if (Object.hasOwn(DEFAULT_SETTINGS, key)) out[key] = JSON.parse(value);
+    if (out.backgroundColor === LEGACY_BACKGROUND) out.backgroundColor = DEFAULT_BACKGROUND;
+    if (out.welcome === LEGACY_WELCOME) out.welcome = DEFAULT_SETTINGS.welcome;
     return out;
   }
 

@@ -1,232 +1,105 @@
-/* Open Matte: a dark room with one warm light. */
+/* Open Matte: a one-shelf video shop. The page's base, the friend's shell and footer,
+   the player's older classes (.theatre, .player-bar, .cue-style, .playback-help,
+   .player-message, which look/friend.css builds on), the elements' own look (fields,
+   tables), the badge and the membership card's button (.btn), and the back office's
+   sign-in.
 
-/* Open Matte's own colours. A cinema's background and accent (and the shades worked
-   out from them) are written over these by the server, in a <style id="theme"> after
-   this sheet. */
-:root {
-  --bg: #0d0c0f;
-  --bg-raised: #17151b;
-  --bg-sunk: #09080b;
-  --line: #2a2730;
-  --line-strong: #3a3642;
-  --text: #ece8e1;
-  --text-dim: #a59f97;
-  --text-faint: #8a847a;
-  --accent: #e8b04a;
-  --accent-ink: #1a1306;
-  --accent-hover: #f2c46d;
-  --good: #7fc28b;
-  --warn: #e8b04a;
-  --bad: #e5776d;
-  /* Shades of the background: the borders (line) and backgrounds (tint) of notices and
-     badges, the poster placeholder, and the background and raised surface as r, g, b,
-     so every browser can draw them see-through: rgba(var(--bg-rgb), 0.85). */
-  --good-line: #2f5236;
-  --good-tint: #111a12;
-  --warn-line: #5e4720;
-  --warn-tint: #1d170c;
-  --bad-line: #6b3530;
-  --bad-tint: #1f1312;
-  --poster-from: #24202a;
-  --poster-to: #121015;
-  --bg-rgb: 13, 12, 15;
-  --bg-raised-rgb: 23, 21, 27;
-  --radius: 10px;
-  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
-  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  color-scheme: dark;
-}
+   The tokens (the room, its text, the rules and edges, the lit block, the faces) are
+   in look/tokens.css, which the theme writes over (server/theme.js). Everything else
+   is in look/ui.css (the interface), look/objects.css (the printed things and the
+   machine), look/friend.css and look/office.css. See look/README.md. */
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+html { -webkit-text-size-adjust: 100%; }
 body {
-  background: var(--bg);
+  background: var(--room);
   color: var(--text);
-  font: 16px/1.55 var(--sans);
+  font: 400 16px/1.5 var(--sans);
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  /* nothing may push the page sideways at 320 */
+  overflow-x: clip;
 }
-a { color: inherit; }
+a { color: inherit; text-underline-offset: 3px; }
 img { display: block; max-width: 100%; }
 button, input, textarea, select { font: inherit; color: inherit; }
-h1, h2, h3 { font-family: var(--serif); font-weight: 600; line-height: 1.15; margin: 0; }
+h1, h2, h3 { font-family: var(--sans); font-weight: 600; line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
 p { margin: 0 0 1em; }
-.dim { color: var(--text-dim); }
-.faint { color: var(--text-faint); }
-.mono { font-family: var(--mono); font-size: 0.9em; }
-.nowrap { white-space: nowrap; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-/* One ring for whatever the keyboard reaches, in the accent and clear of the edge, so
-   it shows on any background. Buttons and fields keep their own, set below. */
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* The focus block (look/ui.css) is on everything under .ui80, which is the whole page;
+   this is the same for anything outside it. */
+:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 2px; }
+.focus-target:focus { outline: none; }
 
-/* ---------- buttons and fields ---------- */
-
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 0.5em;
-  border: 1px solid var(--line-strong); background: var(--bg-raised);
-  padding: 0.55em 1em; border-radius: 999px; cursor: pointer; text-decoration: none;
-  font-size: 0.95rem; line-height: 1.2; transition: border-color 0.15s, background 0.15s;
-}
-.btn:hover:not(:disabled) { border-color: var(--text-dim); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
-.btn.danger { color: var(--bad); }
-.btn.small { padding: 0.3em 0.75em; font-size: 0.85rem; }
-.btn.big { padding: 0.8em 1.6em; font-size: 1.05rem; }
-.linklike { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
-/* Icons (icons.jsx) size themselves. On a line of text they are lowered a little, so
-   they centre on the capitals as the characters they replace did; in a button its
-   gap spaces them from the words. */
-.icon { flex-shrink: 0; vertical-align: -0.1em; }
-/* A file input inside a label.btn: the label is the button, and the input stays reachable from the keyboard. */
-.btn:has(> input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
-.btn:has(> input:disabled) { opacity: 0.45; cursor: not-allowed; }
-
-.field { display: grid; gap: 0.3em; margin-bottom: 1rem; align-content: start; }
-.field > span { font-size: 0.85rem; color: var(--text-dim); }
-.field small { color: var(--text-faint); font-size: 0.8rem; }
-input[type='text'], input[type='password'], input[type='number'], input[type='date'], input:not([type]), textarea, select {
-  width: 100%; background: var(--bg-sunk); border: 1px solid var(--line-strong);
-  border-radius: 8px; padding: 0.55em 0.7em;
-}
-textarea { min-height: 6em; resize: vertical; line-height: 1.5; }
-input:focus, textarea:focus, select:focus, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-input[type='checkbox'], input[type='radio'] { accent-color: var(--accent); }
-input[type='color'] { width: 2.75rem; height: 2.4rem; flex-shrink: 0; padding: 0.2rem; background: var(--bg-sunk); border: 1px solid var(--line-strong); border-radius: 8px; cursor: pointer; }
-.check { display: flex; gap: 0.6em; align-items: center; margin-bottom: 1rem; }
-.check.top { align-items: flex-start; }
-.check.top input { margin-top: 0.3em; flex-shrink: 0; }
-/* A radio button with a heading and an explanation, e.g. Add a sign-in method / Reset after loss. */
-.choice { display: flex; gap: 0.7em; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0.75em 0.9em; margin-bottom: 0.6rem; cursor: pointer; }
-.choice:has(input:checked) { border-color: var(--accent); background: var(--bg-sunk); }
-.choice input { margin-top: 0.3em; flex-shrink: 0; }
-.choice small { display: block; color: var(--text-dim); font-size: 0.85rem; margin-top: 0.15em; }
-.choice:has(input:disabled) { cursor: not-allowed; opacity: 0.6; }
-.keep-box { margin: 0 0 0.8rem 2.1em; }
-.keep-box small { display: block; color: var(--text-dim); font-size: 0.85rem; margin-top: 0.15em; }
-.choice select.inline { width: auto; max-width: 100%; padding: 0.25em 0.5em; margin-left: 0.5em; }
-.row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
-.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 1rem; }
-
-/* ---------- messages ---------- */
-
-.notice { border: 1px solid var(--line-strong); background: var(--bg-raised); border-radius: var(--radius); padding: 0.9em 1.1em; margin: 0 0 1rem; }
-.notice.bad { border-color: var(--bad-line); background: var(--bad-tint); }
-.notice.warn { border-color: var(--warn-line); background: var(--warn-tint); }
-.notice.good { border-color: var(--good-line); background: var(--good-tint); }
-.notice ul { margin: 0.4em 0 0; padding-left: 1.2em; }
-.badge {
-  display: inline-block; font-size: 0.75rem; padding: 0.15em 0.6em; border-radius: 999px;
-  border: 1px solid var(--line-strong); color: var(--text-dim); white-space: nowrap; vertical-align: middle;
-}
-.badge.good { color: var(--good); border-color: var(--good-line); }
-.badge.warn { color: var(--warn); border-color: var(--warn-line); }
-.badge.bad { color: var(--bad); border-color: var(--bad-line); }
-.badge.accent { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
-/* A row of filters: the current one is marked. */
-.btn.on { border-color: var(--accent); color: var(--accent); }
-select.filter-select { width: auto; padding: 0.3em 0.75em; font-size: 0.85rem; border-radius: 999px; }
-select.filter-select.on { border-color: var(--accent); color: var(--accent); }
-
-/* ---------- viewer site ---------- */
+/* ---------- the friend's side: the shell (site.jsx) ---------- */
 
 .site { min-height: 100vh; display: flex; flex-direction: column; }
-/* Above the film page's backdrop and its player (.theatre), so that the name menu,
-   which opens downwards over the video, can always be seen and used: Sign out included. */
-.site-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.2rem clamp(1rem, 4vw, 3rem); position: relative; z-index: 4; }
-.site-name { display: flex; align-items: center; gap: 0.6rem; font-family: var(--serif); font-size: 1.25rem; text-decoration: none; letter-spacing: 0.01em; }
-/* The cinema's logo: its own height (from the img's height attribute) up to about a line
-   of the header. On a narrow screen a wide one shrinks, undistorted, before it pushes
-   the menu off the edge. */
-.site-logo { width: auto; max-height: 2rem; max-width: 100%; min-width: 0; object-fit: contain; object-position: left center; }
-/* The name or logo gives way before the buttons beside it do. */
-.site-header > .row { flex-shrink: 0; }
-.site-signin { color: var(--text-dim); font-size: 0.92rem; text-decoration: none; }
-.site-signin:hover { color: var(--text); text-decoration: underline; }
-.site-main { flex: 1; }
-/* One block, stacked the same on a phone and a computer: TMDB's credit, then Powered
-   by and Licences on a quiet line. Never under 12px, so TMDB's notice stays
-   readable, as its terms want. */
-.site-footer { padding: 2rem clamp(1rem, 4vw, 3rem); color: var(--text-faint); font-size: max(12px, 0.75rem); display: grid; gap: 0.3rem; }
-.site-footer p { margin: 0; }
-.site-footer a { color: var(--text-dim); }
-/* TMDB's logo about as high as the text beside it. The width follows from the height,
-   so the logo keeps its own shape. */
-.site-footer .tmdb-logo { display: inline-block; height: 12px; width: auto; vertical-align: middle; margin-right: 0.25em; }
-/* TMDB's notice: dim, not faint, since TMDB's terms want it prominent. */
-.tmdb-notice { color: var(--text-dim); }
-/* The browser also holds the admin cookie, which bypasses every person rule. */
-.preview-banner { position: relative; z-index: 3; text-align: center; font-size: 0.82rem; padding: 0.35rem 1rem; color: var(--warn); background: var(--warn-tint); border-bottom: 1px solid var(--warn-line); }
-/* "Sam ▾" in the header. */
-.menu { position: relative; }
-.menu-error { position: absolute; right: 0; top: calc(100% + 0.4rem); width: max-content; max-width: 18rem; z-index: 10; }
-.menu-list { position: absolute; right: 0; top: calc(100% + 0.4rem); min-width: 10rem; background: var(--bg-raised); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0.3rem; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); z-index: 10; }
-.menu-list button, .menu-list a { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0.45em 0.7em; border-radius: 6px; cursor: pointer; text-decoration: none; font-size: 0.92rem; }
-.menu-list button:hover, .menu-list a:hover, .menu-list button:focus-visible, .menu-list a:focus-visible { background: var(--bg-sunk); }
-.wrap { width: min(1100px, 100% - 2rem); margin: 0 auto; }
-.narrow { width: min(640px, 100% - 2rem); margin: 0 auto; }
-.account { padding: 3rem 0 2rem; }
-.account h1 { font-size: 2rem; margin-bottom: 0.4rem; }
-.account h2 { font-size: 1.3rem; margin: 2rem 0 0.4rem; }
-.account-card h2 { margin-bottom: 0.9rem; }
-.enroll-card { margin: 1.4rem 0 1.6rem; }
-/* a heading given the focus when what was pressed has gone: nothing to show, nothing to press */
-.focus-target:focus { outline: none; }
-.account-list { list-style: none; padding: 0; margin: 0.8rem 0; }
-.account-list li { border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-raised); padding: 0.75rem 1rem; margin-bottom: 0.5rem; }
-.account-list .dim { font-size: 0.92rem; margin-top: 0.15rem; }
+/* Above the film page's backdrop and its player, so that the name menu, which opens
+   downwards over the video, can always be seen and used: Sign out included. */
+.site-bar { position: relative; z-index: 4; border-bottom: 1px solid var(--rule); }
+/* the rule runs the screen's whole width; the bar inside keeps the page's gutters */
+.ui80 .site-bar > .ui-bar { border-bottom: 0; padding-top: 4px; padding-bottom: 4px; }
+.ui80 .site-home { display: flex; align-items: center; color: inherit; text-decoration: none; min-height: 44px; }
+.site-main { flex: 1 0 auto; }
+/* the owner's preview: one plain line under the header's place, never a coloured box */
+.site-preview { position: relative; z-index: 3; background: var(--deep); border-bottom: 1px solid var(--rule); }
+.ui80 .site-preview .ui-line { margin: 0; padding-top: 10px; padding-bottom: 10px; }
+/* The footer: TMDB's credit, then Powered by and Licences on a quiet line. Never under
+   12px, so TMDB's notice stays readable, as its terms want. */
+.site-footer { border-top: 1px solid var(--hair); padding: 28px 0 40px; font-size: 14px; line-height: 20px; color: var(--text-3); }
+.site-footer p { margin: 0 0 8px; }
+.site-footer p:last-child { margin-bottom: 0; }
+.site-footer a { color: var(--text-2); }
+.site-footer__row { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+.tmdb-credit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+/* TMDB's logo about as high as the text beside it; its notice dim, not faint, since
+   TMDB's terms want it prominent. */
+.tmdb-logo { display: block; height: 12px; width: auto; }
+.tmdb-notice { color: var(--text-2); }
 
-.home-hero { padding: 12vh 0 4rem; }
-.home-hero h1 { font-size: clamp(2rem, 6vw, 3.4rem); margin-bottom: 0.6rem; }
-.home-hero p { color: var(--text-dim); font-size: 1.1rem; max-width: 34em; }
-.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 1.5rem; margin: 1.5rem 0 4rem; }
-.shelf-item { text-decoration: none; display: grid; gap: 0.6rem; }
-/* The poster lifts a little under the pointer, unless the person has asked their
-   device for less motion. */
-@media (prefers-reduced-motion: no-preference) {
-  .shelf-item .poster { transition: transform 0.2s; }
-  .shelf-item:hover .poster { transform: translateY(-3px); }
+/* ---------- the membership card's button (MembershipCard.jsx), and fields ---------- */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 40px; padding: 0 16px; border: 1px solid var(--ui-edge); border-radius: 0; background: transparent;
+  font: 500 15px/20px var(--ui-face); font-variant-ligatures: none; text-decoration: none; cursor: pointer;
+  touch-action: manipulation;
 }
-.shelf-item .meta { font-size: 0.9rem; }
-.poster {
-  aspect-ratio: 2 / 3; width: 100%; object-fit: cover; border-radius: 6px;
-  background: linear-gradient(160deg, var(--poster-from), var(--poster-to)); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+@media (hover: hover) and (pointer: fine) { .btn:hover:not(:disabled) { background: var(--surface); } }
+.btn:active:not(:disabled) { background: var(--surface); }
+.btn:disabled { color: var(--text-3); border-style: dashed; border-color: rgb(154 146 132 / 0.7); cursor: not-allowed; }
+/* Icons (icons.jsx) size themselves. On a line of text they are lowered a little. */
+.icon { flex-shrink: 0; vertical-align: -0.1em; }
+
+input[type='text'], input[type='password'], input[type='number'], input[type='date'], input[type='search'], input[type='url'], input:not([type]), textarea, select {
+  width: 100%; min-height: 44px; background-color: var(--deep); border: 1px solid var(--ui-edge);
+  border-radius: 0; padding: 10px 12px; line-height: 22px; caret-color: var(--text);
 }
-.poster.placeholder { display: grid; place-items: center; padding: 1rem; text-align: center; font-family: var(--serif); color: var(--text-dim); overflow: hidden; overflow-wrap: anywhere; }
+input[type='number'], input[type='date'] { font-family: var(--ui-face); font-variant-numeric: tabular-nums; }
+textarea { min-height: 6em; resize: vertical; line-height: 24px; }
+input:focus, textarea:focus, select:focus { border-color: var(--text); }
+input[type='checkbox'], input[type='radio'] { accent-color: var(--ui-lit); width: 18px; height: 18px; }
+input[type='color'] { width: 44px; height: 44px; flex-shrink: 0; padding: 3px; background: var(--deep); border: 1px solid var(--ui-edge); border-radius: 0; cursor: pointer; }
 
-/* film page */
-.film { position: relative; }
-/* Runs up behind the site header so the picture has no hard top edge. */
-.film-backdrop { position: absolute; top: -5rem; left: 0; right: 0; height: calc(min(80vh, 760px) + 5rem); overflow: hidden; z-index: 0; }
-.film-backdrop img { width: 100%; height: 100%; object-fit: cover; opacity: 0.38; filter: saturate(0.85); }
-.film-backdrop::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(var(--bg-rgb), 0.2), var(--bg) 92%), linear-gradient(to right, rgba(var(--bg-rgb), 0.85), transparent 70%); }
-.film-body { position: relative; z-index: 1; padding: 6vh 0 3rem; display: grid; grid-template-columns: minmax(180px, 280px) 1fr; gap: clamp(1.5rem, 4vw, 3.5rem); align-items: start; }
-@media (max-width: 700px) { .film-body { grid-template-columns: 1fr; } .film-body .poster { max-width: 220px; } }
-.film-title { font-size: clamp(2.2rem, 6vw, 4rem); margin-bottom: 0.4rem; }
-.film-meta { color: var(--text-dim); margin-bottom: 1.8rem; }
-.film-meta span + span::before { content: '·'; margin: 0 0.5em; color: var(--text-faint); }
-.recommendation { font-family: var(--serif); font-size: clamp(1.15rem, 2.2vw, 1.4rem); line-height: 1.5; border-left: 3px solid var(--accent); padding: 0.1em 0 0.1em 1.1em; margin: 0 0 2rem; white-space: pre-line; }
-.recommendation-label { font-family: var(--sans); font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 0.4rem; }
-.synopsis { color: var(--text-dim); max-width: 40em; white-space: pre-line; }
-.ticket-panel { border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 1.1rem 1.3rem; margin: 0 0 2rem; background: rgba(var(--bg-raised-rgb), 0.7); max-width: 34em; }
-.ticket-panel .admit { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.35rem; }
-.ticket-panel p { margin-bottom: 0.9rem; color: var(--text-dim); }
-.ticket-panel p:last-child { margin-bottom: 0; }
-.keep-offer { border-top: 1px solid var(--line); padding-top: 0.9rem; margin: 1rem 0 0.9rem; }
-.keep-offer .linklike { font: inherit; }
-.privacy { font-size: 0.8125rem; color: var(--text-dim); margin-top: 0.9rem; }
+/* ---------- a small mark beside a line ("This browser", "Preview") ---------- */
 
-/* player */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px; font: 400 13px/18px var(--ui-face); padding: 1px 6px;
+  border: 1px solid var(--rule); color: var(--text-2); white-space: nowrap; vertical-align: middle;
+}
+.badge::before { content: ''; width: 6px; height: 6px; flex: none; box-shadow: inset 0 0 0 1px currentColor; }
+.badge.good { color: var(--text); }
+.badge.good::before { background: var(--text); box-shadow: none; }
+
+/* ---------- the player, older classes (look/friend.css restyles them under .fl-page) ---------- */
+
 .theatre { position: relative; z-index: 3; background: #000; margin: 0 auto 2rem; width: min(1600px, 100%); }
 .theatre video { display: block; width: 100%; max-height: 82vh; background: #000; aspect-ratio: 16 / 9; }
-.player-bar { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; align-items: center; padding: 0.7rem 1rem; background: var(--bg-sunk); border-bottom: 1px solid var(--line); font-size: 0.88rem; color: var(--text-dim); }
+.player-bar { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; align-items: center; padding: 0.7rem 1rem; background: var(--deep); border-bottom: 1px solid var(--rule); font-size: 0.88rem; color: var(--text-2); }
 .player-bar label { display: inline-flex; gap: 0.5em; align-items: center; }
-.player-bar select { width: auto; padding: 0.25em 0.5em; }
-.player-bar .spacer { flex: 1; }
-.player-message { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.82); text-align: center; padding: 1.5rem; }
+.player-bar select { width: auto; min-height: 36px; padding: 4px 8px; }
+.player-message { position: absolute; inset: 0; display: grid; place-items: center; background: rgb(16 14 13 / 0.86); text-align: center; padding: 1.5rem; }
 .player-message > div { max-width: 30em; }
 /* Subtitle size and background, from the bar's Aa, as classes on the picture's wrapper.
    Small is the browser's own size. iPhone full screen and AirPlay draw subtitles
@@ -238,201 +111,54 @@ select.filter-select.on { border-color: var(--accent); color: var(--accent); }
 .cues-box video::cue { background-color: rgba(0, 0, 0, 0.75); text-shadow: none; }
 /* Aa: a small button beside the subtitle menu, and the panel it opens under the bar. */
 .cue-style { position: relative; }
-.cue-style-button { background: var(--bg-sunk); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0.25em 0.55em; font-family: var(--serif); font-weight: 600; line-height: inherit; color: var(--text); cursor: pointer; }
-.cue-style-button:hover { border-color: var(--text-dim); }
-.cue-style-button[aria-expanded='true'] { border-color: var(--accent); color: var(--accent); }
-.cue-style-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.cue-style-panel { position: absolute; left: 0; top: calc(100% + 0.5rem); width: 19rem; z-index: 10; background: var(--bg-raised); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0.8rem 0.9rem; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); color: var(--text); }
+.cue-style-button { background: var(--deep); border: 1px solid var(--ui-edge); border-radius: 0; padding: 0.25em 0.55em; font-weight: 600; line-height: inherit; color: var(--text); cursor: pointer; }
+.cue-style-button[aria-expanded='true'] { background: var(--ui-lit); border-color: var(--ui-lit); color: var(--ui-lit-ink); }
+.cue-style-panel { position: absolute; left: 0; top: calc(100% + 0.5rem); width: 19rem; z-index: 10; background: var(--surface); border: 1px solid var(--ui-edge); border-radius: 0; padding: 0.8rem 0.9rem; color: var(--text); }
 .cue-style-panel fieldset { border: 0; margin: 0 0 0.8rem; padding: 0; }
-.cue-style-panel legend { padding: 0; margin-bottom: 0.3rem; color: var(--text-faint); font-size: 0.8rem; }
+.cue-style-panel legend { padding: 0; margin-bottom: 0.3rem; color: var(--text-3); font-size: 0.8rem; }
 .player-bar .cue-style-panel label { margin-right: 1.1rem; cursor: pointer; }
-.cue-style-panel p { margin: 0; color: var(--text-dim); font-size: 0.8rem; }
-/* On a phone the bar is a grid of rows, so every menu starts at the same place: each
-   label in the first column, its menu in the second, and Aa in a third, beside the
-   subtitle menu. Quality shown as text (with nothing to choose), the Preview badge
-   and Playback help each have a row to themselves. The subtitle style panel spans
-   the bar rather than hanging off its button. */
+.cue-style-panel p { margin: 0; color: var(--text-2); font-size: 0.8rem; }
+/* On a phone the bar is a grid of rows, so every menu starts at the same place. */
 @media (max-width: 520px) {
   .player-bar { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto; gap: 0.5rem 0.75rem; position: relative; }
-  /* A label's columns are the bar's own (a subgrid), so the longest label sets where
-     the menus start. A browser without subgrid gives every label the same fixed
-     first column instead. */
   .player-bar > label { grid-column: 1 / 3; display: grid; grid-template-columns: 5rem minmax(0, 1fr); grid-template-columns: subgrid; gap: 0.75rem; }
   .player-bar > label select { width: 100%; }
-  .player-bar .spacer { display: none; }
-  .player-bar > span, .player-bar > .linklike { grid-column: 1 / -1; justify-self: start; }
+  .player-bar > span { grid-column: 1 / -1; justify-self: start; }
   .cue-style { grid-column: 3; position: static; }
-  /* With no menu before it (a film in one language whose only subtitles are forced),
-     Aa starts its row at the left, rather than sitting alone at the right edge. */
   .player-bar > .cue-style:first-child { grid-column: 1 / -1; justify-self: start; }
   .cue-style-panel { left: 1rem; right: 1rem; width: auto; }
 }
-/* Playback help: a quiet link at the end of the bar, and the panel it opens under it. */
-.player-bar .linklike { color: var(--text-dim); }
-.player-bar .linklike:hover { color: var(--text); }
-.playback-help { padding: 1rem; background: var(--bg-sunk); border-bottom: 1px solid var(--line); font-size: 0.88rem; }
+/* Playback help: the panel the bar's Playback help opens under it. */
+.playback-help { padding: 1rem; background: var(--deep); border-bottom: 1px solid var(--rule); font-size: 0.88rem; }
 .playback-help:focus { outline: none; }
-.playback-help > p { color: var(--text-dim); max-width: 46em; }
-.playback-help .kv { margin-bottom: 1rem; }
-/* The browser's long user agent and codec strings wrap rather than widen the page. */
-.playback-help .kv dd { min-width: 0; overflow-wrap: anywhere; }
-.playback-help ul { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 0.92em; }
-.playback-help .field { margin: 1rem 0 0; }
-.playback-help textarea { font-family: var(--mono); font-size: 0.85rem; }
-@media (max-width: 520px) {
-  .playback-help .kv { grid-template-columns: 1fr; gap: 0; }
-  .playback-help .kv dd { margin-bottom: 0.5rem; }
-}
+.playback-help > p { color: var(--text-2); max-width: 46em; }
+.playback-help ul { list-style: none; margin: 0; padding: 0; font-family: var(--ui-face); font-size: 0.92em; }
+.playback-help textarea { font-family: var(--ui-face); font-size: 0.85rem; }
 
-/* ---------- admin ---------- */
+/* ---------- tables: the elements' own look, under look/ui.css's .ui-table ---------- */
 
-.admin { min-height: 100vh; display: grid; grid-template-columns: 210px 1fr; }
-.admin-nav { position: sticky; top: 0; height: 100vh; border-right: 1px solid var(--line); padding: 1.3rem 1rem; display: flex; flex-direction: column; gap: 0.2rem; background: var(--bg-sunk); }
-.admin-nav .brand { font-family: var(--serif); font-size: 1.1rem; margin: 0 0.6rem 1.2rem; }
-.admin-nav a { text-decoration: none; padding: 0.45em 0.6rem; border-radius: 6px; color: var(--text-dim); }
-.admin-nav a.active, .admin-nav a:hover { background: var(--bg-raised); color: var(--text); }
-.admin-nav .tabs { display: flex; flex-direction: column; gap: 0.2rem; }
-.admin-nav .bottom { margin-top: auto; display: grid; gap: 0.4rem; padding: 0 0.6rem; font-size: 0.9rem; }
-/* View site and Sign out are quiet, and the box's padding already lines them up with
-   the labels above, so they have none across of their own. */
-.admin-nav .bottom a { padding-left: 0; padding-right: 0; }
-.admin-nav .bottom a:hover { background: none; }
-.admin-nav .bottom button { background: none; border: 0; padding: 0; color: var(--text-dim); cursor: pointer; }
-.admin-nav .bottom button:hover { color: var(--text); }
-
-/* Phones and small tablets: a bar across the top. The name and View site /
-   Sign out share the first row; the sections are one row underneath that scrolls
-   sideways, from the same edge as the page. */
-@media (max-width: 800px) {
-  .admin { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  .admin-nav {
-    position: sticky; top: 0; z-index: 5; height: auto;
-    display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0.5rem 1rem;
-    padding: 0.8rem 1rem 0.5rem; border-right: 0; border-bottom: 1px solid var(--line);
-  }
-  .admin-nav .brand { margin: 0; }
-  .admin-nav .bottom { grid-column: 2; grid-row: 1; margin: 0; padding: 0; display: flex; align-items: center; gap: 1rem; font-size: 0.85rem; }
-  .admin-nav .bottom a { padding: 0; }
-  /* The row runs to the screen's edges, so a tab that doesn't fit peeks in at the
-     right, but starts from the page's edge, and scrolling a tab into view keeps it
-     there. Each end fades over as much of the tabs as is hidden past it, up to the
-     scroll padding (AdminApp.jsx sets --more-before and --more-after), so the tab
-     peeking in shows there is more, and a tab scrolled into view is clear of the
-     fade. The padding above and below keeps a focus ring from being cut off, and
-     the margins give it back, so the bar is the height it was. Swiping past either
-     end doesn't go back a page. */
-  .admin-nav .tabs {
-    grid-column: 1 / -1; flex-direction: row; gap: 0.2rem;
-    overflow-x: auto; overscroll-behavior-x: contain;
-    margin: -0.25rem -1rem; padding: 0.25rem 1rem; scroll-padding-inline: 1rem 2.5rem;
-    mask-image: linear-gradient(to right, transparent, #000 min(1rem, var(--more-before, 0px)), #000 calc(100% - min(2.5rem, var(--more-after, 0px))), transparent);
-  }
-  /* Narrow enough that on a 390px phone Settings peeks in, rather than starting
-     just past the edge with nothing to show it's there. */
-  .admin-nav .tabs a { white-space: nowrap; padding: 0.4em 0.5rem; }
-  .admin-main { padding-top: 1.2rem; }
-}
-/* No scrollbar under the tabs on a touch screen, where a swipe scrolls them. With a
-   mouse, a thin one, since a wheel scrolls the page, not the row. */
-@media (max-width: 800px) and (pointer: coarse) {
-  .admin-nav .tabs { scrollbar-width: none; }
-  .admin-nav .tabs::-webkit-scrollbar { display: none; }
-  /* View site and Sign out reach further up and down than they show, enough for a
-     finger, without making the bar any taller or reaching over the tabs below. */
-  .admin-nav .bottom a, .admin-nav .bottom button { padding-block: 0.45rem; margin-block: -0.45rem; }
-}
-@media (max-width: 800px) and (pointer: fine) {
-  .admin-nav .tabs { scrollbar-width: thin; }
-}
-.admin-main { padding: 1.8rem clamp(1rem, 3vw, 2.5rem) 4rem; min-width: 0; }
-.admin-main h1 { font-size: 1.8rem; margin-bottom: 0.3rem; }
-.admin-main h2 { font-size: 1.25rem; margin: 2.2rem 0 0.9rem; }
-.page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
-.card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.2rem 1.3rem; }
-.card + .card { margin-top: 1rem; }
-/* Side by side in a grid, cards line up at the top. When the grid stacks them, its
-   row gap keeps them apart instead. */
-.grid-2 > .card + .card { margin-top: 0; }
-.grid-2:has(> .card) { row-gap: 1rem; }
-.card h3 { font-size: 1.05rem; margin: 1.8rem 0 0.7rem; }
-.card h3:first-child { margin-top: 0; }
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
-
-/* Narrow screens: each row of a .stack table becomes a small card, with the
-   column name next to each value. A cell with class card-title heads the card. */
-@media (max-width: 640px) {
-  table.stack thead { display: none; }
-  table.stack, table.stack tbody { display: block; width: 100%; }
-  table.stack tr { display: flex; flex-direction: column; padding: 0.8rem 1rem; border-bottom: 1px solid var(--line); }
-  table.stack tr:last-child { border-bottom: 0; }
-  table.stack td { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.22rem 0; border: 0; text-align: right; max-width: none !important; }
-  table.stack td::before { content: attr(data-label); color: var(--text-faint); font-size: 0.8rem; text-align: left; flex-shrink: 0; }
-  table.stack td.card-title { order: -1; display: block; text-align: left; font-weight: 600; padding-bottom: 0.45rem; }
-  table.stack td.card-title::before, table.stack td:not([data-label])::before { content: none; }
-  table.stack td:empty { display: none; }
-  .table-wrap:has(> table.stack) { overflow-x: visible; }
-}
-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
-th, td { text-align: left; padding: 0.65em 0.9em; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font-weight: 500; color: var(--text-faint); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; background: var(--bg-sunk); }
+table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 22px; }
+th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 500 13px/18px var(--ui-face); color: var(--text-2); border-bottom-color: var(--ui-edge); white-space: nowrap; vertical-align: bottom; }
 tr:last-child td { border-bottom: 0; }
-td a { text-decoration: none; }
-td a:hover { text-decoration: underline; }
-.film-row { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 0.8rem; align-items: center; }
-.film-row .poster { width: 44px; box-shadow: none; border-radius: 3px; }
-/* Too small for a title: just the shape. */
-.film-row .poster.placeholder { font-size: 0; padding: 0; }
-/* Long unbroken titles (file names) wrap instead of running off the edge. */
-.film-row > span, table.stack td { overflow-wrap: anywhere; }
-.kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1.2rem; margin: 0; }
-.kv dt { color: var(--text-faint); }
-.kv dd { margin: 0; }
-/* The projection booth's server card: paths and file names wrap, and on a phone each
-   label sits above its value. */
-.booth .kv dd { min-width: 0; overflow-wrap: anywhere; }
-.booth .kv dd > div + div { margin-top: 0.2rem; }
-@media (max-width: 520px) {
-  .booth .kv { grid-template-columns: 1fr; gap: 0; }
-  .booth .kv dd { margin-bottom: 0.7rem; }
-}
-.link-box { display: flex; gap: 0.5rem; align-items: center; background: var(--bg-sunk); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0.4rem 0.4rem 0.4rem 0.8rem; }
-.link-box code { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 0.88rem; }
-.progress { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; min-width: 60px; }
-.progress > div { height: 100%; background: var(--accent); }
-.edited { color: var(--accent); font-size: 0.75rem; margin-left: 0.4em; }
-.login { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
-.login form { width: min(360px, 100%); }
+td a { text-underline-offset: 3px; text-decoration-color: rgb(233 223 201 / 0.5); }
 
 /* ---------- touch screens ---------- */
 
-/* On a touch screen, and at a phone's width, where the player bar is a grid, fields
-   and controls are sized for a finger. Only a field's text grows, where it must; the
-   rest of the text and the colours stay as they are, so they look much as they do
-   with a mouse. */
+/* On a touch screen, and at a phone's width, fields and controls are sized for a finger. */
 @media (pointer: coarse), (max-width: 520px) {
-  /* iOS Safari zooms the page into a field whose text is under 16px when it's tapped,
-     and leaves it zoomed. With a mouse, in a window wider than a phone, the player
-     bar and the filters keep their smaller text. */
+  /* iOS Safari zooms the page into a field whose text is under 16px when it's tapped. */
   select, textarea, input:not([type='checkbox'], [type='radio'], [type='color'], [type='file']),
-  select.filter-select, .playback-help textarea { font-size: max(16px, 1em); }
-  /* At least 40px tall, about what a fingertip covers. A menu (select) is given its
-     height outright: WebKit ignores a menu's min-height and padding. */
-  .cue-style-button, .cue-style-panel label, .check { min-height: 2.5rem; }
-  select:not([multiple], [size]) { height: 2.5rem; }
-  /* The small buttons and the filters, which sit in rows, show 32px tall, and the
-     buttons answer a finger 4px beyond their edge above and below, so their target is
-     40px without their looking any heavier. A menu can't reach past its edge. */
-  .btn.small { min-height: 2rem; position: relative; }
-  select.filter-select { height: 2rem; }
-  /* From inside the 1px border, so 4px past it. */
-  .btn.small::before { content: ''; position: absolute; inset: -5px 0; }
+  .playback-help textarea { font-size: max(16px, 1em); }
+  .cue-style-button, .cue-style-panel label { min-height: 2.5rem; }
+  select:not([multiple], [size]) { height: 2.75rem; }
   .cue-style-button { min-width: 2.5rem; }
-  /* Links that stand on their own, not inside a sentence. */
-  .player-bar .linklike, .player-message .linklike, .keep-offer > .linklike { min-height: 2.5rem; }
-  .site-name { min-height: 2.5rem; }
-  .site-signin { display: inline-flex; align-items: center; min-height: 2.5rem; }
-  .menu-list button, .menu-list a { padding-block: 0.65em; }
-  /* The header's name and links are taller targets, so it has less padding, and is the
-     height it was. */
-  .site-header { padding-block: 0.9rem; }
 }
+
+/* ---------- the back office's sign-in (admin/AdminApp.jsx) ---------- */
+
+.admin-login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+.admin-login__box { width: min(400px, 100%); }
+.admin-login__brand { margin-bottom: 32px; }
+.admin-login h1 { font-size: 30px; line-height: 36px; margin: 0 0 24px; }
+@media (max-width: 520px) { .admin-login h1 { font-size: 26px; line-height: 32px; } }

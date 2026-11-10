@@ -55,7 +55,7 @@ export function pagePolicy({ styleHashes = [], imageOrigins = [] } = {}) {
     // the video and its tracks may use these: images, scripts and styles may not.
     "media-src 'self' blob: data:",
     "connect-src 'self'",
-    // The fonts the membership card is printed in, which the app serves itself
+    // The fonts the app is set and printed in, which it serves itself
     // (web/public/fonts). Never from anywhere else, and never as data: addresses.
     "font-src 'self'",
     // No worker-src, so workers follow script-src: from this server only, never from a

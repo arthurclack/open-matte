@@ -15,7 +15,7 @@
 // Chromium and Chrome only: virtual passkey authenticators are a Chrome DevTools
 // Protocol feature, which Firefox and WebKit don't offer.
 import fs from 'node:fs';
-import { admin, expect, film, signedInPerson, test, unique } from './fixtures.js';
+import { admin, cinemaName, expect, film, signedInPerson, test, unique } from './fixtures.js';
 
 const CHROMIUM_ONLY = 'virtual passkey authenticators come from the Chrome DevTools Protocol, which only Chromium-based browsers have';
 
@@ -154,20 +154,20 @@ test('a ticket for one person keeps its code in /t/ until they sign in, then the
 
   await test.step('signed out: a sign-in page at the same address, with no cookie and no way to /signin', async () => {
     await page.goto(at);
-    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-    await expect(page.getByText('This ticket is for one person')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Show your card' })).toBeVisible();
+    await expect(page.getByText('This tape is for one member')).toBeVisible();
     await expect(page).toHaveURL((url) => url.pathname === at && url.search === '');
     expect((await context.cookies()).map((c) => c.name)).not.toContain('om_session');
     await expect(page.locator('a[href*="/signin"]')).toHaveCount(0);
   });
 
-  await test.step('a refused attempt says so, stays put, and offers Copy ticket link with the code', async () => {
+  await test.step('a refused attempt says so, stays put, and offers Copy link with the code', async () => {
     await refuseOnce(page, 'get');
     await page.getByRole('button', { name: 'Sign in with a passkey' }).click();
     await expect(page.getByText('Cancelled or timed out. Try again.')).toBeVisible();
     await expect(page.getByText('Inside an app? Open this in Safari or Chrome')).toBeVisible();
     await expect(page).toHaveURL((url) => url.pathname === at);
-    await page.getByRole('button', { name: 'Copy ticket link' }).click();
+    await page.getByRole('button', { name: 'Copy link' }).click();
     expect(await page.evaluate(() => window.__copied)).toBe(new URL(at, page.url()).href);
   });
 
@@ -202,14 +202,14 @@ test('a ticket for one person, opened while signed in as someone else', async ({
 
   await test.step('it says the ticket is for someone else, and the code stays in the address', async () => {
     await other.goto(at);
-    await expect(other.getByRole('heading', { name: 'This ticket is for someone else' })).toBeVisible();
+    await expect(other.getByRole('heading', { name: 'This tape is for someone else' })).toBeVisible();
     await expect(other.getByText(`You're signed in as ${kitName}.`)).toBeVisible();
     await expect(other).toHaveURL((url) => url.pathname === at);
   });
 
   await test.step('signing out there leads to signing in, at the same address', async () => {
     await other.getByRole('button', { name: 'Sign out' }).click();
-    await expect(other.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+    await expect(other.getByRole('heading', { name: 'Show your card' })).toBeVisible();
     await expect(menu(other, kitName)).toBeHidden();
     await expect(other).toHaveURL((url) => url.pathname === at && url.search === '');
   });
@@ -249,7 +249,8 @@ test('a passkey or sign-in the cinema refuses gets a fresh challenge before the 
     await page.goto('/signin');
     await auth.spoil({ isBogusSignature: true });
     await page.getByRole('button', { name: 'Sign in with a passkey' }).click();
-    await expect(page.getByText(/^That passkey didn't work\. Try again, or ask whoever runs /)).toBeVisible();
+    // With no "Your name" set, whom to ask is the shop, by its name.
+    await expect(page.getByText(`That passkey didn't work. Try again, or ask ${cinemaName()}.`, { exact: true })).toBeVisible();
     await auth.spoil({});
     await page.getByRole('button', { name: 'Sign in with a passkey' }).click();
     await expect(menu(page, name)).toBeVisible();
@@ -304,7 +305,7 @@ test('the "already have a passkey" page and signing out let a setup link go from
     await expect(page.getByRole('heading', { name: `Welcome back, ${name}` })).toBeVisible();
     expect(await keptLink(page)).not.toBeNull();
     await menu(page, name).click();
-    await page.getByRole('menuitem', { name: 'Your account' }).click();
+    await page.getByRole('menuitem', { name: 'Your membership card' }).click();
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Sign out everywhere' }).click();
     await expect(menu(page, name)).toBeHidden();
@@ -351,7 +352,7 @@ test('after a refused attempt, Sign in and keep it says to open the link you wer
   await expect(page.getByRole('button', { name: /^Copy/ })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Sign in with a passkey' }).click();
-  await expect(page.getByText("This ticket is in your account, so it's on every device you sign in on.")).toBeVisible();
+  await expect(page.getByText("This tape is on your card, so it's on every device you sign in on.")).toBeVisible();
   await expect(menu(page, name)).toBeVisible();
 });
 
@@ -374,9 +375,9 @@ test("a browser that can't use passkeys leaves a setup link and a ticket for one
     expect(await page.evaluate(() => window.__copied)).toBe(link);
   });
 
-  await test.step('the ticket offers Copy ticket link, with its code still in the address', async () => {
+  await test.step('the tape offers Copy link, with its code still in the address', async () => {
     await page.goto(`/t/${ticket.code}`);
-    await page.getByRole('button', { name: 'Copy ticket link' }).click();
+    await page.getByRole('button', { name: 'Copy link' }).click();
     await expect(page).toHaveURL((url) => url.pathname === `/t/${ticket.code}`);
     expect(await page.evaluate(() => window.__copied)).toBe(page.url());
   });

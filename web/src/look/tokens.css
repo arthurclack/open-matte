@@ -1,0 +1,172 @@
+/* =====================================================================
+   look/tokens.css: the video shop's tokens and its fonts. Loaded first, on
+   every page (main.jsx), before ui.css, objects.css and styles.css.
+
+   The room is dark, lit by one warm white. Printed things (sleeves, the
+   staff pick, labels, the sticker, the membership card) are flat real
+   objects; the blue is the shop's video machine and nothing else; the
+   orange sticker is only ever the next deadline. See README.md.
+
+   THE THEME. The owner's two colours (Settings, Branding) reach the page as
+   a <style id="theme"> the server writes after the stylesheets
+   (server/theme.js palette()): it overrides the --bg family below and, for
+   a shop with an accent of its own, --ui-lit and its shades. Everything
+   else follows from those: --room is var(--bg), and so on. A shop on Open
+   Matte's own colours gets no theme at all, and these values as they are.
+   ===================================================================== */
+
+/* ---------- fonts: served by the app itself (web/public/fonts), all under the
+   SIL Open Font License; the licences file has them (vite.config.js FONTS). A
+   browser downloads a font only for text that uses it. ---------- */
+@font-face {
+  font-family: 'Libre Franklin';
+  src: url('/fonts/LibreFranklin-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/fonts/IBMPlexMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+/* the interface asks for 500 for the machine's words (menus, tabs, buttons) and 600
+   where they stand out: both come from the one heavier file the app ships */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/fonts/IBMPlexMono-SemiBold.ttf') format('truetype');
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'VT323';
+  src: url('/fonts/VT323-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Fraunces';
+  src: url('/fonts/Fraunces-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Grape Nuts';
+  src: url('/fonts/GrapeNuts-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Courier Prime';
+  src: url('/fonts/CourierPrime-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* ---------- the theme's own values (server/theme.js writes over these) ---------- */
+  --bg: #171513;
+  --bg-raised: #1f1c19;
+  --bg-sunk: #100e0d;
+  --bg-high: #29251f;
+  --bg-rgb: 23, 21, 19;
+  --bg-raised-rgb: 31, 28, 25;
+  --line: #33312f;
+  --line-strong: #42403f;
+  --good-line: #415a43;
+  --good-tint: #1e211b;
+  --warn-line: #6b5329;
+  --warn-tint: #262017;
+  --bad-line: #693c37;
+  --bad-tint: #251c19;
+  --poster-from: #2d2b29;
+  --poster-to: #1c1a18;
+
+  /* ---------- the room ---------- */
+  --deep: var(--bg-sunk);      /* the darkest: the back office's menu, fields, the strip under the picture */
+  --room: var(--bg);           /* the page */
+  --surface: var(--bg-raised); /* a menu, a hovered row */
+  --raised: var(--bg-high);    /* the highest: rarely needed */
+  --text: #e9dfc9;             /* 13.8:1 on the room */
+  --text-2: #b4ac9b;           /* secondary */
+  --text-3: #9a9284;           /* faint, still 5.4:1 on the surface */
+  --rule: rgb(233 223 201 / 0.14); /* a decorative 1px rule */
+  --hair: rgb(233 223 201 / 0.09); /* the faintest rule (the footer's) */
+
+  /* ---------- the interface layer (ui.css): the shop's computer ---------- */
+  --ui-face: 'IBM Plex Mono', ui-monospace, 'Courier Prime', monospace;
+  --ui-read: var(--sans);
+  --ui-bg: var(--room);
+  --ui-sunk: var(--deep);
+  --ui-raised: var(--surface);
+  --ui-fg: var(--text);
+  --ui-fg-2: var(--text-2);
+  --ui-fg-3: var(--text-3);
+  --ui-rule: var(--rule);
+  /* a control's edge: 3:1 or more on every room shade. Never call it --edge: the
+     membership card has a --edge of its own (its margins) and would inherit this */
+  --ui-edge: #8a8273;
+  /* lit (inverse video): what is selected, and the main action. A shop with an accent
+     of its own gets up to 22% of it mixed in by the theme, never below 7:1 */
+  --ui-lit: #e9dfc9;
+  --ui-lit-hover: #f4edde;
+  --ui-lit-press: #dcd2bc;
+  --ui-lit-ink: var(--room);
+  /* the focus block: a 3px warm-white ring on a 2px dark gap */
+  --ui-focus: #f2ede1;
+  --ui-focus-gap: var(--deep);
+  /* the marks of a warning and an error (never the only sign: a word in bold comes first) */
+  --ui-bad: #ee9a86;
+  --ui-warn: #d9b35f;
+  /* the back office's raster: look/devicePixels.js sets the line and pitch in whole device pixels */
+  --ui-raster-o: 0.2;
+  --ui-raster-line: 1px;
+  --ui-raster-pitch: 3px;
+
+  /* ---------- printed things: stocks and inks ---------- */
+  --stock-card: #e9dfc9;     /* card: the membership card, labels */
+  --stock-pick: #f3ecdf;     /* the staff-pick card, a whiter board */
+  --stock-label: #eee7d7;    /* a typed sleeve label */
+  --stock-kraft: #b39b78;    /* the plain sleeve */
+  --stock-sticker: #f26b21;  /* the price-gun sticker: fluorescent, and only for the next deadline */
+  --stock-tape: #262320;     /* black label-maker tape */
+  --ink: #171513;            /* black print, typed ribbon, the gun */
+  --ink-pen: #1a1714;        /* the shopkeeper's felt-tip */
+  --ink-blue: #2030c8;       /* the shop's second printing colour */
+  --tape-letter: #e2ded5;    /* the stress-whitened letters of label tape */
+
+  /* ---------- the machine: the blue screen ---------- */
+  --blue: #2030c8;
+  --blue-press: #1b29b4;
+  --osd: #f6f7fd;
+  --osd-inverse-ink: #17208f; /* text inside a lit block on the blue screen */
+  /* scanlines in whole device pixels (look/devicePixels.js sets them from devicePixelRatio) */
+  --scan-p: 3px;
+  --scan-l: 1px;
+  --scan-s: 1.5px;
+
+  /* ---------- faces ---------- */
+  --sans: 'Libre Franklin', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --type: 'Courier Prime', 'Courier New', monospace;
+  --osd-face: 'VT323', ui-monospace, monospace;
+  --hand: 'Grape Nuts', 'Bradley Hand', 'Segoe Print', cursive;
+  /* the shop's own printed lettering: a soft, heavy serif, as small-shop stationery was set c. 1984 */
+  --shop-face: 'Fraunces', Georgia, serif;
+  --shop-weight: 800;
+  --shop-vars: 'SOFT' 100, 'WONK' 0, 'opsz' 72;
+
+  /* ---------- page widths: the gutters of take 2 ---------- */
+  --page-max: 1440px;
+  --gutter: 96px;
+}
+@media (max-width: 1279px) { :root { --gutter: 48px; } }
+@media (max-width: 767px) { :root { --gutter: 16px; } }

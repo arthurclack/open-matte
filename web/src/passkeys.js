@@ -101,10 +101,10 @@ export function anotherBrowserMayHelp(err) {
   return err?.name !== 'SecurityError';
 }
 
-// What to say when the cinema said no. Codes the page handles itself (expired or
-// used links, a passkey that already exists) are left to the page.
-export function serverProblem(err, cinemaName) {
-  const host = `whoever runs ${cinemaName || 'this cinema'}`;
+// What to say when the shop said no. Codes the page handles itself (expired or
+// used links, a passkey that already exists) are left to the page. host: whom to ask,
+// as the page names them (look/words.js hostName(site): "Arthur", or the shop's name).
+export function serverProblem(err, host = 'the shop') {
   switch (err?.code) {
     case 'ceremony-expired':
       return 'That took a little too long. Try again.';
@@ -119,13 +119,13 @@ export function serverProblem(err, cinemaName) {
     case 'sign-in-failed':
       return `That passkey didn't work. Try again, or ask ${host}.`;
     case 'account-disabled':
-      return `This account has been turned off. Ask ${host}.`;
+      return `Your membership card has been turned off. Ask ${host}.`;
     case 'try-again':
       return "That didn't go through. Try again.";
     case 'passkey-invalid':
       return "Your passkey couldn't be checked. Try again.";
     default:
-      if (!err?.status || err.status >= 500) return "Couldn't reach the cinema just now. Check your connection, then try again.";
+      if (!err?.status || err.status >= 500) return "Couldn't reach the shop just now. Check your connection, then try again.";
       return 'Something went wrong. Try again.';
   }
 }

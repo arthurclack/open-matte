@@ -1,13 +1,13 @@
 // Admin smoke: signing in through the form with the run's password, Films, the
-// film, issuing a ticket from its page and finding it under Tickets, the
-// projection booth (with a media request it saw refused), and Activity filtered
-// by the film and to viewing. Nothing may throw, and nothing may log an error in
+// film, lending a tape from its page and finding it under Tapes, Status (with a
+// media request it saw refused), and the Ledger filtered by the film and to
+// viewing. Nothing may throw, and nothing may log an error in
 // the console. Every browser.
 import { CSP_MESSAGE, NO_SNAPSHOTS, admin, expect, film, secondFilm, signInAsAdmin, test, unique } from './fixtures.js';
 
 test.use(NO_SNAPSHOTS);
 
-test('the admin signs in, issues a ticket from the film page, and reads Tickets, Status and Activity', async ({ page, newContext }, testInfo) => {
+test('the admin signs in, lends a tape from the film page, and reads Tapes, Status and the Ledger', async ({ page, newContext }, testInfo) => {
   const consoleErrors = [];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
@@ -26,13 +26,13 @@ test('the admin signs in, issues a ticket from the film page, and reads Tickets,
 
   const label = unique('Smoke', testInfo);
   let link;
-  await test.step('Films, the film, and a ticket issued from its page', async () => {
+  await test.step('Films, the film, and a tape lent from its page', async () => {
     await page.getByRole('link', { name: new RegExp(film.title) }).click();
     await expect(page.getByRole('heading', { level: 1, name: film.title })).toBeVisible();
     await expect(page).toHaveURL((url) => url.pathname === `/admin/films/${film.id}`);
     await page.getByRole('textbox', { name: 'Who is it for?' }).fill(label);
-    await page.getByRole('button', { name: 'Issue ticket for anyone with the link' }).click();
-    const issued = page.locator('.notice.good').filter({ hasText: '1 ticket ready.' });
+    await page.getByRole('button', { name: 'Lend a tape for anyone with the link' }).click();
+    const issued = page.locator('.ui-line--done').filter({ hasText: '1 tape ready.' });
     await expect(issued).toBeVisible();
     await expect(issued).toContainText(`For ${label}`);
     await expect(issued.locator('code')).toHaveText(/^http:\/\/localhost:\d+\/t\/[a-z0-9]{13}$/);
@@ -52,18 +52,18 @@ test('the admin signs in, issues a ticket from the film page, and reads Tickets,
     expect(status).toBe(403);
   });
 
-  await test.step('the ticket is under Tickets', async () => {
-    await page.getByRole('link', { name: 'Tickets', exact: true }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Tickets' })).toBeVisible();
+  await test.step('the tape is under Tapes', async () => {
+    await page.getByRole('link', { name: 'Tapes', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Tapes' })).toBeVisible();
     const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: label }) });
     await expect(row).toHaveCount(1);
     await expect(row).toContainText(film.title);
     await expect(row).toContainText('Anyone with the link');
   });
 
-  await test.step('Status: the projection booth', async () => {
+  await test.step('Status', async () => {
     await page.getByRole('link', { name: 'Status', exact: true }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Projection booth' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Status' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'Needs attention' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'The server' })).toBeVisible();
     // The stranger's refusal, among any the other journeys caused: no address, just the film.
@@ -71,10 +71,10 @@ test('the admin signs in, issues a ticket from the film page, and reads Tickets,
     const refused = page.getByRole('row').filter({ has: page.getByRole('cell', { name: `/${film.slug}`, exact: true }) });
     await expect(refused.first()).toContainText('403');
     // The media folder holds the journeys' two films.
-    await expect(page.locator('dt:text-is("Media folder") + dd')).toContainText('Readable 2 folders in it now.');
+    await expect(page.locator('dt:text-is("Media folder") + dd')).toContainText('Readable. 2 folders in it now.');
   });
 
-  await test.step('Activity, filtered by the film and to viewing', async () => {
+  await test.step('the Ledger, filtered by the film and to viewing', async () => {
     // What the filters have to leave out, beside the guest's opening of this film:
     // the other film's ticket opened in a third browser, and a ticket for this film
     // given to someone (an accounts-and-links event, not a viewing one).
@@ -102,9 +102,9 @@ test('the admin signs in, issues a ticket from the film page, and reads Tickets,
     const onlyViewing = { ...onlyThisFilm, kind: 'viewing' };
 
     let answer = loaded({});
-    await page.getByRole('link', { name: 'Activity', exact: true }).click();
+    await page.getByRole('link', { name: 'Ledger', exact: true }).click();
     await answer;
-    await expect(page.getByRole('heading', { level: 1, name: 'Activity' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Ledger' })).toBeVisible();
     for (const text of [label, otherLabel, givenLabel]) await expect(rows(text).first()).toBeVisible();
 
     answer = loaded(onlyThisFilm);

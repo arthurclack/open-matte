@@ -203,7 +203,7 @@ export function adminRoutes(deps) {
     if ('sortOrder' in b) sets.push('sort_order = ?'), args.push(optInt(b.sortOrder, 'Sort order', { min: -100000 }) ?? 0);
     if ('published' in b) {
       if (bool(b.published, 'published') && (f.media_status === 'error' || f.media_status === 'missing')) {
-        throw bad("This film's media has errors. Fix the folder and scan again before publishing.");
+        throw bad("This film's media has errors. Fix the folder and scan again before putting it on the shelf.");
       }
       sets.push('published = ?'), args.push(b.published ? 1 : 0);
     }
@@ -296,7 +296,7 @@ export function adminRoutes(deps) {
   const ticketRow = db.prepare('SELECT * FROM tickets WHERE id = ?');
   const getTicket = (id) => {
     const t = ticketRow.get(Number(id));
-    if (!t) throw bad('Ticket not found', 404);
+    if (!t) throw bad('Tape not found', 404);
     return t;
   };
   const deviceOf = db.prepare('SELECT device FROM sessions WHERE id_hash = ?');
@@ -406,7 +406,7 @@ export function adminRoutes(deps) {
 
   function ticketFields(b, sets, args) {
     if ('label' in b) sets.push('label = ?'), args.push(optText(b.label, 200, 'The label'));
-    if ('screeningLimit' in b) sets.push('screening_limit = ?'), args.push(optInt(b.screeningLimit, 'Screening limit', { min: 1, max: 1000 }));
+    if ('screeningLimit' in b) sets.push('screening_limit = ?'), args.push(optInt(b.screeningLimit, 'Number of plays', { min: 1, max: 1000 }));
     if ('startBy' in b) sets.push('start_by = ?'), args.push(optTime(b.startBy, 'Start-by date'));
     if ('daysAfterFirstPlay' in b) sets.push('days_after_first_play = ?'), args.push(optInt(b.daysAfterFirstPlay, 'Days after first play', { min: 1, max: 3650 }));
   }
@@ -414,7 +414,7 @@ export function adminRoutes(deps) {
   // Only a ticket for anyone with the link can be keepable.
   function claimableField(b, personId, sets, args) {
     if (!('claimable' in b)) return;
-    if (bool(b.claimable, 'claimable') && personId != null) throw bad('Only a ticket for anyone with the link can be kept');
+    if (bool(b.claimable, 'claimable') && personId != null) throw bad('Only a tape for anyone with the link can be kept');
     sets.push('claimable = ?'), args.push(b.claimable ? 1 : 0);
   }
 
@@ -445,14 +445,14 @@ export function adminRoutes(deps) {
   router.post('/api/admin/tickets', (req, res) => {
     const b = req.body || {};
     const film = getFilm(b.filmId);
-    const count = optInt(b.count, 'Number of tickets', { min: 1, max: 50 }) ?? 1;
+    const count = optInt(b.count, 'Number of tapes', { min: 1, max: 50 }) ?? 1;
     const sets = [];
     const args = [];
     ticketFields({ label: b.label, screeningLimit: b.screeningLimit, startBy: b.startBy, daysAfterFirstPlay: b.daysAfterFirstPlay }, sets, args);
     // A ticket only one person can use, signed in with their passkey.
     if (b.personId != null) {
       const person = enabledPerson(b.personId);
-      if (count !== 1) throw bad('One ticket at a time for a person');
+      if (count !== 1) throw bad('One tape at a time for a member');
       sets.push('person_id = ?'), args.push(person.id);
     }
     claimableField(b, b.personId, sets, args);
@@ -542,7 +542,7 @@ export function adminRoutes(deps) {
   // Gives a screening back (say playback failed). It stays in the history.
   router.post('/api/admin/screenings/:id/void', (req, res) => {
     const s = db.prepare('SELECT * FROM screenings WHERE id = ?').get(Number(req.params.id));
-    if (!s) throw bad('Screening not found', 404);
+    if (!s) throw bad('Play not found', 404);
     db.prepare('UPDATE screenings SET voided_at = ? WHERE id = ? AND voided_at IS NULL').run(Date.now(), s.id);
     res.json(adminTicket(req, getTicket(s.ticket_id)));
   });

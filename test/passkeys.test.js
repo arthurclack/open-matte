@@ -88,17 +88,17 @@ describe('after the browser says no', { skip }, () => {
 describe('after the cinema says no', { skip }, () => {
   const refused = (code, status = 400) => ({ code, status });
 
-  test('each refusal has its own words, and names whoever runs the cinema where they can help', () => {
+  test('each refusal has its own words, and names whom to ask where they can help', () => {
     assert.equal(serverProblem(refused('ceremony-expired')), 'That took a little too long. Try again.');
-    assert.equal(serverProblem(refused('sign-in-failed'), 'Harbour Lights'), "That passkey didn't work. Try again, or ask whoever runs Harbour Lights.");
+    assert.equal(serverProblem(refused('sign-in-failed'), 'Arthur'), "That passkey didn't work. Try again, or ask Arthur.");
     assert.equal(serverProblem(refused('passkey-invalid')), "Your passkey couldn't be checked. Try again.");
-    assert.equal(serverProblem(refused('account-disabled')), 'This account has been turned off. Ask whoever runs this cinema.');
+    assert.equal(serverProblem(refused('account-disabled')), 'Your membership card has been turned off. Ask the shop.');
     assert.match(serverProblem(refused('too-many-requests', 429)), /^Too many attempts/);
   });
 
   test("an unreachable cinema isn't blamed on the person", () => {
-    assert.match(serverProblem(new Error('Failed to fetch')), /^Couldn't reach the cinema/);
-    assert.match(serverProblem(refused(undefined, 502)), /^Couldn't reach the cinema/);
+    assert.match(serverProblem(new Error('Failed to fetch')), /^Couldn't reach the shop just now/);
+    assert.match(serverProblem(refused(undefined, 502)), /^Couldn't reach the shop just now/);
     assert.equal(serverProblem(refused('something-new', 400)), 'Something went wrong. Try again.');
   });
 });

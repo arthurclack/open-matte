@@ -1,0 +1,237 @@
+/* =====================================================================
+   look/office.css: the back office's pages (web/src/admin/*) on the
+   interface layer: Films and a film's page, Tapes and one tape, Members
+   and one member, the Ledger, Status and Settings, and the back office's
+   sign-in.
+
+   Loaded with the back office only (admin/AdminApp.jsx imports it, so
+   friends never download it), after the shared stylesheets. Owned by the
+   back office's side: see README.md (FILE OWNERSHIP). Every class here is
+   .of-* and sits under .ui80, and only the back office's pages use them,
+   so the friend's pages are never touched.
+
+   Ported from the approved mock-up (.claude/design/vhs/app/office/
+   office.css, .om-*): every control is the interface layer's (.ui-*); this
+   file lays out the owner's screens and adds a few pieces of its own:
+     .of-mark     a state in words, with the layer's 8px block
+     .of-progress how far playback got, in whole pixels
+     .of-clock    the still 12:00 on the blue screen (Status, while nothing
+                  is on the shelf)
+   Printed things stay small accents with a meaning: sleeve thumbnails,
+   the sleeve on a film's details, the shop's ledger heading on a strip of
+   label tape, the membership card in Settings. Nothing here moves.
+   ===================================================================== */
+
+/* ---------- a screen's heading ---------- */
+.ui80 .of-back { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; margin: -8px 0 4px; font: 500 14px/20px var(--ui-face); color: var(--ui-fg-2); text-decoration: none; }
+@media (hover: hover) and (pointer: fine) { .ui80 .of-back:hover { color: var(--ui-fg); text-decoration: underline; text-underline-offset: 4px; } }
+.ui80 .of-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px 24px; margin: 0 0 24px; }
+.ui80 .of-head > div:first-child { min-width: 0; flex: 1 1 420px; }
+.ui80 .of-head h1 { font: 600 30px/36px var(--ui-read); letter-spacing: -0.01em; margin: 0 0 8px; overflow-wrap: anywhere; }
+.ui80 .of-head .ui-btns { flex: 0 1 auto; }
+.ui80 .of-lede { font: 400 16px/24px var(--ui-read); color: var(--ui-fg-2); margin: 0; max-width: 66ch; }
+.ui80 .of-lede + .of-lede { margin-top: 6px; }
+.ui80 .admin-main h2.of-h2, .ui80 h2.of-h2 { font: 600 21px/28px var(--ui-read); margin: 40px 0 12px; }
+.ui80 h2.of-h2:first-child { margin-top: 0; }
+.ui80 .of-h3 { font: 600 17px/24px var(--ui-read); margin: 28px 0 8px; }
+.ui80 .of-h3:first-child, .ui80 .of-box > .of-h2:first-child { margin-top: 0; }
+.ui80 .of-p { margin: 0 0 12px; max-width: 66ch; }
+.ui80 .of-dim { color: var(--ui-fg-2); }
+.ui80 .of-faint { color: var(--ui-fg-3); }
+.ui80 .of-small { font-size: 14px; line-height: 20px; }
+.ui80 .of-mono { font-family: var(--ui-face); font-variant-ligatures: none; }
+.ui80 .of-w { max-width: 760px; }
+.ui80 .of-nowrap { white-space: nowrap; }
+.ui80 .of-gap { margin-top: 20px; }
+.ui80 .of-gap-s { margin-top: 8px; }
+@media (max-width: 520px) { .ui80 .of-head h1 { font-size: 26px; line-height: 32px; } }
+
+/* a film's own heading: its sleeve beside the title */
+.ui80 .of-filmhead { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 20px; align-items: start; }
+.ui80 .of-filmhead__sleeve { width: 72px; padding-top: 4px; }
+.ui80 .of-facts { display: flex; flex-wrap: wrap; gap: 2px 16px; margin: 0; font: 400 14px/22px var(--ui-face); color: var(--ui-fg-2); }
+.ui80 .of-facts > * { white-space: nowrap; }
+@media (max-width: 520px) { .ui80 .of-filmhead__sleeve { width: 56px; } }
+
+/* a film's page in three parts: one row of tabs */
+.ui80 .of-tabs { margin: 0 0 24px; }
+
+/* ---------- a state in words, with the layer's block ---------- */
+.ui80 .of-mark { display: inline-grid; grid-template-columns: 8px minmax(0, auto); align-items: start; gap: 8px; font: 400 14px/20px var(--ui-read); color: var(--ui-fg); text-align: left; }
+.ui80 .of-mark::before { content: ''; width: 8px; height: 8px; margin-top: 6px; background: var(--ui-fg); }
+.ui80 .of-mark--info::before { background: linear-gradient(90deg, var(--ui-fg) 0 50%, transparent 50%); box-shadow: inset 0 0 0 1px var(--ui-fg); }
+.ui80 .of-mark--warn::before { background: var(--ui-warn); }
+.ui80 .of-mark--bad::before { background: var(--ui-bad); }
+.ui80 .of-mark--off::before { height: 2px; margin-top: 9px; background: var(--ui-fg-3); }
+.ui80 .of-marks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; }
+/* a plain fact, not a state: no block */
+.ui80 .of-fact { font: 400 14px/20px var(--ui-read); color: var(--ui-fg-2); }
+
+/* ---------- the shelf: a sleeve beside each title ---------- */
+.ui80 .of-film { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 4px 14px; align-items: start; color: inherit; text-decoration: none; }
+.ui80 .of-film b { display: block; font: 600 16px/22px var(--ui-read); overflow-wrap: anywhere; }
+.ui80 .of-film__t { color: inherit; text-decoration: underline; text-decoration-color: rgb(233 223 201 / 0.4); text-underline-offset: 4px; }
+@media (hover: hover) and (pointer: fine) { .ui80 .of-film__t:hover { text-decoration-color: currentColor; } }
+.ui80 .of-film__k { display: block; font: 400 13px/18px var(--ui-face); color: var(--ui-fg-3); margin-top: 2px; overflow-wrap: anywhere; }
+.ui80 .of-film .of-marks { margin-top: 6px; }
+.ui80 .of-cell { display: grid; gap: 2px; }
+.ui80 .of-cell small { font: 400 13px/18px var(--ui-face); color: var(--ui-fg-3); }
+.ui80 .ui-table td .of-kind { display: block; font: 400 14px/20px var(--ui-read); color: var(--ui-fg-3); margin-top: 2px; }
+.ui80 .ui-office .ui-table td.ui-title a { font-weight: 600; }
+@media (max-width: 640px) {
+  .ui80 .ui-table--stack td.of-td-film { order: -1; display: block; padding: 0 0 8px; text-align: left; }
+  .ui80 .ui-table--stack td.of-td-film::before { content: none; }
+  .ui80 .ui-table--stack td .of-cell { text-align: right; justify-items: end; }
+  .ui80 .ui-table--stack td.of-td-btn { justify-content: flex-start; padding-top: 8px; }
+  .ui80 .ui-table--stack td.of-td-btn::before { content: none; }
+  .ui80 .ui-table--stack td.of-td-left { display: block; text-align: left; padding-top: 6px; }
+  .ui80 .ui-table--stack td.of-td-left::before { display: block; }
+  .ui80 .ui-table--stack td.of-td-left .of-cell { text-align: left; justify-items: start; }
+  /* phones: the scanned time goes under the media's state */
+  .ui80 .ui-table--stack td.of-desk-only { display: none; }
+}
+.ui80 .of-phone-only { display: none; }
+@media (max-width: 640px) { .ui80 .of-phone-only { display: block; } }
+
+/* ---------- key and value ---------- */
+.ui80 .of-kv { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); gap: 0; margin: 0; border-top: 1px solid var(--ui-rule); }
+.ui80 .of-kv > dt, .ui80 .of-kv > dd { margin: 0; padding: 10px 0; border-bottom: 1px solid var(--ui-rule); }
+.ui80 .of-kv > dt { font: 500 13px/22px var(--ui-face); color: var(--ui-fg-2); padding-right: 16px; }
+.ui80 .of-kv > dd { font: 400 15px/22px var(--ui-read); min-width: 0; overflow-wrap: anywhere; }
+.ui80 .of-kv > dd > * { margin: 0; }
+.ui80 .of-kv > dd > * + * { margin-top: 4px; }
+.ui80 .of-kv .of-mono { font-size: 14px; }
+.ui80 .of-kv .ui-line { margin: 0; }
+.ui80 .of-kv .ui-line + .ui-line, .ui80 .of-kv .ui-line + p { margin-top: 6px; }
+@media (max-width: 560px) {
+  .ui80 .of-kv { grid-template-columns: minmax(0, 1fr); }
+  .ui80 .of-kv > dt { padding: 10px 0 0; border-bottom: 0; }
+  .ui80 .of-kv > dd { padding: 2px 0 10px; }
+}
+
+/* ---------- a box for a form or a group: square, 1px, opaque over the raster ---------- */
+.ui80 .of-box { border: 1px solid var(--ui-rule); background: var(--ui-bg); padding: 20px; margin: 0 0 24px; min-width: 0; }
+.ui80 .of-box > :last-child { margin-bottom: 0; }
+@media (max-width: 520px) { .ui80 .of-box { padding: 16px; margin-left: -4px; margin-right: -4px; } }
+.ui80 .of-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
+.ui80 .of-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 24px; }
+@media (max-width: 1100px) { .ui80 .of-grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) { .ui80 .of-grid2, .ui80 .of-grid3 { grid-template-columns: minmax(0, 1fr); } }
+/* a shorter field beside a taller one keeps its parts together at the top */
+.ui80 :is(.of-grid2, .of-grid3) > .ui-field { align-content: start; }
+.ui80 .of-split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 32px; align-items: start; margin: 0 0 24px; }
+@media (max-width: 1100px) { .ui80 .of-split { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+.ui80 .of-inline { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.ui80 .of-inline > .ui-field { margin: 0; }
+.ui80 .of-inline .ui-select { width: auto; max-width: 100%; }
+.ui80 .of-src { font: 400 13px/18px var(--ui-face); color: var(--ui-fg-3); margin-left: 8px; }
+/* a field that sits under the choice it belongs to */
+.ui80 .of-under { margin: 0 0 12px 34px; }
+.ui80 .of-under .ui-select { max-width: 360px; }
+@media (max-width: 520px) { .ui80 .of-under { margin-left: 0; } }
+/* a filter that is on: the layer's lit block, as for anything chosen */
+.ui80 .ui-office .ui-btn[aria-pressed='true'] { background: var(--ui-lit); border-color: var(--ui-lit); color: var(--ui-lit-ink); }
+@media (hover: hover) and (pointer: fine) { .ui80 .ui-office .ui-btn[aria-pressed='true']:hover { background: var(--ui-lit-hover); border-color: var(--ui-lit-hover); } }
+.ui80 .of-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 8px; margin: 0 0 16px; }
+.ui80 .of-filters .ui-select { width: auto; max-width: 100%; min-height: 40px; }
+.ui80 .of-filters .ui-select.is-on { border-color: var(--ui-lit); box-shadow: inset 0 0 0 1px var(--ui-lit); }
+.ui80 .of-filters .ui-check { padding: 0; min-height: 40px; align-items: center; margin-left: 4px; }
+.ui80 .of-filters .ui-check input { margin-top: 0; }
+/* a line of words after a table: room above it */
+.ui80 .ui-office .ui-table-wrap + .ui-line { margin-top: 20px; }
+/* [hidden] wins over the layer's display rules */
+.ui80 .ui-office [hidden] { display: none !important; }
+
+/* ---------- the link and the message ---------- */
+.ui80 .of-linkbox { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 12px 0; }
+.ui80 .of-linkbox code { flex: 1 1 320px; min-width: 0; padding: 10px 12px; font: 400 14px/20px var(--ui-face); color: var(--ui-fg); background: var(--ui-sunk); border: 1px solid var(--ui-edge); overflow-wrap: anywhere; }
+.ui80 .of-ready { margin: 16px 0 0; }
+.ui80 .of-ready__for { margin: 12px 0 0; font: 400 14px/20px var(--ui-read); color: var(--ui-fg-2); }
+.ui80 .of-ready__for + .of-linkbox { margin-top: 4px; }
+
+/* ---------- how far playback got ---------- */
+.ui80 .of-progress { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font: 400 14px/20px var(--ui-face); color: var(--ui-fg-2); }
+.ui80 .of-progress__bar { display: block; width: 64px; height: 8px; border: 1px solid var(--ui-edge); background: var(--ui-sunk); }
+.ui80 .of-progress__bar > span { display: block; height: 100%; background: var(--ui-fg); }
+
+/* ---------- the ledger ---------- */
+/* its heading: the shop's ledger, on a strip of label tape */
+.ui80 .of-ledger-head { margin: 0 0 14px; }
+.ui80 .of-ledger-head .emb-line { font-size: 22px; line-height: 28px; }
+.ui80 .of-ledger .of-c-when { width: 150px; }
+.ui80 .of-ledger .of-c-device { width: 190px; }
+@media (max-width: 640px) {
+  .ui80 .ui-table--stack.of-ledger td.of-td-left { display: flex; justify-content: flex-start; gap: 16px; text-align: left; padding: 3px 0; }
+  .ui80 .ui-table--stack.of-ledger td.of-td-left::before { display: block; min-width: 56px; }
+}
+/* the security row: plain words with the error block, never on print */
+.ui80 .of-sec b { font-weight: 600; }
+
+/* ---------- status: the still 12:00, only while nothing is on the shelf ---------- */
+.ui80 .of-unset { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px 32px; align-items: center; margin: 8px 0 32px; }
+.ui80 .of-unset ol { margin: 0 0 12px; padding-left: 22px; max-width: 66ch; }
+.ui80 .of-unset li + li { margin-top: 4px; }
+.of-clock { aspect-ratio: 4 / 3; }
+.of-clock .crt__screen { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 8%; text-align: center; }
+.of-clock__t { font-size: max(64px, 24cqw); line-height: 1; font-variant-numeric: tabular-nums; }
+.of-clock__s { font-size: max(22px, 7.6cqw); line-height: 1.1; }
+.crt.of-clock p { text-shadow: 0 0 1px rgb(246 247 253 / 0.5), 1px 0 1px rgb(246 247 253 / 0.18), -1px 0 1px rgb(246 247 253 / 0.18), 0 0 7px rgb(160 176 255 / 0.26); }
+@media (prefers-contrast: more) { .crt.of-clock p { text-shadow: none; } }
+@media (max-width: 680px) { .ui80 .of-unset { grid-template-columns: minmax(0, 1fr); } .ui80 .of-unset > .crt { max-width: 300px; width: 100%; } }
+
+/* ---------- settings ---------- */
+/* the page's own index */
+.ui80 .of-toc { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: -8px 0 28px; padding: 0; list-style: none; }
+.ui80 .of-toc a { display: inline-block; padding: 8px 0; font: 500 14px/20px var(--ui-face); color: var(--ui-fg-2); text-underline-offset: 4px; }
+@media (hover: hover) and (pointer: fine) { .ui80 .of-toc a:hover { color: var(--ui-fg); } }
+.ui80 .of-box[id] { scroll-margin-top: 16px; }
+@media (max-width: 800px) { .ui80 .of-box[id] { scroll-margin-top: 132px; } }
+/* the membership card in the shop's ink, front and back */
+.ui80 .of-cardpreview { margin: 8px 0 16px; display: grid; gap: 10px; max-width: 340px; min-width: 0; }
+.ui80 .of-cardpreview figcaption { font: 400 14px/20px var(--ui-read); color: var(--ui-fg-2); }
+.ui80 .of-colour { display: flex; gap: 8px; align-items: center; }
+.ui80 .of-colour .ui-input { max-width: 10ch; font-family: var(--ui-face); }
+/* the logo as the header shows it, on the shop's room */
+.ui80 .of-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--ui-rule); background: var(--ui-bg); margin: 0 0 12px; min-width: 0; }
+.ui80 .of-strip .ui-shopname { padding: 0; min-width: 0; }
+.ui80 .of-strip img { flex: none; }
+.ui80 .of-backups { margin: 0 0 16px; }
+.ui80 .of-backups .ui-list__row { padding: 6px 0; }
+.ui80 .ui-office .tmdb-credit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 16px 0 0; font: 400 14px/20px var(--ui-read); color: var(--ui-fg-2); max-width: 72ch; }
+.ui80 .ui-office .tmdb-credit img { display: block; height: 12px; width: auto; flex: none; }
+
+/* ---------- a film's artwork, and TMDB's choices ---------- */
+.ui80 .of-art { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 20px 28px; align-items: start; margin: 16px 0; }
+.ui80 .of-art .of-src { display: block; margin-left: 0; }
+.ui80 .of-art__backdrop { display: block; width: 100%; max-width: 320px; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--ui-rule); margin: 4px 0 0; }
+@media (max-width: 560px) { .ui80 .of-art { grid-template-columns: minmax(0, 1fr); } .ui80 .of-art > :first-child { max-width: 150px; } }
+.ui80 .of-results { display: grid; gap: 0; margin: 16px 0 0; border-top: 1px solid var(--ui-rule); }
+.ui80 .of-result { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--ui-rule); }
+.ui80 .of-result img, .ui80 .of-result__none { display: block; width: 54px; aspect-ratio: 2 / 3; object-fit: cover; background: var(--ui-sunk); border: 1px solid var(--ui-rule); }
+.ui80 .of-result__over { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 2px 0 0; font-size: 14px; line-height: 20px; color: var(--ui-fg-2); }
+@media (max-width: 520px) { .ui80 .of-result { grid-template-columns: 54px minmax(0, 1fr); } .ui80 .of-result .ui-btn { grid-column: 2; justify-self: start; } }
+.ui80 .of-picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin: 6px 0 0; }
+.ui80 .of-pick { display: block; padding: 0; border: 1px solid var(--ui-edge); background: var(--ui-sunk); color: var(--ui-fg-2); font: 500 13px/18px var(--ui-face); cursor: pointer; overflow: hidden; }
+.ui80 .of-pick--tall { width: 92px; aspect-ratio: 2 / 3; }
+.ui80 .of-pick--wide { width: 168px; aspect-ratio: 16 / 9; }
+.ui80 .of-pick img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ui80 .of-pick[aria-pressed='true'] { border-color: var(--ui-lit); box-shadow: 0 0 0 2px var(--ui-lit); }
+@media (hover: hover) and (pointer: fine) { .ui80 .of-pick:hover { border-color: var(--ui-fg); } }
+.ui80 .of-tmdb-choice { margin: 20px 0 0; padding: 20px 0 0; border-top: 1px solid var(--ui-rule); }
+.ui80 .of-use { width: 40px; }
+
+/* ---------- sign in ---------- */
+.ui80 .admin-login .ui-btn--wide { margin-top: 4px; }
+
+/* a quiet footnote at a screen's foot */
+.ui80 .of-foot { margin: 24px 0 0; font: 400 14px/20px var(--ui-read); color: var(--ui-fg-3); max-width: 72ch; }
+.ui80 .of-foot a { color: var(--ui-fg-2); }
+/* the status line: what it knows, and a link to Status when the server needs a look */
+.ui80 .ui-office .ui-status a { color: var(--ui-fg); text-underline-offset: 3px; }
+
+/* ---------- forced colours: the blocks are the system's text colour ---------- */
+@media (forced-colors: active) {
+  .ui80 .of-mark::before, .ui80 .of-progress__bar > span { forced-color-adjust: none; background: CanvasText; }
+  .ui80 .of-mark--off::before { background: CanvasText; }
+  .ui80 .of-pick[aria-pressed='true'] { outline: 3px solid Highlight; }
+}

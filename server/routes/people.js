@@ -6,7 +6,7 @@ const bad = (message, status = 400) => Object.assign(new Error(message), { statu
 
 const name = (v) => {
   const s = typeof v === 'string' ? v.trim() : '';
-  if (!s) throw bad('A person needs a name');
+  if (!s) throw bad('A member needs a name');
   if (s.length > 80) throw bad('Names can be up to 80 characters');
   return s;
 };

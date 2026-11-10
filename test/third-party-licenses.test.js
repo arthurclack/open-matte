@@ -187,7 +187,7 @@ describe('the build writes the file', { skip }, () => {
     const list = ['@scope/beta 2.0.0 (BSD-3-Clause)', 'alpha 1.2.3 (MIT)', 'delta 4.0.0 (MIT OR Apache-2.0)', 'epsilon 1.0.0 (Apache-2.0)', 'gamma 0.1.0 (ISC)', 'tool 9.9.9 (MIT)', 'zeta 3.1.4 (Apache-2.0)'];
     assert.ok(text.includes(list.map((l) => `  ${l}`).join('\n')), 'the list');
     const headings = [...text.matchAll(/^={80}\n(.+)\nLicence: (.+)\n={80}$/gm)].map((m) => `${m[1]} (${m[2]})`);
-    // Then the membership card's fonts.
+    // Then the fonts.
     assert.deepEqual(headings, [...list, ...FONTS.map((f) => `${f.name} (fonts/${f.file}), a font (OFL-1.1)`)]);
     assert.ok(text.includes(MIT('Alpha')) && text.includes(MIT('Delta')) && text.includes(MIT('Tool')));
     assert.ok(text.includes('Epsilon includes software from Somebody.'), 'a NOTICE is passed on');
@@ -422,11 +422,13 @@ describe('the links to it', { skip }, () => {
 });
 
 // The server's side runs everywhere: it serves whatever the build wrote.
-// The fonts the membership card is printed in: served as they are from
-// web/public/fonts, each with its licence beside it and in the licences file.
-describe('the membership card’s fonts', { skip }, () => {
+// The fonts the app is set and printed in: served as they are from web/public/fonts,
+// each with its licence beside it and in the licences file, and declared once.
+describe('the fonts', { skip }, () => {
   const FONTS_DIR = new URL('../web/public/fonts/', import.meta.url);
-  const CARD_CSS = new URL('../web/src/membershipCard.css', import.meta.url);
+  const FONTS_CSS = 'look/tokens.css';
+  // IBM Plex Mono comes in two files, one family.
+  const family = (f) => f.name.replace(/ SemiBold$/, '');
 
   test('each is in web/public/fonts, with its OFL beside it, copyright line first', () => {
     for (const f of FONTS) {
@@ -434,12 +436,18 @@ describe('the membership card’s fonts', { skip }, () => {
       // A TrueType file: version 1.0's tag.
       assert.equal(font.readUInt32BE(0), 0x00010000, `${f.file} is a TrueType font`);
       const licence = fs.readFileSync(new URL(f.licenceFile, FONTS_DIR), 'utf8');
-      assert.match(licence, /^Copyright \d{4} The .+ Project Authors/, f.licenceFile);
+      assert.match(licence, /^Copyright (?:© )?\d{4},? .+/, f.licenceFile);
       assert.match(licence, /SIL OPEN FONT LICENSE Version 1\.1/);
     }
-    assert.deepEqual(FONTS.map((f) => f.name), ['Fraunces', 'Grape Nuts', 'Courier Prime']);
+    assert.deepEqual(
+      FONTS.map((f) => f.name),
+      ['Fraunces', 'Grape Nuts', 'Courier Prime', 'Libre Franklin', 'IBM Plex Mono', 'IBM Plex Mono SemiBold', 'VT323'],
+    );
     // Names an address can carry as they are.
     for (const f of FONTS) assert.match(f.file, /^[A-Za-z0-9.-]+$/);
+    // Every font file served is listed, with its licence: none slips in unlicensed.
+    const served = fs.readdirSync(FONTS_DIR).filter((n) => /\.(ttf|otf|woff2?)$/i.test(n)).sort();
+    assert.deepEqual(served, FONTS.map((f) => f.file).sort());
   });
 
   test('the licences file says they are under the OFL, not the GPL, and gives each licence in full', () => {
@@ -447,7 +455,7 @@ describe('the membership card’s fonts', { skip }, () => {
     const intro = text.slice(0, text.indexOf('The app also includes code'));
     assert.match(
       intro,
-      /\n\nThe membership card is printed in fonts made by others: Fraunces, Grape Nuts and\nCourier Prime, in fonts\/\. They are under the SIL Open Font License, version 1\.1,\nnot the GPL, and their licences are given in full at the end of this file\.\n\n$/,
+      /\n\nThe app is set and printed in fonts made by others: Fraunces, Grape Nuts,\nCourier Prime, Libre Franklin, IBM Plex Mono and VT323, in fonts\/\. They are\nunder the SIL Open Font License, version 1\.1, not the GPL, and their licences\nare given in full at the end of this file\.\n\n$/,
     );
     for (const f of shippedFonts()) {
       const at = text.indexOf(`\n${f.name} (fonts/${f.file}), a font\nLicence: OFL-1.1\n`);
@@ -457,22 +465,26 @@ describe('the membership card’s fonts', { skip }, () => {
       assert.ok(section.includes(f.text), `${f.name}'s licence, whole`);
       assert.ok(section.includes(f.text.split('\n')[0]), `${f.name}'s copyright line`);
     }
-    assert.ok(text.split('\n').every((line) => line.length <= 80 || /^(Copyright|http)/.test(line) || / {2}/.test(line) || line.includes('github.com')), 'its own lines fit 80 columns');
+    // Its own lines: the fonts' licences are given word for word, as their authors
+    // wrapped them (IBM Plex Mono's has a line of 93), so they are left out here.
+    const own = shippedFonts().reduce((rest, f) => rest.replace(f.text, ''), text);
+    assert.ok(own.split('\n').every((line) => line.length <= 80 || /^(Copyright|http)/.test(line) || / {2}/.test(line) || line.includes('github.com')), 'its own lines fit 80 columns');
   });
 
-  test('the card’s stylesheet declares each one, from this site, letting text show while it loads', () => {
-    const css = fs.readFileSync(CARD_CSS, 'utf8');
+  test('one stylesheet declares each one, from this site, letting text show while it loads', () => {
+    const css = fs.readFileSync(new URL(`../web/src/${FONTS_CSS}`, import.meta.url), 'utf8');
     const faces = [...css.matchAll(/@font-face\s*{([^}]*)}/g)].map((m) => m[1]);
     assert.equal(faces.length, FONTS.length);
     for (const f of FONTS) {
-      const face = faces.find((x) => x.includes(`font-family: '${f.name}'`));
+      const face = faces.find((x) => x.includes(`url('/fonts/${f.file}')`));
       assert.ok(face, f.name);
+      assert.ok(face.includes(`font-family: '${family(f)}'`), `${f.name} is ${family(f)}`);
       assert.match(face, new RegExp(`src: url\\('/fonts/${f.file.replace('.', '\\.')}'\\) format\\('truetype'\\);`));
       assert.match(face, /font-display: swap;/);
     }
-    // Only the card's stylesheet: the rest of the app never asks for them.
+    // Only that stylesheet: nothing else in the app asks for them.
     for (const file of fs.readdirSync(new URL('../web/src/', import.meta.url), { recursive: true })) {
-      if (!/\.(css|jsx?)$/.test(file) || file === 'membershipCard.css') continue;
+      if (!/\.(css|jsx?)$/.test(file) || file === FONTS_CSS) continue;
       assert.doesNotMatch(fs.readFileSync(new URL(`../web/src/${file}`, import.meta.url), 'utf8'), /@font-face|\/fonts\//, file);
     }
   });

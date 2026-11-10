@@ -45,18 +45,18 @@ test("in the admin: the earlier pages don't come back, nor do their answers from
   await admin.issueTicket({ label });
   await page.goto('/admin');
   await signInAsAdmin(page, () => page.getByRole('button', { name: 'Sign in' }).click());
-  await page.getByRole('link', { name: 'Tickets', exact: true }).click();
+  await page.getByRole('link', { name: 'Tapes', exact: true }).click();
   await expect(page.getByRole('row').filter({ hasText: label })).toHaveCount(1);
   // As the owner would leave it: the viewer site, then back into the admin, then Sign out.
-  await page.getByRole('link', { name: 'View site' }).click();
+  await page.getByRole('link', { name: 'View the shop' }).click();
   await expect(page.getByRole('heading', { level: 1, name: cinemaName() })).toBeVisible();
-  await page.locator('header').getByRole('link', { name: 'Admin' }).click();
+  await page.locator('header').getByRole('link', { name: 'Back office' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Films' })).toBeVisible();
-  await page.locator('.admin-nav').getByRole('button', { name: 'Sign out', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Open Matte admin' })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Back office' }).getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Sign in to the back office' })).toBeVisible();
 
   await backTo(page, '/admin/tickets');
-  await expect(page.getByRole('heading', { name: 'Open Matte admin' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sign in to the back office' })).toBeVisible();
   expect(await restores(page), 'the browser brought pages back from its back/forward cache').toBeGreaterThan(0);
   await expect(page.getByRole('button', { name: 'Copy link' })).toHaveCount(0);
   await expect(page.getByText(label)).toHaveCount(0);
@@ -70,7 +70,7 @@ test("on the viewer site: Your account doesn't come back signed in", async ({ pa
   await context.addCookies([cookie]);
   const menu = (p) => p.getByRole('button', { name, exact: true });
   await page.goto('/account');
-  await expect(page.getByText('Signed in here with this')).toBeVisible();
+  await expect(page.getByText('Used to sign in here')).toBeVisible();
   // Another page, then Sign out there.
   await page.goto('/');
   await menu(page).click();
@@ -78,9 +78,9 @@ test("on the viewer site: Your account doesn't come back signed in", async ({ pa
   await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
 
   await backTo(page, '/account');
-  await expect(page.getByText('Sign in to see your passkeys')).toBeVisible();
+  await expect(page.getByText('Sign in to see your card')).toBeVisible();
   expect(await restores(page), 'the browser brought the page back from its back/forward cache').toBeGreaterThan(0);
   await expect(menu(page)).toBeHidden();
-  await expect(page.getByText('Signed in here with this')).toHaveCount(0);
+  await expect(page.getByText('Used to sign in here')).toHaveCount(0);
   for (const url of ['/api/account', '/api/me']) expect(await cached(page, url), url).toBe('not in the cache');
 });

@@ -38,7 +38,7 @@ test("page paths get the app, titled with the cinema's name", async () => {
     // The stub has no </head>: the cinema's tags follow the title, in whatever order.
     const tags = html.slice(html.indexOf('<title>Open Matte</title>') + '<title>Open Matte</title>'.length);
     assert.match(tags, /^\s*<(?:meta|link|style|script)\b/, p);
-    assert.match(tags, /<meta name="theme-color" content="#0d0c0f"/, p);
+    assert.match(tags, /<meta name="theme-color" content="#171513"/, p);
     assert.match(tags, /<script\b(?=[^>]*\bid="site-data")(?=[^>]*\btype="application\/json")[^>]*>/, p);
   }
   assert.equal(fs.existsSync(branding), existed);

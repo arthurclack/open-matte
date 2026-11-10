@@ -1,9 +1,14 @@
 # Open Matte
 
-A small, self-hosted cinema for recommending films to friends. You publish a handful
-of films you think your friends should see, write a few lines on why, and send a
-friend a ticket: a link that opens the film in their browser. You choose every film,
-and nobody can sign up on their own.
+A small, self-hosted video shop for lending films to friends. You put a handful of
+films you think your friends should see on the shelf, write a staff pick saying why,
+and lend a friend a tape: a link that opens the film in their browser. You choose
+every film, and nobody can sign up on their own.
+
+Since 1.1.0 the pages look and talk like a one-shelf video shop. The code, the API
+and the database still say ticket where the pages say tape, screening where they say
+play, and person where they say member; [docs/access.md](docs/access.md#words) has
+the full list.
 
 > You should watch this film. Here's the link.
 
@@ -15,7 +20,7 @@ computer with the encoder, copy them to the server, and it sends those files as 
 are. So the server needs little processing power. What matters is its disk space and
 upload speed.
 
-Nor is it copy protection: every request for a film is checked against a ticket, but
+Nor is it copy protection: every request for a film is checked against a tape, but
 anyone who can play a film could record it.
 
 Only share films you have the right to share.
@@ -30,51 +35,54 @@ Only share films you have the right to share.
 | Prepared films | Encoded on your computer with `scripts/encode.mjs`, which needs Node and `ffmpeg`, into one folder per film ([docs/encoding.md](docs/encoding.md), [docs/import-format.md](docs/import-format.md)). |
 | Optionally | A TMDB API key, free for non-commercial use, to fill in film details and artwork ([docs/metadata.md](docs/metadata.md)), and somewhere off the server to copy backups to. |
 
-What your friends need depends on the kind of ticket. The admin offers two: **Anyone
-with the link**, and **Only a person, signed in**, which this page calls a ticket for
-one person.
+What your friends need depends on the kind of tape. The back office offers two:
+**Anyone with the link**, and **Only one member, signed in**, which this page calls a
+tape for one member.
 
-- **A browser.** A ticket for anyone with the link needs no account. Playback has been
+- **A browser.** A tape for anyone with the link needs no membership card. Playback has been
   checked in Safari on iPhone and Mac (on the Mac by keyboard alone too), Chrome on a
   computer and on Android, desktop Firefox, WhatsApp's and Instagram's built-in
   browsers, a TV browser, AirPlay, Chromecast and a screen without HDR
   ([device checks](docs/history/device-checks.md)). TV browsers vary, so others may
   not work.
-- **A passkey, only if you add them under People.** You'd do that to send them a
-  ticket for one person, or to show them films before they have a ticket. They create
-  the passkey from a link you send, and need no password. The only password is yours:
-  you sign in to the admin with `ADMIN_PASSWORD`. Passkeys have been checked on iPhone, Mac,
+- **A passkey, only if you make them a membership card under Members.** You'd do that
+  to lend them a tape for one member, or to show them films before they have a tape.
+  They create the passkey from a link you send, and need no password. The only
+  password is yours: you sign in to the back office with `ADMIN_PASSWORD`. Passkeys have been checked on iPhone, Mac,
   Android, Chrome signing in with a phone's QR code, and a password manager. TV
   browsers and apps' built-in browsers usually can't use them.
 
 ## What it does
 
-- **Film pages** with the poster, details and your recommendation, and details and
+- **Film pages** with the poster printed as the sleeve (a plain kraft sleeve with a
+  typed label when there's no artwork), the details, your staff pick, and details and
   artwork from TMDB if you want them.
-- **Tickets**, each for one film, with its own link. By default a ticket admits one: a
-  single screening, whenever they like. You can allow more screenings, or leave the
-  limit empty for no limit. You can also set a date to start watching by, and the days
-  it stays valid after first play. Revoking one stops it on the next request.
-- **Screenings**: pressing Play starts one. It can be paused and resumed for 48 hours
-  by default (the resume window, in Settings), on one device at a time.
+- **Tapes**, each for one film, with its own link. By default a tape has one play,
+  whenever they like. You can allow more plays, or leave the limit empty for no limit.
+  You can also set a date to start by, and the days until it's due back after the
+  first play. The next deadline is on an orange sticker. Taking a tape back stops it
+  on the next request.
+- **Plays**: pressing Play starts one. It can be paused and come back to for 48 hours
+  by default (Time to come back, in Settings), on one device at a time.
 - **Protected media**: every playlist, segment and subtitle request is checked against
-  the browser's ticket and the screening it holds.
+  the browser's tape and the play it holds.
 - **Playback**: adaptive HLS, through hls.js or Safari's own player, in HEVC and H.264,
   with HDR10. Audio and subtitle choices are remembered in each browser, and the lock
   screen shows the film. A **Playback help** link gives a friend a summary to send you
   when something won't play.
-- **People and passkeys**: tickets for one person; letting someone keep a ticket for
-  anyone with the link in their account; films shown to members (the people you've
-  added, signed in), who can read about a film but need a ticket to play it; recovery
-  when someone loses a device.
-- **Branding**: your cinema's name, colours, logo and tab icon. A ticket for anyone
-  with the link previews its film's poster and title in chat apps.
-- **The admin**: scan the media folder, publish, issue tickets, add people, see
-  Activity, choose how long records are kept, and check on the server under
-  **Status**.
+- **Members and passkeys**: a membership card for everyone you add, tapes for one
+  member, letting someone keep a tape for anyone with the link on their card, films
+  on the shelf for members (signed in), who can read about a film but need a tape to
+  play it, and recovery when someone loses a phone.
+- **Your shop**: its name, your name (to sign the staff picks), your colour (which
+  prints the membership card), the background, a logo and a tab icon. A tape for
+  anyone with the link previews its film's poster and title in chat apps.
+- **The back office**: scan the media folder, put films on the shelf, lend tapes, make
+  membership cards, read the Ledger, choose how long records are kept, and check on
+  the server under **Status**.
 - **Backups** every day, keeping the last 14 days and one a month for a year, with a
   timer to copy them off the server. A backup holds the database (films' details,
-  tickets, screenings, activity, people, passkeys and the admin's settings), the
+  tapes, plays, the ledger, members, passkeys and the shop's settings), the
   posters and backdrops downloaded from TMDB, and your logo and tab icon, but not the films or `deploy/.env`.
 
 [docs/access.md](docs/access.md) has the rules: who can play what, and what is
@@ -83,7 +91,7 @@ recorded about viewers and for how long.
 ## Where to start
 
 [docs/installing.md](docs/installing.md) takes you from a fresh server to a working
-cinema and a played ticket. Before you update, read [CHANGELOG.md](CHANGELOG.md): each
+shop and a played tape. Before you update, read [CHANGELOG.md](CHANGELOG.md): each
 release says whether it needs a backup first, and whether you can go back without a
 restore.
 
@@ -107,8 +115,8 @@ installed.
 To work on the web app with hot reload, run `npm run dev:web` alongside and use
 http://localhost:5173. Vite serves the page itself there, without what the server on
 :3000 writes into it: the page has Open Matte's own colours and tab icon rather than
-the cinema's, no link-preview tags, a header that waits for `/api/me` before
-showing the cinema's name and logo, and no Content-Security-Policy, which only the
+the shop's, no link-preview tags, a header that waits for `/api/me` before
+showing the shop's name and logo, and no Content-Security-Policy, which only the
 server on :3000 sends. Before you deploy, run `npm run build` and check anything new
 on http://localhost:3000, or run `npm run e2e`, which builds first.
 
@@ -117,8 +125,8 @@ them on an IP address. Locally they need no setting; on a server, see
 [docs/installing.md](docs/installing.md).
 
 Put a film folder in `media/` (or make a test one with the encoder), open
-http://localhost:3000/admin, scan, publish, and issue a ticket. Open the ticket link
-in a private window to see it as a friend would.
+http://localhost:3000/admin, scan, put a film on the shelf, and lend a tape. Open the
+tape's link in a private window to see it as a friend would.
 
 ```bash
 npm test                    # access rules, passkeys, scanner, retention and the full ticket journey
@@ -139,7 +147,7 @@ by the pages' Content-Security-Policy.
 
 ```text
 server/         Express app: access rules, passkeys, scanner, routes, SQLite
-web/            React app: viewer pages, player, admin
+web/            React app: friends' pages, player, back office (web/src/look: the look)
 scripts/        encode.mjs (reference encoder), deploy.sh (copy to a server over SSH)
 deploy/         Docker Compose, Caddy and the backup-copy timer
 docs/           installing, running and updating, access rules, import format,
@@ -169,9 +177,12 @@ repository or a Docker image, does convey it.
 `web/public/tmdb.svg` is TMDB's logo and trademark, included unchanged because TMDB's
 terms require apps that use its data to show it. It isn't covered by the GPL.
 
-`web/public/fonts/` holds the membership card's fonts, Fraunces, Grape Nuts and
-Courier Prime, unchanged, each under the SIL Open Font License 1.1 (its licence is
-beside it, and in the licences file), not the GPL.
+`web/public/fonts/` holds the fonts the pages are set and printed in: Libre Franklin
+(headings and reading text), IBM Plex Mono (the interface's own words), Fraunces (the
+shop's printing), Courier Prime (typed labels), Grape Nuts (the one handwritten
+hand), and VT323 (only on the video machine's blue screen). They're unchanged, each
+under the SIL Open Font License 1.1 (its licence is beside it, and in the licences
+file), not the GPL.
 
 ### Third-party licences
 

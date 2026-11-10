@@ -7,7 +7,7 @@
 // other audio itself and doesn't tell the page that a request was refused.
 import { admin, expect, film, heartbeats, media, playButton, playbackSupport, test, unique } from './fixtures.js';
 
-const ELSEWHERE = 'This screening is now playing on another device.';
+const ELSEWHERE = 'This tape is now playing on another device.';
 const FORBIDDEN = 'Playback stopped: this browser is no longer allowed to stream this film.';
 
 test('a request refused after a takeover says another device has the screening, and Watch here instead takes it back', async ({ page, newContext }, testInfo) => {
@@ -37,7 +37,7 @@ test('a request refused after a takeover says another device has the screening, 
   const otherReports = heartbeats(other);
   await test.step('another browser opens the link and resumes the screening, then pauses', async () => {
     await other.goto(`/t/${ticket.code}`);
-    await expect(playButton(other)).toHaveText(/^Resume/);
+    await expect(playButton(other)).toHaveAccessibleName(/^Resume/);
     await playButton(other).click();
     await media.playedPast(other, 0.5);
     await other.locator('video').evaluate((v) => v.pause());
@@ -45,7 +45,8 @@ test('a request refused after a takeover says another device has the screening, 
   });
 
   await test.step('this browser, still paused, picks French audio: refused, and told why', async () => {
-    await page.getByLabel('Audio').selectOption({ label: 'French · Stereo' });
+    // Paused, the choices are on the machine's strip under the picture.
+    await page.getByRole('radiogroup', { name: 'Audio' }).getByRole('radio', { name: 'French · Stereo' }).click();
     await expect.poll(() => page.evaluate(() => window.__playerMessages), { message: 'the player says why it stopped' }).toContain(ELSEWHERE);
     // The audio's playlist was refused, and the player asked the server, which said why.
     expect(refused.length, 'a media request refused with 403').toBeGreaterThan(0);

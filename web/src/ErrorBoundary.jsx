@@ -30,16 +30,16 @@ export class ErrorBoundary extends Component {
     if (!error) return this.props.children;
     const missing = error instanceof PartMissing;
     return (
-      <div className="narrow" style={{ paddingTop: '15vh' }}>
-        <h1 style={{ fontSize: '2rem', marginBottom: '0.8rem' }}>{missing ? 'This page needs reloading' : 'Something went wrong'}</h1>
-        <p className="dim">
+      <div className="fl-narrow ui-w">
+        <h1>{missing ? 'This page needs reloading' : 'Something went wrong'}</h1>
+        <p>
           {missing ? "Part of it didn't load. The site may have just been updated." : "This page couldn't be shown."} Reload it to carry on.
         </p>
-        <div className="row" style={{ gap: '0.6rem' }}>
-          <button className="btn primary" onClick={() => window.location.reload()}>
+        <div className="ui-btns">
+          <button type="button" className="ui-btn ui-btn--primary" onClick={() => window.location.reload()}>
             Reload
           </button>
-          <a className="btn" href="/">
+          <a className="ui-btn" href="/">
             Go to the front page
           </a>
         </div>

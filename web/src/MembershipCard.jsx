@@ -36,7 +36,9 @@ import './membershipCard.css';
 // site: { cinemaName, accentColor, logo, logoWithName } as /api/me gives it.
 // membership: { number, since } from /api/account or /api/enroll/finish.
 // start: the side up at first. writeOn: write the name on once, as when the passkey
-// has just been made.
+// has just been made. face="front": the front alone, nobody's (no membership needed),
+// to be looked at rather than handled: no back, no Turn over. The sign-in pages use it
+// as the button that signs in ("Show your card").
 
 const TURN_MS = 460;
 const WRITE_MS = 560;
@@ -61,10 +63,11 @@ export function loadCardFonts(text = 'Aa0') {
 // the ink's printed edge is left off text. The plates stay off register.
 const WEBKIT = typeof navigator !== 'undefined' && /AppleWebKit/.test(navigator.userAgent) && !/Chrome|Chromium|Edg|Android/.test(navigator.userAgent);
 
-export default function MembershipCard({ site, name, membership, start = 'front', writeOn = false }) {
-  const shop = site?.cinemaName || 'this cinema';
-  const number = membership.number;
-  const seed = `member:${number}`;
+export default function MembershipCard({ site, name, membership, start = 'front', writeOn = false, face }) {
+  const frontOnly = face === 'front';
+  const shop = site?.cinemaName || 'this shop';
+  const number = membership?.number ?? '';
+  const seed = frontOnly ? 'front' : `member:${number}`;
   const ink = printInk(site?.accentColor).ink;
   // Ids for the stage and the SVG filters: letters and digits only, for url(#…).
   const uid = `mc${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -235,6 +238,7 @@ export default function MembershipCard({ site, name, membership, start = 'front'
         <div className="mc-face mc-face--front" style={faceStyle('front')} aria-hidden={side !== 'front' || undefined} inert={side !== 'front'} onTransitionEnd={turned}>
           <Front sheetRef={frontRef} shop={shop} site={site} seed={`${seed}:front`} uid={uid} soft={soft} />
         </div>
+        {!frontOnly && (
         <div className="mc-face mc-face--back" style={faceStyle('back')} aria-hidden={side !== 'back' || undefined} inert={side !== 'back'}>
           <Back
             sheetRef={backRef}
@@ -252,15 +256,20 @@ export default function MembershipCard({ site, name, membership, start = 'front'
             seed={`${seed}:back`}
           />
         </div>
+        )}
       </div>
-      <div className="mc-ctl">
-        <button type="button" className="btn" onClick={turn} aria-controls={`${uid}-stage`}>
-          Turn over
-        </button>
-      </div>
-      <p className="visually-hidden" aria-live="polite">
-        {said}
-      </p>
+      {!frontOnly && (
+        <>
+          <div className="mc-ctl">
+            <button type="button" className="btn" onClick={turn} aria-controls={`${uid}-stage`}>
+              Turn over
+            </button>
+          </div>
+          <p className="visually-hidden" aria-live="polite">
+            {said}
+          </p>
+        </>
+      )}
     </div>
   );
 }

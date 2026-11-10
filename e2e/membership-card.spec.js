@@ -51,7 +51,7 @@ test('the account page shows the membership card, front up, and Turn over turns 
   const fonts = [];
   page.on('response', (r) => new URL(r.url()).pathname.startsWith('/fonts/') && fonts.push(`${new URL(r.url()).pathname} ${r.status()}`));
   await page.goto('/account');
-  await expect(page.getByRole('heading', { level: 2, name: 'Your membership card' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Your membership card' })).toBeVisible();
   const { front, back } = sides(page);
 
   await test.step('front up: the shop, and the back hidden from everyone', async () => {
@@ -118,7 +118,11 @@ test('the account page shows the membership card, front up, and Turn over turns 
     for (const face of ['800 16px Fraunces', '16px "Grape Nuts"', '16px "Courier Prime"']) {
       expect(await page.evaluate((f) => document.fonts.check(f), face), face).toBe(true);
     }
-    expect(fonts.sort()).toEqual(['/fonts/CourierPrime-Regular.ttf 200', '/fonts/Fraunces-Variable.ttf 200', '/fonts/GrapeNuts-Regular.ttf 200']);
+    // The card's three, besides the faces the page itself is set in (Libre Franklin,
+    // IBM Plex Mono): every one from this site, and each fetched once.
+    expect(fonts.filter((f) => /CourierPrime|Fraunces|GrapeNuts/.test(f)).sort()).toEqual(['/fonts/CourierPrime-Regular.ttf 200', '/fonts/Fraunces-Variable.ttf 200', '/fonts/GrapeNuts-Regular.ttf 200']);
+    for (const f of fonts) expect(f).toMatch(/^\/fonts\/[A-Za-z0-9.-]+\.ttf 200$/);
+    expect(new Set(fonts).size).toBe(fonts.length);
   });
 
   await test.step('and over again, back to the front', async () => {

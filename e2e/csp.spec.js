@@ -7,12 +7,14 @@
 // request reaching the server's log. Every browser, but for how hls.js runs
 // (chromium only).
 import fs from 'node:fs';
+import { litTint } from '../server/theme.js';
 import { THUMBNAIL_QUERY } from './tmdb.js';
 import { NO_SNAPSHOTS, admin, exclusively, expect, film, media, playButton, playbackSupport, signInAsAdmin, signedInPerson, test, unique } from './fixtures.js';
 
 test.use(NO_SNAPSHOTS);
 
-const DEFAULT_COLORS = { accentColor: '#e8b04a', backgroundColor: '#0d0c0f' };
+// Open Matte's own: the accent and the video shop's room (1.1.0; before, #0d0c0f).
+const DEFAULT_COLORS = { accentColor: '#e8b04a', backgroundColor: '#171513' };
 // Through the admin API, so Settings' form starts from them and can save.
 const defaultColors = () => admin.patch('/api/admin/settings', DEFAULT_COLORS);
 
@@ -21,14 +23,22 @@ const asAdmin = async (context, baseURL) => {
   await context.addCookies([{ name: 'om_admin', value, url: baseURL, httpOnly: true, sameSite: 'Lax' }]);
 };
 
-// The colours a page is drawn in: the theme's own two, and the page's background as drawn.
-const drawn = (page) =>
-  page.evaluate(() => {
-    const root = getComputedStyle(document.documentElement);
-    return { accent: root.getPropertyValue('--accent').trim(), bg: root.getPropertyValue('--bg').trim(), body: getComputedStyle(document.body).backgroundColor };
-  });
+// The colours a page is drawn in: a lit block as drawn (`lit`: a selector for one on
+// the page; the accent tints them, and nothing draws the accent itself since 1.1.0),
+// the room as the theme gives it, and the page's background as drawn.
+const drawn = (page, lit = OFFICE_LIT) =>
+  page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    return { lit: el && getComputedStyle(el).backgroundColor, bg: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(), body: getComputedStyle(document.body).backgroundColor };
+  }, lit);
+// The back office's current section, lit in its menu.
+const OFFICE_LIT = '.ui-office__nav .ui-tab[aria-current="page"]';
 
 const hexToRgb = (hex) => `rgb(${[1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+// What a pair of colours should look like drawn: the lit block with a little of the
+// accent (server/theme.js's rule; test/branding.test.js checks the rule itself), the
+// room, and the page's background.
+const looks = ({ accent, bg }) => ({ lit: hexToRgb(litTint(accent, bg).vars['--ui-lit']), bg, body: hexToRgb(bg) });
 
 // The img-src a page was sent with.
 const policyOf = (res) => res.headers()['content-security-policy'].split('; ').find((d) => d.startsWith('img-src '));
@@ -48,6 +58,9 @@ async function answerPasskeys(context, auth) {
     if (!navigator.credentials) return;
     const bytes = (s) => Uint8Array.from(atob(s.replaceAll('-', '+').replaceAll('_', '/')), (c) => c.charCodeAt(0)).buffer;
     const text = (b) => btoa(String.fromCharCode(...new Uint8Array(ArrayBuffer.isView(b) ? b.buffer : b))).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+    // Held on to: WebKit can collect navigator.credentials' wrapper on a busy page and
+    // hand out a fresh one, without this replacement on it.
+    window.__e2eCredentials = navigator.credentials;
     navigator.credentials.get = async ({ publicKey }) => {
       const c = await window.e2ePasskey(text(publicKey.challenge));
       const { clientDataJSON, authenticatorData, signature, userHandle } = c.response;
@@ -65,6 +78,8 @@ async function answerPasskeys(context, auth) {
 
 // Find details for the test film, from its page in the admin: TMDB's thumbnail, drawn.
 async function findThumbnail(page, baseURL) {
+  // Film information is on the film page's Details tab.
+  await page.getByRole('tab', { name: 'Details' }).click();
   await page.getByRole('button', { name: /^(Find details|Change match)…$/ }).click();
   const search = page.locator('form').filter({ has: page.getByRole('button', { name: 'Search TMDB' }) });
   await search.getByRole('textbox', { name: 'Title' }).fill(THUMBNAIL_QUERY);
@@ -83,6 +98,7 @@ async function findThumbnail(page, baseURL) {
 test("the cinema's colours, saved in Settings, show in the admin at once and on a viewer's page", async ({ page, newContext }, testInfo) => {
   // Two pairs, so the second save changes the style the server wrote.
   const first = { accent: '#4ab0e8', bg: '#0b1016' };
+  const FIRST_LIT = '#cad6d2';
   const second = { accent: '#7fd18b', bg: '#100b14' };
   const ticket = await admin.issueTicket({ label: unique('Colours', testInfo) });
 
@@ -100,22 +116,22 @@ test("the cinema's colours, saved in Settings, show in the admin at once and on 
       });
 
       const save = async ({ accent, bg }) => {
-        await page.getByRole('textbox', { name: 'Accent, as #rrggbb' }).fill(accent);
+        await page.getByRole('textbox', { name: 'Your colour, as #rrggbb' }).fill(accent);
         await page.getByRole('textbox', { name: 'Background, as #rrggbb' }).fill(bg);
         // The preview, before saving.
-        await expect.poll(() => drawn(page)).toMatchObject({ accent, bg });
+        await expect.poll(() => drawn(page)).toEqual(looks({ accent, bg }));
         await page.getByRole('button', { name: 'Save colours' }).click();
         await expect(page.getByText('Colours saved.', { exact: true })).toBeVisible();
         // Once the preview has gone, the page keeps them.
         await expect.poll(() => page.evaluate(() => document.documentElement.style.length)).toBe(0);
-        await expect.poll(() => drawn(page)).toEqual({ accent, bg, body: hexToRgb(bg) });
+        await expect.poll(() => drawn(page)).toEqual(looks({ accent, bg }));
       };
 
       await test.step('the first colours, saved, stay on the page and on the next admin page', async () => {
         await save(first);
         await page.getByRole('link', { name: 'Films', exact: true }).click();
         await expect(page.getByRole('heading', { level: 1, name: 'Films' })).toBeVisible();
-        expect(await drawn(page)).toEqual({ ...first, body: hexToRgb(first.bg) });
+        expect(await drawn(page)).toEqual(looks(first));
       });
 
       await test.step("a viewer's page is drawn in them, from the style the server wrote", async () => {
@@ -125,25 +141,32 @@ test("the cinema's colours, saved in Settings, show in the admin at once and on 
         expect((await answer).headers()['content-security-policy']).toMatch(/style-src 'self' 'sha256-[A-Za-z0-9+/]+=*'/);
         await expect(viewer.getByRole('heading', { level: 1, name: film.title })).toBeVisible();
         await expect(viewer.locator('style#theme')).toHaveCount(1);
-        expect(await drawn(viewer)).toEqual({ ...first, body: hexToRgb(first.bg) });
-        // And the button that takes the accent.
-        expect(await playButton(viewer).evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(hexToRgb(first.accent));
+        expect(await drawn(viewer, 'body')).toMatchObject({ bg: first.bg, body: hexToRgb(first.bg) });
+        // And a lit block (the main button's words, under the card on the sign-in
+        // page), which takes a little of the accent rather than all of it: #4ab0e8 into
+        // the warm white.
+        expect(looks(first).lit).toBe(hexToRgb(FIRST_LIT));
+        await viewer.goto('/signin');
+        await expect(viewer.getByRole('button', { name: 'Sign in with a passkey' })).toBeEnabled();
+        expect(await drawn(viewer, '.fl-cardbtn__label')).toEqual(looks(first));
       });
 
       await test.step('reloaded, the admin has the server’s style; saving again changes it in place', async () => {
         await page.goto('/admin/settings');
         await expect(page.locator('style#theme')).toHaveCount(1);
-        expect(await drawn(page)).toEqual({ ...first, body: hexToRgb(first.bg) });
+        // (Polled: the menu is drawn once the back office has checked its session.)
+        await expect.poll(() => drawn(page)).toEqual(looks(first));
         await save(second);
         await page.reload();
-        expect(await drawn(page)).toEqual({ ...second, body: hexToRgb(second.bg) });
+        await expect.poll(() => drawn(page)).toEqual(looks(second));
       });
 
       await test.step("back to Open Matte's colours", async () => {
         await page.getByRole('button', { name: "Back to Open Matte's colours" }).click();
         await page.getByRole('button', { name: 'Save colours' }).click();
         await expect(page.getByText('Colours saved.', { exact: true })).toBeVisible();
-        await expect.poll(() => drawn(page)).toEqual({ accent: DEFAULT_COLORS.accentColor, bg: DEFAULT_COLORS.backgroundColor, body: hexToRgb(DEFAULT_COLORS.backgroundColor) });
+        // Open Matte's own accent leaves the lit blocks the room's warm white.
+        await expect.poll(() => drawn(page)).toEqual({ lit: hexToRgb('#e9dfc9'), bg: DEFAULT_COLORS.backgroundColor, body: hexToRgb(DEFAULT_COLORS.backgroundColor) });
       });
     } finally {
       await defaultColors();
@@ -182,6 +205,7 @@ test("only the admin's pages allow TMDB's image server, and signing in on the wa
     await signingIn.getByRole('button', { name: 'Sign in with a passkey' }).click();
     expect(policyOf(await loaded)).toMatch(ADMIN_IMAGES);
     await expect(signingIn).toHaveURL((url) => url.pathname === next);
+    await signingIn.getByRole('tab', { name: 'Details' }).click();
     await expect(signingIn.getByRole('button', { name: /^(Find details|Change match)…$/ })).toBeVisible();
   });
 });
@@ -191,7 +215,7 @@ test("the header's Admin button loads the admin as a page of its own, so Find de
   await asAdmin(context, baseURL);
   await page.goto('/');
   const loaded = loadOf(page, '/admin');
-  await page.locator('header').getByRole('link', { name: 'Admin' }).click();
+  await page.locator('header').getByRole('link', { name: 'Back office' }).click();
   expect(policyOf(await loaded)).toMatch(ADMIN_IMAGES);
   // On through the admin, within that page: the guard fails the test on a blocked
   // thumbnail.
@@ -264,7 +288,7 @@ test("a poster and the licences opened in a tab of their own: the browser's own 
   const ticket = await admin.issueTicket({ label: unique('Files', testInfo) });
   await page.goto(`/t/${ticket.code}`);
   await expect(page.getByRole('heading', { level: 1, name: film.title })).toBeVisible();
-  const poster = await page.locator('img.poster').first().getAttribute('src');
+  const poster = await page.locator('.fl-sleeve img').first().getAttribute('src');
   await page.goto(poster);
   await expect.poll(() => page.evaluate(() => document.images[0]?.complete && document.images[0].naturalWidth)).toBeGreaterThan(0);
 

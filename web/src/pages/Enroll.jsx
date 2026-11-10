@@ -2,29 +2,25 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api, formatDayTime } from '../api.js';
 import { enrollLink } from '../enrollLink.js';
+import { Line } from '../look/ui.jsx';
+import { hostName } from '../look/words.js';
 import MembershipCard, { loadCardFonts } from '../MembershipCard.jsx';
-import { OpenInBrowser } from '../PasskeySignIn.jsx';
+import { KeyMark, OpenInBrowser, Problem } from '../PasskeySignIn.jsx';
 import { anotherBrowserMayHelp, browserProblem, createPasskey, serverProblem, supportsPasskeys, useCeremonyOptions } from '../passkeys.js';
 import { useSite } from '../site.jsx';
+import { NarrowPage } from './tape.jsx';
 
 // Links that will never work again: the copy kept for this tab goes.
+// host: whom to ask (look/words.js hostName): only the owner sends these links.
 const DEAD_LINKS = {
-  'link-unknown': ["This link doesn't work", 'Check that you copied all of it, or ask whoever sent it for a new one.'],
-  'link-used': ['This link has been used', "This link has already been used. If that wasn't you, tell whoever sent it straight away."],
-  'link-expired': ['This link has expired', 'Ask whoever sent it for a new one.'],
-  'link-cancelled': ['This link no longer works', 'It was cancelled, perhaps because a newer link was sent. Ask whoever sent it if you need one.'],
+  'link-unknown': (host) => ["This link doesn't work", `Check that you copied all of it, or ask ${host} for a new one.`],
+  'link-used': (host) => ['This link has been used', `This link has already been used. If that wasn't you, tell ${host} straight away.`],
+  'link-expired': (host) => ['This link has expired', `Ask ${host} for a new one.`],
+  'link-cancelled': (host) => ['This link no longer works', `It was cancelled, perhaps because a newer link was sent. Ask ${host} if you need one.`],
 };
 
-const Page = ({ children }) => (
-  <div className="narrow" style={{ paddingTop: '15vh' }}>
-    {children}
-  </div>
-);
-const Title = ({ children, ...attrs }) => (
-  <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }} {...attrs}>
-    {children}
-  </h1>
-);
+const Page = NarrowPage;
+const Title = ({ children, ...attrs }) => <h1 {...attrs}>{children}</h1>;
 
 // /enroll#<token>: create a passkey from a setup or recovery link. The token is in the
 // fragment, which never reaches the server; once read, this tab keeps it (enrollLink.js).
@@ -56,7 +52,7 @@ export default function Enroll() {
   if (link.unsupported) {
     return (
       <Page>
-        <Title>Create a passkey</Title>
+        <Title>Set up your membership card</Title>
         <OpenInBrowser />
       </Page>
     );
@@ -128,7 +124,7 @@ function EnrollLink({ token }) {
         // The server took this challenge whatever happened: the next try needs a new one.
         ceremony.reload({ spent: true });
         if (err.code === 'passkey-exists') return setAlready('passkey');
-        setMessage(serverProblem(err, site?.cinemaName));
+        setMessage(serverProblem(err, hostName(site)));
       })
       .finally(() => setBusy(false));
   }
@@ -137,20 +133,24 @@ function EnrollLink({ token }) {
     // The card, back up. New: their name is written on it as it appears. A recovery
     // link (a new phone, a lost one): the same card as before, name and all.
     return (
-      <Page>
-        <Title ref={doneRef} tabIndex={-1} className="focus-target">
-          {done.again ? 'Your new passkey is ready' : 'Your membership card is ready'}
-        </Title>
-        <p className="dim">{done.again ? 'Your membership card is the same as before. Next time, sign in with the new passkey.' : 'Your passkey is ready. Next time, use it to sign in.'}</p>
+      <div className="fl-cardpage ui-w">
+        <div className="fl-cardpage__head">
+          <Title ref={doneRef} tabIndex={-1} className="focus-target">
+            {done.again ? 'Your new passkey is ready' : 'Your membership card is ready'}
+          </Title>
+          <p>{done.again ? 'Your membership card is the same as before. Next time, sign in with the new passkey.' : 'Next time, show your card: sign in with your passkey.'}</p>
+        </div>
         {done.membership && (
-          <div className="enroll-card">
+          <div className="fl-cardpage__card">
             <MembershipCard site={site} name={done.person.name} membership={done.membership} start="back" writeOn={!done.again} />
           </div>
         )}
-        <button className="btn primary" onClick={() => navigate(done.slug ? `/${done.slug}` : '/', { replace: true })}>
-          {done.film ? `Continue to ${done.film.title}` : 'Continue'}
-        </button>
-      </Page>
+        <div className="fl-cardpage__act ui-btns">
+          <button type="button" className="ui-btn ui-btn--primary ui-btn--big" onClick={() => navigate(done.slug ? `/${done.slug}` : '/', { replace: true })}>
+            {done.film ? `Continue to ${done.film.title}` : 'Continue'}
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -158,19 +158,19 @@ function EnrollLink({ token }) {
     return (
       <Page>
         <Title>Open your link again</Title>
-        <p className="dim">Open the link you were sent again: it works until a passkey has been created with it.</p>
+        <p>Open the link you were sent again: it works until a passkey has been created with it.</p>
       </Page>
     );
   }
 
   if (dead) {
-    const [title, text] = DEAD_LINKS[dead];
+    const [title, text] = DEAD_LINKS[dead](hostName(site));
     return (
       <Page>
         <Title>{title}</Title>
-        <p className="dim">{text}</p>
+        <p>{text}</p>
         {dead === 'link-used' && (
-          <p className="dim">
+          <p>
             If it was you, <Link to="/signin">sign in</Link> with your passkey.
           </p>
         )}
@@ -182,14 +182,16 @@ function EnrollLink({ token }) {
     return (
       <Page>
         <Title>You already have a passkey</Title>
-        <p className="dim">
+        <p>
           {already === 'device'
             ? "This phone or computer already has your passkey, so you don't need this link: sign in instead."
             : "That passkey is already set up here, so you don't need this link: sign in instead."}
         </p>
-        <Link to="/signin" className="btn primary">
-          Sign in
-        </Link>
+        <div className="ui-btns">
+          <Link to="/signin" className="ui-btn ui-btn--primary">
+            Sign in
+          </Link>
+        </div>
       </Page>
     );
   }
@@ -199,13 +201,15 @@ function EnrollLink({ token }) {
       <Page>
         {ceremony.error ? (
           <>
-            <div className="notice bad">{serverProblem(ceremony.error, site?.cinemaName)}</div>
-            <button className="btn primary" onClick={ceremony.reload} disabled={ceremony.loading}>
-              Try again
-            </button>
+            <Problem message={serverProblem(ceremony.error, hostName(site))} />
+            <div className="ui-btns">
+              <button type="button" className="ui-btn ui-btn--primary" onClick={ceremony.reload} disabled={ceremony.loading}>
+                Try again
+              </button>
+            </div>
           </>
         ) : (
-          <p className="dim">Opening your link…</p>
+          <p role="status">Opening your link…</p>
         )}
       </Page>
     );
@@ -218,24 +222,27 @@ function EnrollLink({ token }) {
         {info.purpose === 'setup' ? 'Welcome' : 'Welcome back'}, {name}
       </Title>
       <p>
-        Create a passkey to sign in to {site?.cinemaName || 'this cinema'}
-        {info.film ? `, then go on to ${info.film.title}` : ''}. Your phone or computer keeps it and unlocks it with Face ID, a fingerprint or
-        your screen lock. No password, no email address.
+        Create a passkey to open your membership card at {site?.cinemaName || 'this video shop'}
+        {info.film ? `, then go on to ${info.film.title}` : ''}. Your phone or computer keeps it and unlocks it with Face ID, a fingerprint or your
+        screen lock. No password, no email address.
       </p>
       {info.reset && (
-        <div className="notice warn">
-          Before you continue: if your old phone or computer was lost or stolen, remove it from your Apple ID, Google account or password manager first. A new
-          passkey would otherwise reach it too.
-        </div>
+        <Line kind="warn" lead="Before you continue:">
+          if your old phone or computer was lost or stolen, remove it from your Apple Account, Google account or password manager first. A new passkey
+          would otherwise reach it too.
+        </Line>
       )}
-      {message && <div className="notice bad">{message}</div>}
-      <button className="btn primary big" onClick={create} disabled={busy || ceremony.spent}>
-        {busy ? 'Creating…' : 'Create a passkey'}
-      </button>
+      {message && <Problem message={message} />}
+      <div className="ui-btns">
+        <button type="button" className="ui-btn ui-btn--primary ui-btn--big" onClick={create} disabled={busy || ceremony.spent}>
+          <KeyMark />
+          {busy ? 'Creating…' : 'Create a passkey'}
+        </button>
+      </div>
       {/* The fragment has gone from the address, so Copy link puts the whole link back together. */}
       {refusedHere && <OpenInBrowser refused link={`${window.location.origin}/enroll#${token}`} />}
-      <p className="dim" style={{ marginTop: '1.2rem' }}>
-        This link works once, until {formatDayTime(info.expiresAt)}. Not {name}? Stop here and let whoever sent it know.
+      <p className="fl-small">
+        This link works once, until {formatDayTime(info.expiresAt)}. Not {name}? Stop here and let {hostName(site)} know.
       </p>
     </Page>
   );

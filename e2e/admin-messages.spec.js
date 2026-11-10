@@ -25,7 +25,7 @@ test('the sign-in form says the password is wrong only when it is', async ({ pag
     return route.fulfill(body ? { status: answer, json: body } : { status: answer, contentType: 'text/html', body: '<h1>Bad gateway</h1>' });
   });
   await page.goto('/admin');
-  await page.getByLabel('Admin password').fill('not the password');
+  await page.getByLabel('Back office password').fill('not the password');
 
   const WRONG = 'That password is not right.';
   const UNREACHED = "Couldn't sign in just now. Check your connection and try again in a moment.";
@@ -35,11 +35,11 @@ test('the sign-in form says the password is wrong only when it is', async ({ pag
     const sent = page.waitForRequest('**/api/admin/login');
     await page.getByRole('button', { name: 'Sign in' }).click();
     await sent;
-    await expect(page.locator('.login .notice.bad'), String(status)).toHaveText(message);
+    await expect(page.locator('.admin-login [role="alert"]'), String(status)).toHaveText(message);
   }
 });
 
-test('giving a ticket to someone disabled since the page opened says so in words', async ({ page, context, baseURL }, testInfo) => {
+test('giving a tape to someone whose card was turned off since the page opened says so in words', async ({ page, context, baseURL }, testInfo) => {
   await asAdmin(context, baseURL);
   const person = await admin.newPerson(unique('Dana', testInfo));
   const ticket = await admin.issueTicket({ label: unique('Give', testInfo) });
@@ -49,7 +49,7 @@ test('giving a ticket to someone disabled since the page opened says so in words
   await admin.post(`/api/admin/people/${person.id}/disable`);
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Give', exact: true }).click();
-  await expect(page.locator('.notice.bad')).toHaveText("They're disabled: enable them on their page before giving them a ticket.");
+  await expect(page.locator('.ui-line--bad')).toHaveText('Their card is turned off: turn it back on, on their page, before giving them a tape.');
   await expect(page.getByText('Anyone with the link.', { exact: true })).toBeVisible();
 });
 
@@ -58,6 +58,8 @@ test('Reset to film.json appears once a field is edited, and puts it back', asyn
   test.skip(testInfo.project.name !== 'chromium', 'edits a film every browser shares, so it runs in the chromium project only');
   await asAdmin(context, baseURL);
   await page.goto(`/admin/films/${secondFilm.id}`);
+  // The details are the film page's second tab.
+  await page.getByRole('tab', { name: 'Details' }).click();
   const reset = page.getByRole('button', { name: 'Reset to film.json' });
   const country = page.getByRole('textbox', { name: /^Country/ });
   await expect(country).toHaveValue('');
@@ -66,7 +68,7 @@ test('Reset to film.json appears once a field is edited, and puts it back', asyn
   await country.fill('Testland');
   await page.getByRole('button', { name: 'Save details' }).click();
   await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible();
-  await expect(page.locator('label.field').filter({ has: country }).locator('.edited')).toHaveText('edited here');
+  await expect(page.locator('.ui-field').filter({ has: country }).locator('.of-src')).toHaveText('edited here');
   await expect(reset).toBeVisible();
 
   page.once('dialog', (dialog) => {

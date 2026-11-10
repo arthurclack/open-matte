@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, formatAgo, formatDateTime, formatDayTime, formatMonthYear, plural } from '../api.js';
+import { Line } from '../look/ui.jsx';
 import { groupNumber } from '../membershipCard.js';
 import { CreatedLink, PasskeysProblem, PersonBadge, peopleError } from './People.jsx';
 import { TicketTable } from './Tickets.jsx';
-import { ErrorNote, describeEvent, linkLifetime, useAction, useLoad } from './ui.jsx';
+import { Back, DoneNote, ErrorNote, Head, Mark, Table, describeEvent, linkLifetime, useAction, useLoad } from './ui.jsx';
 
 const SETUP_HOURS = [1, 24, 72, 168];
 const RECOVERY_HOURS = [1, 24];
@@ -23,6 +24,7 @@ export default function PersonDetail() {
   const [notice, setNotice] = useState(null);
   const [form, setForm] = useState(null);
   const action = useAction();
+  const fid = useId();
 
   useEffect(() => {
     setPanel(null);
@@ -43,10 +45,10 @@ export default function PersonDetail() {
   if (!p || !form) return null;
 
   const name = p.name;
-  const cinema = settings.data?.cinemaName || 'the cinema';
+  const shop = settings.data?.cinemaName || 'the shop';
 
-  // Actions answer with the person as it now is, or with a count or a link (then
-  // the person is fetched again). Either way there is new activity.
+  // Actions answer with the member as they now are, or with a count or a link (then
+  // the member is fetched again). Either way there is new activity.
   async function act(fn, done) {
     setNotice(null);
     const r = await action.run(fn);
@@ -55,7 +57,7 @@ export default function PersonDetail() {
     else reload();
     done?.(r);
     events.reload();
-    tickets.reload(); // disabling or enabling changes how their tickets show
+    tickets.reload(); // turning a card off or on changes how their tapes show
   }
 
   const createLink = (body) =>
@@ -82,8 +84,8 @@ export default function PersonDetail() {
 
   function disable() {
     const text =
-      `Disable ${name}? ${name} is signed out everywhere and can't sign in, and tickets only for ${name} stop working from the next request. ` +
-      "Tickets for anyone with the link aren't affected. Disabling doesn't remove passkeys: for a lost or stolen device, use Reset after loss.";
+      `Turn ${name}'s card off? ${name} is signed out everywhere and can't sign in, and tapes only for ${name} stop working from the next request. ` +
+      `Tapes for anyone with the link aren't affected. It doesn't remove passkeys: for a lost or stolen device, take back the keys instead (Help ${name} sign in again).`;
     if (!window.confirm(text)) return;
     act(() => api.post(`/api/admin/people/${p.id}/disable`));
   }
@@ -115,264 +117,265 @@ export default function PersonDetail() {
 
   return (
     <>
-      <p style={{ margin: '0 0 0.6rem' }}>
-        <Link to="/admin/people" className="dim">
-          ← People
-        </Link>
-      </p>
-      <div className="page-head">
-        <div>
-          <h1>{name}</h1>
-          <div className="row" style={{ gap: '0.5rem' }}>
-            <PersonBadge person={p} />
-            {p.note && <span className="dim">{p.note}</span>}
-          </div>
-        </div>
-        <div className="row">
-          {!p.disabled &&
-            (p.setUp ? (
-              <button className="btn primary" onClick={() => setPanel(panel === 'help' ? null : 'help')} disabled={action.busy}>
-                Help {name} sign in again
+      <Back to="/admin/people">Members</Back>
+      <Head
+        title={name}
+        actions={
+          <>
+            {!p.disabled &&
+              (p.setUp ? (
+                <button type="button" className="ui-btn ui-btn--primary" onClick={() => setPanel(panel === 'help' ? null : 'help')} disabled={action.busy}>
+                  Help {name} sign in again
+                </button>
+              ) : (
+                <button type="button" className="ui-btn ui-btn--primary" onClick={() => setPanel(panel === 'setup' ? null : 'setup')} disabled={action.busy}>
+                  Create a setup link
+                </button>
+              ))}
+            {!p.disabled && (
+              <Link className="ui-btn" to={`/admin/tickets?person=${p.id}`}>
+                Lend {name} a tape
+              </Link>
+            )}
+            <button type="button" className="ui-btn" onClick={signOutEverywhere} disabled={action.busy || !p.browsers.length}>
+              Sign out everywhere
+            </button>
+            {p.disabled ? (
+              <button type="button" className="ui-btn" onClick={enable} disabled={action.busy}>
+                Turn the card back on
               </button>
             ) : (
-              <button className="btn primary" onClick={() => setPanel(panel === 'setup' ? null : 'setup')} disabled={action.busy}>
-                Create a setup link
+              <button type="button" className="ui-btn ui-btn--danger" onClick={disable} disabled={action.busy}>
+                Turn the card off
               </button>
-            ))}
-          {!p.disabled && (
-            <Link className="btn" to={`/admin/tickets?person=${p.id}`}>
-              Issue a ticket for {name}
-            </Link>
-          )}
-          <button className="btn" onClick={signOutEverywhere} disabled={action.busy || !p.browsers.length}>
-            Sign out everywhere
-          </button>
-          {p.disabled ? (
-            <button className="btn" onClick={enable} disabled={action.busy}>
-              Enable
-            </button>
-          ) : (
-            <button className="btn danger" onClick={disable} disabled={action.busy}>
-              Disable
-            </button>
-          )}
+            )}
+          </>
+        }
+      >
+        <div className="of-marks">
+          <PersonBadge person={p} />
+          {p.note && <span className="of-fact">{p.note}</span>}
         </div>
-      </div>
+      </Head>
 
       <PasskeysProblem settings={settings.data} />
       <ErrorNote error={peopleError(action.error)} />
       {error && <ErrorNote error={peopleError(error)} />}
-      {notice && <div className="notice good">{notice}</div>}
+      <DoneNote>{notice}</DoneNote>
       {p.disabled && (
-        <div className="notice">
-          Disabled {formatDateTime(p.disabledAt)}. {name} can't sign in, and no links can be made until you enable them again.
-        </div>
+        <Line kind="info">
+          Card turned off {formatDateTime(p.disabledAt)}. {name} can't sign in, and no links can be made until you turn it back on.
+        </Line>
       )}
 
-      {created && <CreatedLink created={created} name={name} cinema={cinema} onDone={() => setCreated(null)} />}
+      {created && <CreatedLink created={created} name={name} cinema={shop} onDone={() => setCreated(null)} />}
 
-      {panel === 'setup' && (
-        <SetupLinkPanel person={p} busy={action.busy} onCreate={(hours) => createLink({ hours })} onClose={() => setPanel(null)} />
-      )}
+      {panel === 'setup' && <SetupLinkPanel person={p} busy={action.busy} onCreate={(hours) => createLink({ hours })} onClose={() => setPanel(null)} />}
       {panel === 'help' && (
-        <HelpSignInPanel
-          person={p}
-          busy={action.busy}
-          onCreate={(body) => createLink({ ...body, confirmedContact: true })}
-          onClose={() => setPanel(null)}
-        />
+        <HelpSignInPanel person={p} busy={action.busy} onCreate={(body) => createLink({ ...body, confirmedContact: true })} onClose={() => setPanel(null)} />
       )}
 
       {p.linkWaiting && (
-        <div className="notice">
+        <Line kind="warn">
           A {p.linkWaiting.purpose} link is waiting: created {formatAgo(p.linkWaiting.createdAt)},{' '}
           {p.linkWaiting.openedAt ? (
             <>
-              opened {formatAgo(p.linkWaiting.openedAt)} <span className="faint">(perhaps a link scanner)</span>
+              opened {formatAgo(p.linkWaiting.openedAt)} <span className="of-faint">(perhaps a link scanner)</span>
             </>
           ) : (
             'not opened yet'
           )}
-          , works until {formatDayTime(p.linkWaiting.expiresAt)}.{' '}
-          <button className="linklike" onClick={cancelLink} disabled={action.busy}>
-            Cancel it
-          </button>
-        </div>
+          , works until {formatDayTime(p.linkWaiting.expiresAt)}.
+          <div className="ui-btns">
+            <button type="button" className="ui-btn ui-btn--small" onClick={cancelLink} disabled={action.busy}>
+              Cancel it
+            </button>
+          </div>
+        </Line>
       )}
 
-      <div className="grid-2" style={{ marginTop: '1.5rem' }}>
-        <div className="card">
-          <dl className="kv">
-            <dt>Added</dt>
-            <dd>{formatDateTime(p.createdAt)}</dd>
-            {/* What their membership card says. Printed on a card, not a key: nothing accepts it. */}
-            {p.membership && (
-              <>
-                <dt>Membership number</dt>
-                <dd className="nowrap">{groupNumber(p.membership.number)}</dd>
-                <dt>Member since</dt>
-                <dd>{formatMonthYear(p.membership.since)}</dd>
-              </>
-            )}
-            <dt>Passkeys</dt>
-            <dd>{p.passkeys.length || (p.setUp ? 'None' : 'None yet')}</dd>
-            <dt>Signed in on</dt>
-            <dd>{plural(p.browsers.length, 'browser')}</dd>
-            <dt>Last signed in</dt>
-            <dd>{p.lastSignedInAt ? formatDateTime(p.lastSignedInAt) : 'Never'}</dd>
-          </dl>
-        </div>
-        <form className="card" onSubmit={save}>
-          <label className="field">
-            <span>Name</span>
-            <input value={form.name} onChange={set('name')} maxLength={80} required />
-            <small>They'll see it, and their password manager stores it. Changing it here doesn't change passkeys already saved.</small>
-          </label>
-          <label className="field">
-            <span>Note</span>
-            <input value={form.note} onChange={set('note')} maxLength={1000} />
-            <small>Only you see this.</small>
-          </label>
-          <button className="btn primary" disabled={action.busy || !form.name.trim()}>
-            Save changes
-          </button>
+      <div className="of-split">
+        <dl className="of-kv">
+          <dt>Added</dt>
+          <dd>{formatDateTime(p.createdAt)}</dd>
+          {/* What their membership card says. Printed on a card, not a key: nothing accepts it. */}
+          {p.membership && (
+            <>
+              <dt>Membership number</dt>
+              <dd className="ui-n of-nowrap">{groupNumber(p.membership.number)}</dd>
+              <dt>Member since</dt>
+              <dd>{formatMonthYear(p.membership.since)}</dd>
+            </>
+          )}
+          <dt>Passkeys</dt>
+          <dd>{p.passkeys.length || (p.setUp ? 'None' : 'None yet')}</dd>
+          <dt>Signed in on</dt>
+          <dd>{plural(p.browsers.length, 'browser')}</dd>
+          <dt>Last signed in</dt>
+          <dd>{p.lastSignedInAt ? formatDateTime(p.lastSignedInAt) : 'Never'}</dd>
+        </dl>
+        <form className="of-box" onSubmit={save}>
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor={`${fid}-name`}>
+              Name
+            </label>
+            <input id={`${fid}-name`} className="ui-input" value={form.name} onChange={set('name')} maxLength={80} required />
+            <p className="ui-field__hint">They'll see it, and their password manager stores it. Changing it here doesn't change passkeys already saved.</p>
+          </div>
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor={`${fid}-note`}>
+              Note
+            </label>
+            <input id={`${fid}-note`} className="ui-input" value={form.note} onChange={set('note')} maxLength={1000} />
+            <p className="ui-field__hint">Only you see this.</p>
+          </div>
+          <div className="ui-btns">
+            <button className="ui-btn ui-btn--primary" disabled={action.busy || !form.name.trim()}>
+              Save changes
+            </button>
+          </div>
         </form>
       </div>
 
-      <h2>Passkeys</h2>
+      <h2 className="of-h2">Passkeys</h2>
       {p.passkeys.length === 0 ? (
-        <p className="dim">{p.setUp ? 'No passkeys at the moment.' : 'None yet. They create one with a setup link.'}</p>
+        <p className="of-p of-dim">{p.setUp ? 'No passkeys at the moment.' : 'None yet. They create one with a setup link.'}</p>
       ) : (
-        <div className="table-wrap">
-          <table className="stack">
-            <thead>
-              <tr>
-                <th>Added from</th>
-                <th>Kind</th>
-                <th>Added</th>
-                <th>Last used</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {p.passkeys.map((k) => (
-                <tr key={k.id}>
-                  <td className="card-title">{k.addedDevice || 'Unknown device'}</td>
-                  <td data-label="Kind">{k.synced ? <span className="badge good">Synced</span> : <span className="badge">This device only</span>}</td>
-                  <td data-label="Added">
-                    <span>
-                      {formatDateTime(k.addedAt)}
-                      {k.viaLink && <span className="faint"> · {k.viaLink === 'recovery' ? 'with a recovery link' : 'with the setup link'}</span>}
-                    </span>
-                  </td>
-                  <td className="faint nowrap" data-label="Last used">{k.lastUsedAt ? formatAgo(k.lastUsedAt) : 'Never'}</td>
-                  <td>
-                    <button className="btn small danger" onClick={() => removePasskey(k)} disabled={action.busy}>
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          head={
+            <>
+              <th>Added from</th>
+              <th>Kind</th>
+              <th>Added</th>
+              <th>Last used</th>
+              <th>
+                <span className="visually-hidden">Remove</span>
+              </th>
+            </>
+          }
+        >
+          {p.passkeys.map((k) => (
+            <tr key={k.id}>
+              <td className="ui-title">{k.addedDevice || 'Unknown device'}</td>
+              <td data-label="Kind">{k.synced ? <Mark tone="done">Synced</Mark> : <Mark tone="off">This device only</Mark>}</td>
+              <td data-label="Added">
+                <span className="of-cell">
+                  <time>{formatDateTime(k.addedAt)}</time>
+                  {k.viaLink && <small>{k.viaLink === 'recovery' ? 'with a recovery link' : 'with the setup link'}</small>}
+                </span>
+              </td>
+              <td className="ui-when" data-label="Last used">
+                {k.lastUsedAt ? formatAgo(k.lastUsedAt) : 'Never'}
+              </td>
+              <td className="of-td-btn">
+                <button type="button" className="ui-btn ui-btn--small ui-btn--danger" onClick={() => removePasskey(k)} disabled={action.busy}>
+                  Remove
+                </button>
+              </td>
+            </tr>
+          ))}
+        </Table>
       )}
 
-      <h2>Signed in on</h2>
+      <h2 className="of-h2">Signed in on</h2>
       {p.browsers.length === 0 ? (
-        <p className="dim">Not signed in anywhere.</p>
+        <p className="of-p of-dim">Not signed in anywhere.</p>
       ) : (
-        <div className="table-wrap">
-          <table className="stack">
-            <thead>
-              <tr>
-                <th>Device</th>
-                <th>Signed in</th>
-                <th>Last seen</th>
-                <th>With the passkey from</th>
-              </tr>
-            </thead>
-            <tbody>
-              {p.browsers.map((b, i) => (
-                <tr key={`${b.signedInAt}-${i}`}>
-                  <td className="card-title">{b.device || 'Unknown device'}</td>
-                  <td data-label="Signed in">{formatDateTime(b.signedInAt)}</td>
-                  <td className="faint" data-label="Last seen">{formatAgo(b.lastSeenAt)}</td>
-                  <td className="faint" data-label="With the passkey from">{passkeyFrom(b.passkeyId) || '–'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          head={
+            <>
+              <th>Device</th>
+              <th>Signed in</th>
+              <th>Last seen</th>
+              <th>With the passkey from</th>
+            </>
+          }
+        >
+          {p.browsers.map((b, i) => (
+            <tr key={`${b.signedInAt}-${i}`}>
+              <td className="ui-title">{b.device || 'Unknown device'}</td>
+              <td className="ui-when" data-label="Signed in">
+                {formatDateTime(b.signedInAt)}
+              </td>
+              <td className="ui-when" data-label="Last seen">
+                {formatAgo(b.lastSeenAt)}
+              </td>
+              <td className="of-faint" data-label="With the passkey from">
+                {passkeyFrom(b.passkeyId) || '–'}
+              </td>
+            </tr>
+          ))}
+        </Table>
       )}
 
       {p.viewing?.length > 0 && (
         <>
-          <h2>Films</h2>
+          <h2 className="of-h2">Films</h2>
           <FilmsWatched person={p} />
         </>
       )}
 
-      <h2>Tickets</h2>
+      <h2 className="of-h2">Tapes</h2>
       <ErrorNote error={tickets.error} />
       {tickets.data?.length > 0 && <TicketTable tickets={tickets.data} showFilm showKind={false} />}
-      {tickets.data?.length === 0 && <p className="dim">No tickets only for {name} yet. Tickets for anyone with the link aren't listed here.</p>}
+      {tickets.data?.length === 0 && <p className="of-p of-dim">No tapes only for {name} yet. Tapes for anyone with the link aren't listed here.</p>}
 
-      <h2>Links</h2>
+      <h2 className="of-h2">Links</h2>
       {p.links.length === 0 ? (
-        <p className="dim">No setup or recovery links yet.</p>
+        <p className="of-p of-dim">No setup or recovery links yet.</p>
       ) : (
-        <div className="table-wrap">
-          <table className="stack">
-            <thead>
-              <tr>
-                <th>Link</th>
-                <th>Created</th>
-                <th>Opened</th>
-                <th>What happened</th>
-              </tr>
-            </thead>
-            <tbody>
-              {p.links.map((l) => (
-                <tr key={l.id}>
-                  <td className="card-title">{l.purpose === 'setup' ? 'Setup link' : l.reset ? 'Recovery link, after a loss' : 'Recovery link'}</td>
-                  <td className="nowrap" data-label="Created">{formatDateTime(l.createdAt)}</td>
-                  <td className="faint" data-label="Opened">{l.openedAt ? formatDateTime(l.openedAt) : 'Not opened'}</td>
-                  <td data-label="What happened">
-                    <LinkOutcome link={l} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          head={
+            <>
+              <th>Link</th>
+              <th>Created</th>
+              <th>Opened</th>
+              <th>What happened</th>
+            </>
+          }
+        >
+          {p.links.map((l) => (
+            <tr key={l.id}>
+              <td className="ui-title">{l.purpose === 'setup' ? 'Setup link' : l.reset ? 'Recovery link, keys taken back' : 'Recovery link'}</td>
+              <td className="ui-when" data-label="Created">
+                {formatDateTime(l.createdAt)}
+              </td>
+              <td className="ui-when" data-label="Opened">
+                {l.openedAt ? formatDateTime(l.openedAt) : 'Not opened'}
+              </td>
+              <td data-label="What happened">
+                <LinkOutcome link={l} />
+              </td>
+            </tr>
+          ))}
+        </Table>
       )}
 
-      <h2>Activity</h2>
+      <h2 className="of-h2">Activity</h2>
       {events.data?.events.length ? (
-        <div className="table-wrap">
-          <table className="stack">
-            <tbody>
-              {events.data.events.map((e) => (
-                <tr key={e.id}>
-                  <td className="nowrap faint" data-label="When">{formatDateTime(e.at)}</td>
-                  <td className="card-title">{describeEvent(e)}</td>
-                  <td data-label="Film">{e.filmId ? <Link to={`/admin/films/${e.filmId}`}>{e.filmTitle}</Link> : ''}</td>
-                  <td className="faint" data-label="Device">{e.device}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          {events.data.events.map((e) => (
+            <tr key={e.id}>
+              <td className="ui-when" data-label="When">
+                {formatDateTime(e.at)}
+              </td>
+              <td className="ui-title">{describeEvent(e)}</td>
+              <td data-label="Film">{e.filmId ? <Link to={`/admin/films/${e.filmId}`}>{e.filmTitle}</Link> : ''}</td>
+              <td className="of-faint" data-label="Device">
+                {e.device}
+              </td>
+            </tr>
+          ))}
+        </Table>
       ) : (
-        <p className="dim">
+        <p className="of-p of-dim">
           {p.lastSignedInAt || p.viewing?.length
             ? 'None kept: older events are cleared after a while (Settings, Keeping records).'
             : 'Nothing yet. Links, sign-ins and passkeys show up here.'}
         </p>
       )}
       {events.data?.next && (
-        <p style={{ marginTop: '1rem' }}>
+        <p className="of-p of-gap">
           <Link to={`/admin/activity?person=${p.id}`}>All of {name}'s activity</Link>
         </p>
       )}
@@ -380,45 +383,46 @@ export default function PersonDetail() {
   );
 }
 
-// Each film they have a ticket of their own for, newest first. The server works it out
-// from those tickets and their screenings, so clearing old activity never changes it.
+// Each film they have a tape of their own for, newest first. The server works it out
+// from those tapes and their plays, so clearing old activity never changes it.
 function FilmsWatched({ person: p }) {
-  const when = (ms) => (ms ? formatDateTime(ms) : <span className="faint">Not yet</span>);
+  const when = (ms) => (ms ? formatDateTime(ms) : <span className="of-faint">Not yet</span>);
   return (
-    <div className="table-wrap">
-      <table className="stack">
-        <thead>
-          <tr>
-            <th>Film</th>
-            <th>Opened</th>
-            <th>First played</th>
-            <th>Finished</th>
-          </tr>
-        </thead>
-        <tbody>
-          {p.viewing.map((v) => (
-            <tr key={v.film.id}>
-              <td className="card-title">
-                <Link to={`/admin/films/${v.film.id}`}>{v.film.title}</Link>
-                {v.tickets > 1 && <span className="faint" style={{ fontWeight: 400 }}> · {plural(v.tickets, 'ticket')}</span>}
-              </td>
-              <td className="nowrap" data-label="Opened">{when(v.openedAt)}</td>
-              <td data-label="First played">
-                {v.playedAt ? (
-                  <span>
-                    {formatDateTime(v.playedAt)} ·{' '}
-                    <Link to={`/admin/activity?person=${p.id}&film=${v.film.id}&kind=viewing`}>{plural(v.screenings, 'screening')}</Link>
-                  </span>
-                ) : (
-                  when(null)
-                )}
-              </td>
-              <td className="nowrap" data-label="Finished">{when(v.finishedAt)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table
+      head={
+        <>
+          <th>Film</th>
+          <th>Opened</th>
+          <th>First played</th>
+          <th>Finished</th>
+        </>
+      }
+    >
+      {p.viewing.map((v) => (
+        <tr key={v.film.id}>
+          <td className="ui-title">
+            <Link to={`/admin/films/${v.film.id}`}>{v.film.title}</Link>
+            {v.tickets > 1 && <span className="of-kind">{plural(v.tickets, 'tape')}</span>}
+          </td>
+          <td className="ui-when" data-label="Opened">
+            {when(v.openedAt)}
+          </td>
+          <td data-label="First played">
+            {v.playedAt ? (
+              <span className="of-cell">
+                <time>{formatDateTime(v.playedAt)}</time>
+                <Link to={`/admin/activity?person=${p.id}&film=${v.film.id}&kind=viewing`}>{plural(v.screenings, 'play')}</Link>
+              </span>
+            ) : (
+              when(null)
+            )}
+          </td>
+          <td className="ui-when" data-label="Finished">
+            {when(v.finishedAt)}
+          </td>
+        </tr>
+      ))}
+    </Table>
   );
 }
 
@@ -426,54 +430,60 @@ function LinkOutcome({ link: l }) {
   // Where a link was used matters most: it's who now has a passkey.
   if (l.usedAt) {
     return (
-      <strong>
-        Used {formatDayTime(l.usedAt)}
-        {l.usedDevice ? ` from ${l.usedDevice}` : ''}
-      </strong>
+      <Mark tone="done">
+        <b>
+          Used {formatDayTime(l.usedAt)}
+          {l.usedDevice ? ` from ${l.usedDevice}` : ''}
+        </b>
+      </Mark>
     );
   }
-  if (l.cancelledAt) return <span className="faint">Cancelled {formatDateTime(l.cancelledAt)}</span>;
-  if (l.expiresAt <= Date.now()) return <span className="faint">Expired {formatDateTime(l.expiresAt)}</span>;
-  return <span>Waiting: works until {formatDayTime(l.expiresAt)}</span>;
+  if (l.cancelledAt) return <Mark tone="off">Cancelled {formatDateTime(l.cancelledAt)}</Mark>;
+  if (l.expiresAt <= Date.now()) return <Mark tone="off">Expired {formatDateTime(l.expiresAt)}</Mark>;
+  return <Mark tone="warn">Waiting: works until {formatDayTime(l.expiresAt)}</Mark>;
 }
 
 function SetupLinkPanel({ person: p, busy, onCreate, onClose }) {
   const [hours, setHours] = useState(72);
+  const id = useId();
   return (
-    <div className="card" style={{ maxWidth: 720, marginBottom: '1rem' }}>
-      <h2 style={{ margin: '0 0 0.6rem', fontSize: '1.15rem' }}>Create a setup link for {p.name}</h2>
-      <p className="dim">
-        {p.name} opens it on their phone or computer and creates a passkey. It works once. Send it on a contact you know is theirs.
-      </p>
-      <label className="field" style={{ maxWidth: 240 }}>
-        <span>Works for</span>
-        <select value={hours} onChange={(e) => setHours(Number(e.target.value))}>
+    <section className="of-box of-w" aria-labelledby={`${id}-h`}>
+      <h2 className="of-h2" id={`${id}-h`}>
+        Create a setup link for {p.name}
+      </h2>
+      <p className="of-p of-dim">{p.name} opens it on their phone or computer and creates a passkey. It works once. Send it on a contact you know is theirs.</p>
+      <div className="ui-field" style={{ maxWidth: 240 }}>
+        <label className="ui-field__label" htmlFor={`${id}-for`}>
+          Works for
+        </label>
+        <select id={`${id}-for`} className="ui-select" value={hours} onChange={(e) => setHours(Number(e.target.value))}>
           {SETUP_HOURS.map((h) => (
             <option key={h} value={h}>
               {linkLifetime(h)}
             </option>
           ))}
         </select>
-      </label>
-      {p.linkWaiting && <p className="dim">The link that's waiting stops working.</p>}
-      <div className="row">
-        <button className="btn primary" onClick={() => onCreate(hours)} disabled={busy}>
+      </div>
+      {p.linkWaiting && <p className="of-p of-dim">The link that's waiting stops working.</p>}
+      <div className="ui-btns">
+        <button type="button" className="ui-btn ui-btn--primary" onClick={() => onCreate(hours)} disabled={busy}>
           Create link
         </button>
-        <button className="btn" onClick={onClose}>
+        <button type="button" className="ui-btn ui-btn--quiet" onClick={onClose}>
           Cancel
         </button>
       </div>
-    </div>
+    </section>
   );
 }
 
-// Recovery: either another passkey for a new device, or a reset after a loss,
-// which cuts the old passkeys and browsers off now rather than when the link is used.
+// Recovery: either another passkey for a new device, or taking back the keys after a
+// loss, which cuts the old passkeys and browsers off now rather than when the link is used.
 function HelpSignInPanel({ person: p, busy, onCreate, onClose }) {
   const [confirmed, setConfirmed] = useState(false);
   const [hours, setHours] = useState(1);
   const [reset, setReset] = useState(false);
+  const id = useId();
   const name = p.name;
   const keys = p.passkeys.length;
   const browsers = p.browsers.length;
@@ -483,68 +493,71 @@ function HelpSignInPanel({ person: p, busy, onCreate, onClose }) {
   if (keys && browsers) resetText = `Removes ${theirPasskeys(name, keys)} and signs ${name} out of ${plural(browsers, 'browser')} now, before the link is used.`;
   else if (keys) resetText = `Removes ${theirPasskeys(name, keys)} now, before the link is used. ${name} isn't signed in anywhere.`;
   else if (browsers) resetText = `Signs ${name} out of ${plural(browsers, 'browser')} now, before the link is used.`;
-  else resetText = `${name} has no passkeys and isn't signed in anywhere, so there's nothing to remove.`;
+  else resetText = `${name} has no passkeys and isn't signed in anywhere, so there's nothing to take back.`;
 
   function create() {
     if (reset && (keys || browsers)) {
-      const what = [keys && `remove ${theirPasskeys(name, keys)}`, browsers && `sign ${name} out of ${plural(browsers, 'browser')}`].filter(Boolean).join(' and ');
+      const what = [keys && `take back ${theirPasskeys(name, keys)}`, browsers && `sign ${name} out of ${plural(browsers, 'browser')}`].filter(Boolean).join(' and ');
       if (!window.confirm(`This will ${what} straight away. Continue?`)) return;
     }
     onCreate({ hours, reset });
   }
 
   return (
-    <div className="card" style={{ maxWidth: 720, marginBottom: '1rem' }}>
-      <h2 style={{ margin: '0 0 0.9rem', fontSize: '1.15rem' }}>Help {name} sign in again</h2>
-      <label className="check top">
-        <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+    <section className="of-box of-w" aria-labelledby={`${id}-h`}>
+      <h2 className="of-h2" id={`${id}-h`}>
+        Help {name} sign in again
+      </h2>
+      <label className="ui-check">
+        <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} aria-describedby={`${id}-check`} />
         <span>
           I'm replying on a contact I already know is {name}'s: not a new number or account
-          <small className="faint" style={{ display: 'block', fontSize: '0.85rem' }}>
-            If someone says they've lost their phone, a quick call is the surest check.
-          </small>
+          <small id={`${id}-check`}>If someone says they've lost their phone, a quick call is the surest check.</small>
         </span>
       </label>
 
-      <div className="field">
-        <span>Works for</span>
-        <div className="row">
+      <fieldset className="ui-fieldset">
+        <legend>Works for</legend>
+        <div className="ui-btns">
           {RECOVERY_HOURS.map((h) => (
-            <label key={h} className="check" style={{ margin: 0 }}>
-              <input type="radio" name="hours" checked={hours === h} onChange={() => setHours(h)} />
-              {linkLifetime(h)}
+            <label key={h} className="ui-check">
+              <input type="radio" name={`${id}-hours`} checked={hours === h} onChange={() => setHours(h)} />
+              <span>{linkLifetime(h)}</span>
             </label>
           ))}
         </div>
-      </div>
+      </fieldset>
 
-      <label className="choice">
-        <input type="radio" name="kind" checked={!reset} onChange={() => setReset(false)} />
-        <span>
-          <strong>Add a sign-in method</strong>
-          <small>{addText}</small>
-        </span>
-      </label>
-      <label className="choice">
-        <input type="radio" name="kind" checked={reset} onChange={() => setReset(true)} />
-        <span>
-          <strong>Reset after loss</strong>
-          <small>
-            {resetText} If the device was stolen, ask {name} to remove it from their Apple ID, Google account or password manager first, or change that
-            password: a passkey saved there reaches every device still signed in to it.
-          </small>
-        </span>
-      </label>
+      <fieldset className="ui-fieldset">
+        <legend>What the link is for</legend>
+        <label className="ui-choice">
+          <input type="radio" name={`${id}-kind`} checked={!reset} onChange={() => setReset(false)} />
+          <span>
+            <b>Add a passkey</b>
+            <small>{addText}</small>
+          </span>
+        </label>
+        <label className="ui-choice">
+          <input type="radio" name={`${id}-kind`} checked={reset} onChange={() => setReset(true)} />
+          <span>
+            <b>Lost phone: take back the keys</b>
+            <small>
+              {resetText} If the device was stolen, ask {name} to remove it from their Apple Account, Google account or password manager first, or
+              change that password: a passkey saved there reaches every device still signed in to it.
+            </small>
+          </span>
+        </label>
+      </fieldset>
 
-      {p.linkWaiting && <p className="dim">The link that's waiting stops working.</p>}
-      <div className="row">
-        <button className={reset ? 'btn danger' : 'btn primary'} onClick={create} disabled={busy || !confirmed}>
-          {reset ? 'Reset and create a recovery link' : 'Create a recovery link'}
+      {p.linkWaiting && <p className="of-p of-dim">The link that's waiting stops working.</p>}
+      <div className="ui-btns">
+        <button type="button" className={reset ? 'ui-btn ui-btn--danger' : 'ui-btn ui-btn--primary'} onClick={create} disabled={busy || !confirmed}>
+          {reset ? 'Take back the keys and create a recovery link' : 'Create a recovery link'}
         </button>
-        <button className="btn" onClick={onClose}>
+        <button type="button" className="ui-btn ui-btn--quiet" onClick={onClose}>
           Cancel
         </button>
       </div>
-    </div>
+    </section>
   );
 }

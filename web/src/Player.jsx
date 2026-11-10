@@ -1,29 +1,22 @@
 import Hls from 'hls.js';
 import { createRef, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { api } from './api.js';
+import { api, formatClock } from './api.js';
 import { StepIcon } from './icons.jsx';
+import { OsdStrip, VcrMenu } from './look/crt.jsx';
 import { useMediaSession } from './mediaSession.js';
 import { scrollBehavior } from './motion.js';
+import { haltMessages, timeLeft } from './pages/tapeWords.js';
 import PlaybackHelp from './PlaybackHelp.jsx';
 import { codecName, scrub } from './playbackHelp.js';
 import { loadPrefs, savePrefs } from './playerPrefs.js';
+import { useSite } from './site.jsx';
 import { SUBTITLE_BACKGROUNDS, SUBTITLE_SIZES, audioLabel, initialAudio, initialSubtitle, languageName, menuSubtitles, showing } from './tracks.js';
 
 const HEARTBEAT_MS = 30 * 1000;
 
-const HALT_MESSAGES = {
-  'playing-elsewhere': 'This screening is now playing on another device.',
-  'screening-ended': 'This screening has ended.',
-  expired: 'This ticket has expired.',
-  revoked: 'This ticket is no longer valid.',
-  unavailable: "This film isn't available right now.",
-  unpublished: "This film isn't available right now.",
-  forbidden: 'Playback stopped: this browser is no longer allowed to stream this film.',
-  'not-found': 'This ticket is no longer valid.',
-  'signed-out': 'This browser has been signed out, so the film has stopped.',
-  unsupported: "This browser can't play this film. Try a recent version of Safari, Chrome, Edge or Firefox.",
-  error: 'Something went wrong during playback.',
-};
+// What the player says when it stops, by code: pages/tapeWords.js haltMessages. Any
+// code it doesn't know is an error.
+const HALT_CODES = new Set(Object.keys(haltMessages(null)));
 
 // Halts about playback itself, rather than the ticket or the screening: their
 // message offers Playback help.
@@ -99,7 +92,10 @@ function startPosition(position, duration) {
   return position;
 }
 
-export default function Player({ film, screening, onHalt, onReclaim }) {
+// comeBackBy: when the window to come back to this play closes (the tape's, as the film
+// page has it), for the paused strip.
+export default function Player({ film, screening, onHalt, onReclaim, comeBackBy = screening.resumableUntil }) {
+  const { site } = useSite();
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const subtitles = film.media.subtitles;
@@ -153,6 +149,10 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
   const helpRef = useRef(null);
   const helpButtonRef = useRef(null);
   const errors = useRef([]);
+  // Paused by the viewer once the film has played (not before it starts, nor at its
+  // end): the machine's strip under the picture, and where it stopped.
+  const [paused, setPaused] = useState(false);
+  const [pausedAt, setPausedAt] = useState(0);
 
   // The language being heard: the audio track's, or before the tracks are known (or with
   // the audio inside the picture's stream) the film's default audio. A forced track shows
@@ -184,7 +184,7 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
       video.load();
     }
     logError('player', code);
-    setHalted(code in HALT_MESSAGES ? code : 'error');
+    setHalted(HALT_CODES.has(code) ? code : 'error');
     if (code !== 'playing-elsewhere' && code !== 'unsupported') onHalt?.(code);
   }
 
@@ -441,6 +441,49 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     return () => video.removeEventListener('timeupdate', onTime);
   }, []);
 
+  // Paused or playing, as the video says, whatever paused it (its own controls, Space,
+  // the lock screen). Before it has played, a paused video is only loading; at the end
+  // it has stopped, not paused.
+  useEffect(() => {
+    const video = videoRef.current;
+    let played = false;
+    const onPlaying = () => {
+      played = true;
+      setPaused(false);
+    };
+    const onPlay = () => setPaused(false);
+    const onPause = () => {
+      if (!played || video.ended) return;
+      setPausedAt(video.currentTime);
+      setPaused(true);
+    };
+    const onSeeked = () => {
+      if (video.paused) setPausedAt(video.currentTime);
+    };
+    const onEnded = () => setPaused(false);
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+    video.addEventListener('seeked', onSeeked);
+    video.addEventListener('ended', onEnded);
+    return () => {
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('seeked', onSeeked);
+      video.removeEventListener('ended', onEnded);
+    };
+  }, []);
+
+  // Resume from the paused strip: the focus goes to the video, as after Play, so the
+  // keyboard carries on there.
+  function resume() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.focus({ preventScroll: true });
+    video.play().catch(() => {});
+  }
+
   // ---- report progress (not in admin preview, which has no screening)
   useEffect(() => {
     if (!screening.screeningId) return undefined;
@@ -624,25 +667,130 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
     helpButtonRef.current?.focus();
   }
 
+  const HALT = haltMessages(site);
+  // The paused strip: only while the viewer has paused the film here, and it can carry on.
+  const strip = paused && !halted;
+  // While it shows, the time left to come back is counted down: drawn again as each
+  // minute of it runs out.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!strip || !comeBackBy) return undefined;
+    let timer;
+    const wait = () => {
+      const rest = comeBackBy - Date.now();
+      if (rest <= 0) return;
+      timer = setTimeout(() => {
+        setTick((n) => n + 1);
+        wait();
+      }, (rest % 60000 || 60000) + 50);
+    };
+    wait();
+    return () => clearTimeout(timer);
+  }, [strip, comeBackBy]);
+
+  // The audio, subtitles and picture, as the paused strip's VCR menu has them: the same
+  // choices as the bar's menus, which they work through.
+  const rows = [];
+  if (audioTracks.length > 1) {
+    rows.push({ id: 'audio', label: 'Audio', value: audioTrack, options: audioTracks.map((t) => ({ value: t.id, label: t.label })), onChange: chooseAudio });
+  }
+  if (listed.length > 0) {
+    rows.push({
+      id: 'subtitles',
+      label: 'Subtitles',
+      value: subtitle,
+      options: [{ value: -1, label: forcedShowing ? 'Off · signs and foreign dialogue shown' : 'Off' }, ...listed.map((s) => ({ value: s.index, label: s.label }))],
+      onChange: chooseSubtitle,
+    });
+  }
+  if (engine === 'native') {
+    rows.push(
+      nativeChoices.length > 1
+        ? { id: 'picture', label: 'Picture', value: '-1', options: [{ value: '-1', label: 'Auto' }, ...nativeChoices.map((r) => ({ value: r.key, label: r.label }))], onChange: switchToChosen }
+        : { id: 'picture', label: 'Picture', value: 'auto', options: [{ value: 'auto', label: 'Auto' }] },
+    );
+  } else if (levels.length > 1) {
+    rows.push({
+      id: 'picture',
+      label: 'Picture',
+      value: level,
+      options: [{ value: -1, label: `Auto${level === -1 && current ? ` (${current})` : ''}` }, ...levels.map((l) => ({ value: l.index, label: l.label }))],
+      onChange: chooseLevel,
+    });
+  } else if (current) {
+    rows.push({ id: 'picture', label: 'Picture', value: 'current', options: [{ value: 'current', label: current }] });
+  }
+
+  // Subtitle size and background (Aa), beside the subtitles: in the bar, or under the
+  // paused strip.
+  const cueStyle = subtitles.length > 0 && (
+    <div className="cue-style" ref={styleRef}>
+      <button
+        ref={styleButtonRef}
+        type="button"
+        className="cue-style-button"
+        title="Subtitle style"
+        aria-expanded={styleOpen}
+        aria-controls={styleId}
+        onClick={() => setStyleOpen(!styleOpen)}
+      >
+        Aa<span className="visually-hidden"> subtitle style</span>
+      </button>
+      {styleOpen && (
+        <div id={styleId} className="cue-style-panel" role="group" aria-label="Subtitle style">
+          <fieldset>
+            <legend>Size</legend>
+            {SUBTITLE_SIZES.map((size) => (
+              <label key={size}>
+                <input type="radio" name={`${styleId}-size`} checked={cueSize === size} onChange={() => chooseCueSize(size)} />
+                {SIZE_LABELS[size]}
+              </label>
+            ))}
+          </fieldset>
+          <fieldset>
+            <legend>Background</legend>
+            {SUBTITLE_BACKGROUNDS.map((background) => (
+              <label key={background}>
+                <input type="radio" name={`${styleId}-background`} checked={cueBackground === background} onChange={() => chooseCueBackground(background)} />
+                {BACKGROUND_LABELS[background]}
+              </label>
+            ))}
+          </fieldset>
+          <p>
+            On iPhone in full screen, and on AirPlay, your device's own caption style applies (Settings <StepIcon /> Accessibility <StepIcon /> Subtitles
+            &amp; Captioning).
+          </p>
+        </div>
+      )}
+    </div>
+  );
+  const helpButton = (
+    <button ref={helpButtonRef} type="button" className="ui-btn ui-btn--quiet ui-btn--small fl-helpbtn" aria-expanded={helpOpen} aria-controls={helpId} onClick={() => setHelpOpen(!helpOpen)}>
+      Playback help
+    </button>
+  );
+  const left = timeLeft(comeBackBy);
+
   return (
     <>
-      <div className={`cues-${cueSize} cues-${cueBackground}`} style={{ position: 'relative' }}>
+      {/* The picture is never themed: nothing of the shop's lies over it. */}
+      <div className={`fl-picture cues-${cueSize} cues-${cueBackground}`}>
         <video ref={videoRef} controls playsInline preload="metadata" poster={film.backdropUrl || undefined}>
           {subtitles.map((s, i) => (
             <track key={s.url} ref={trackRefs[i]} kind="subtitles" src={s.url} srcLang={s.language} label={s.label} />
           ))}
         </video>
         {halted && (
-          <div className="player-message">
+          <div className={`player-message fl-halt${halted === 'unsupported' ? ' fl-halt--black' : ''}`}>
             <div>
-              <p>{HALT_MESSAGES[halted]}</p>
+              <p>{HALT[halted]}</p>
               {halted === 'playing-elsewhere' && (
-                <button className="btn primary" onClick={onReclaim}>
+                <button type="button" className="ui-btn ui-btn--primary" onClick={onReclaim}>
                   Watch here instead
                 </button>
               )}
               {HELP_FOR.has(halted) && (
-                <button className="linklike" onClick={showHelp}>
+                <button type="button" className="ui-btn ui-btn--quiet" onClick={showHelp}>
                   Playback help
                 </button>
               )}
@@ -650,110 +798,82 @@ export default function Player({ film, screening, onHalt, onReclaim }) {
           </div>
         )}
       </div>
-      <div className="player-bar">
-        {audioTracks.length > 1 && (
-          <label>
-            Audio
-            <select value={audioTrack ?? ''} onChange={(e) => chooseAudio(e.target.value)} disabled={Boolean(halted)}>
-              {audioTracks.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {listed.length > 0 && (
-          <label>
-            Subtitles
-            <select value={subtitle} onChange={(e) => chooseSubtitle(e.target.value)} disabled={Boolean(halted)}>
-              <option value={-1}>{forcedShowing ? 'Off · signs and foreign dialogue shown' : 'Off'}</option>
-              {listed.map((s) => (
-                <option key={s.index} value={s.index}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {subtitles.length > 0 && (
-          <div className="cue-style" ref={styleRef}>
-            <button
-              ref={styleButtonRef}
-              type="button"
-              className="cue-style-button"
-              title="Subtitle style"
-              aria-expanded={styleOpen}
-              aria-controls={styleId}
-              onClick={() => setStyleOpen(!styleOpen)}
-            >
-              Aa<span className="visually-hidden"> subtitle style</span>
-            </button>
-            {styleOpen && (
-              <div id={styleId} className="cue-style-panel" role="group" aria-label="Subtitle style">
-                <fieldset>
-                  <legend>Size</legend>
-                  {SUBTITLE_SIZES.map((size) => (
-                    <label key={size}>
-                      <input type="radio" name={`${styleId}-size`} checked={cueSize === size} onChange={() => chooseCueSize(size)} />
-                      {SIZE_LABELS[size]}
-                    </label>
-                  ))}
-                </fieldset>
-                <fieldset>
-                  <legend>Background</legend>
-                  {SUBTITLE_BACKGROUNDS.map((background) => (
-                    <label key={background}>
-                      <input type="radio" name={`${styleId}-background`} checked={cueBackground === background} onChange={() => chooseCueBackground(background)} />
-                      {BACKGROUND_LABELS[background]}
-                    </label>
-                  ))}
-                </fieldset>
-                <p>
-                  On iPhone in full screen, and on AirPlay, your device's own caption style applies (Settings <StepIcon /> Accessibility <StepIcon />{' '}
-                  Subtitles &amp; Captioning).
-                </p>
-              </div>
-            )}
+      {strip ? (
+        // Paused: the machine's strip under the picture, never over it.
+        <div className="fl-bar fl-bar--osd">
+          <OsdStrip at={formatClock(pausedAt)} onResume={resume} resumeLabel={`Resume at ${formatClock(pausedAt)}`} left={left}>
+            {rows.length > 0 && <VcrMenu rows={rows} />}
+          </OsdStrip>
+          <div className="fl-bar__ctl">
+            {cueStyle}
+            {screening.preview && <span className="badge">Preview</span>}
+            {helpButton}
           </div>
-        )}
-        <span className="spacer" />
-        {engine === 'native' ? (
-          nativeChoices.length > 1 ? (
-            <label title="Picking a quality switches to Open Matte's own player. AirPlay comes back when you reload the page.">
-              Quality
-              <select value="-1" onChange={(e) => switchToChosen(e.target.value)} disabled={Boolean(halted) && halted !== 'error'}>
-                <option value="-1">Auto</option>
-                {nativeChoices.map((r) => (
-                  <option key={r.key} value={r.key}>
-                    {r.label}
+        </div>
+      ) : (
+        <div className="player-bar fl-bar">
+          {audioTracks.length > 1 && (
+            <label>
+              Audio
+              <select className="ui-select" value={audioTrack ?? ''} onChange={(e) => chooseAudio(e.target.value)} disabled={Boolean(halted)}>
+                {audioTracks.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {listed.length > 0 && (
+            <label>
+              Subtitles
+              <select className="ui-select" value={subtitle} onChange={(e) => chooseSubtitle(e.target.value)} disabled={Boolean(halted)}>
+                <option value={-1}>{forcedShowing ? 'Off · signs and foreign dialogue shown' : 'Off'}</option>
+                {listed.map((s) => (
+                  <option key={s.index} value={s.index}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {cueStyle}
+          <span className="spacer" />
+          {engine === 'native' ? (
+            nativeChoices.length > 1 ? (
+              <label title="Picking one switches to Open Matte's own player. AirPlay comes back when you reload the page.">
+                Picture
+                <select className="ui-select" value="-1" onChange={(e) => switchToChosen(e.target.value)} disabled={Boolean(halted) && halted !== 'error'}>
+                  <option value="-1">Auto</option>
+                  {nativeChoices.map((r) => (
+                    <option key={r.key} value={r.key}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <span title="Safari's player picks the quality itself">Picture: Auto</span>
+            )
+          ) : levels.length > 1 ? (
+            <label title="Auto adjusts to your connection and screen">
+              Picture
+              <select className="ui-select" value={level} onChange={(e) => chooseLevel(e.target.value)} disabled={Boolean(halted)}>
+                <option value={-1}>Auto{level === -1 && current ? ` (${current})` : ''}</option>
+                {levels.map((l) => (
+                  <option key={l.index} value={l.index}>
+                    {l.label}
                   </option>
                 ))}
               </select>
             </label>
           ) : (
-            <span title="Safari's player picks the quality itself">Quality: Auto</span>
-          )
-        ) : levels.length > 1 ? (
-          <label title="Auto adjusts to your connection and screen">
-            Quality
-            <select value={level} onChange={(e) => chooseLevel(e.target.value)} disabled={Boolean(halted)}>
-              <option value={-1}>Auto{level === -1 && current ? ` (${current})` : ''}</option>
-              {levels.map((l) => (
-                <option key={l.index} value={l.index}>
-                  {l.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          current && <span>Quality: {current}</span>
-        )}
-        {screening.preview && <span className="badge">Preview</span>}
-        <button ref={helpButtonRef} className="linklike" aria-expanded={helpOpen} aria-controls={helpId} onClick={() => setHelpOpen(!helpOpen)}>
-          Playback help
-        </button>
-      </div>
+            current && <span>Picture: {current}</span>
+          )}
+          {screening.preview && <span className="badge">Preview</span>}
+          {helpButton}
+        </div>
+      )}
       {helpOpen && (
         <PlaybackHelp
           id={helpId}

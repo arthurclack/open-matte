@@ -1,23 +1,29 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, formatClock, formatDate, formatDateTime, formatDateTimeYear, formatRuntime, plural } from '../api.js';
+import { api, formatClock, formatRuntime } from '../api.js';
 import { lazyPart } from '../ErrorBoundary.jsx';
-import { PlayIcon } from '../icons.jsx';
+import { ComingBack, PlayScreen, PlayTile } from '../look/crt.jsx';
+import { PickCard, Sleeve } from '../look/objects.jsx';
+import { Line } from '../look/ui.jsx';
+import { hostName, nextDeadline, noTapeYet, playsLeft, stickerText, tapeCounter } from '../look/words.js';
 import { scrollBehavior } from '../motion.js';
 import PasskeySignIn, { NewPasskeys } from '../PasskeySignIn.jsx';
 import { supportsPasskeys } from '../passkeys.js';
 import { useSite } from '../site.jsx';
-import { Poster } from './shared.jsx';
+import { NarrowPage, TitleTape } from './tape.jsx';
+import { clockLines, goneLine, privacyLine } from './tapeWords.js';
 
 // hls.js is large; load it when someone presses Play.
-const Player = lazyPart(() => import('../Player.jsx'));
+const loadPlayer = () => import('../Player.jsx');
+const Player = lazyPart(loadPlayer);
 
-// What Play can be refused with. Anything else (no connection, a server error) gets
-// a message of its own, since nothing on the reloaded page would explain it.
+// What Play can be refused with: { lead, text } for a system line. Anything else (no
+// connection, a server error) gets one of its own, since nothing on the reloaded page
+// would explain it.
 const PLAY_ERRORS = {
-  'playing-elsewhere': 'This screening is playing on another device right now. Pause it there, or give it a minute, then try again.',
-  'too-many-requests': 'Play was pressed too many times from this connection. Wait a few minutes, then try again.',
-  'no-ticket': null, // the ticket panel explains these after a reload
+  'playing-elsewhere': { lead: "It's playing on another device right now.", text: 'Pause it there, or give it a minute, then try again.' },
+  'too-many-requests': { lead: 'Play was pressed too many times from this connection.', text: 'Wait a few minutes, then try again.' },
+  'no-ticket': null, // the counter explains these after a reload
   used_up: null,
   expired: null,
   unavailable: null,
@@ -25,23 +31,30 @@ const PLAY_ERRORS = {
   revoked: null,
   unpublished: null,
 };
+const PLAY_FAILED = { lead: "Couldn't start playback.", text: 'Try again in a moment.' };
 
+// A film's page: the sleeve and the staff pick on the wall, the film and the counter
+// beside them. On the counter, the title on label tape with the sticker for the next
+// deadline, and Play (or the telly, for a paused tape). Pressing it shows the machine's
+// PLAY screen in the picture's place, then the film.
 export default function Film() {
   const { slug } = useParams();
   const { me, site, refresh: refreshSite, setPlayerOpen } = useSite();
   const [data, setData] = useState(undefined); // undefined = loading, null = not found, { kept } = kept by someone else
   const [screening, setScreening] = useState(null);
+  // The PLAY screen has given way to the picture.
+  const [picture, setPicture] = useState(false);
   const [message, setMessage] = useState(null);
   const [starting, setStarting] = useState(false);
   // Passkeys added since the one used to sign in here (Sign in and keep it). The
   // server reports them once, so they stay on the page after the offer goes.
   const [newPasskeys, setNewPasskeys] = useState(null);
   // The player stopped because this browser was signed out (Sign out everywhere, the
-  // admin signing browsers out, the person disabled): the page then says so.
+  // owner signing browsers out, the member turned off): the page then says so.
   const [signedOut, setSignedOut] = useState(false);
-  // The player has stopped for good, for a reason the server gave (the screening
-  // ended, the ticket went): the ticket panel offers Play or Resume again. Stopping
-  // because another device took over offers Watch here instead, in the player.
+  // The player has stopped for good, for a reason the server gave (the play ended, the
+  // tape went): the counter offers Play or Resume again. Stopping because another
+  // device took over offers Watch here instead, in the player.
   const [stopped, setStopped] = useState(false);
   const theatreRef = useRef(null);
 
@@ -57,7 +70,7 @@ export default function Film() {
         .catch((err) => {
           if (err.status === 404) return setData(null);
           if (err.code === 'ticket-kept') return setData({ kept: true });
-          setMessage("Couldn't load this page. Try again in a moment.");
+          setMessage({ lead: "Couldn't load this page.", text: 'Try again in a moment.' });
         }),
     [slug],
   );
@@ -86,15 +99,19 @@ export default function Film() {
   async function play() {
     setMessage(null);
     setStarting(true);
+    // The player's code comes while the PLAY screen shows. A part that won't load is
+    // the player's to say (the page then asks to be reloaded).
+    loadPlayer().catch(() => {});
     try {
       const s = await api.post(`/api/films/${encodeURIComponent(slug)}/screenings`);
+      setPicture(false);
       setScreening({ ...s, key: Date.now() });
       setStopped(false);
       requestAnimationFrame(() => theatreRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }));
-      // The ticket panel then tells of the screening just opened, not the one Play would start.
+      // The counter then tells of the play just opened, not the one Play would start.
       load(true);
     } catch (err) {
-      if (!Object.hasOwn(PLAY_ERRORS, err.code)) setMessage("Couldn't start playback. Try again in a moment.");
+      if (!Object.hasOwn(PLAY_ERRORS, err.code)) setMessage(PLAY_FAILED);
       else if (PLAY_ERRORS[err.code]) setMessage(PLAY_ERRORS[err.code]);
       await load(true);
     } finally {
@@ -102,222 +119,232 @@ export default function Film() {
     }
   }
 
-  // Something changed on the server (the ticket was kept, the player was
-  // refused): read the page and the header again.
-  const reload = useCallback(async (code) => {
-    if (code === 'signed-out') setSignedOut(true);
-    await load(true);
-    refreshSite();
-  }, [load, refreshSite]);
+  // Something changed on the server (the tape was kept, the player was refused): read
+  // the page and the header again.
+  const reload = useCallback(
+    async (code) => {
+      if (code === 'signed-out') setSignedOut(true);
+      await load(true);
+      refreshSite();
+    },
+    [load, refreshSite],
+  );
 
   // The player stopped because the server refused something: find out why.
-  const onHalt = useCallback(async (code) => {
-    setStopped(true);
-    await reload(code);
-  }, [reload]);
+  const onHalt = useCallback(
+    async (code) => {
+      setStopped(true);
+      await reload(code);
+    },
+    [reload],
+  );
 
-  if (data === undefined) return message ? <div className="narrow notice bad">{message}</div> : null;
-  // This browser opened the ticket's link, and someone has kept it in their account since.
+  if (data === undefined) {
+    return message ? (
+      <NarrowPage>
+        <Line kind="bad" lead={message.lead} role="alert">
+          {message.text}
+        </Line>
+      </NarrowPage>
+    ) : null;
+  }
+  // This browser opened the tape's link, and someone has kept it on their card since.
   if (data?.kept) {
     return (
-      <div className="narrow" style={{ paddingTop: '15vh' }}>
-        <h1 style={{ fontSize: '2rem', marginBottom: '0.8rem' }}>This ticket has been kept</h1>
-        <p className="dim">It's in someone's account now, so it only works for them. Ask whoever sent it.</p>
-        <Link to="/" className="btn">
-          Go to the front page
-        </Link>
-      </div>
+      <NarrowPage>
+        <h1>This tape has been kept</h1>
+        <p>It's on someone's membership card now, so it only works for them. Ask {hostName(site)}.</p>
+        <div className="ui-btns">
+          <Link to="/" className="ui-btn">
+            Go to the front page
+          </Link>
+        </div>
+      </NarrowPage>
     );
   }
   // The film is gone from this browser with its session: someone signed it out.
   if (data === null && signedOut) {
     return (
-      <div className="narrow" style={{ paddingTop: '15vh' }}>
-        <h1 style={{ fontSize: '2rem', marginBottom: '0.8rem' }}>This browser has been signed out</h1>
-        <p className="dim">Sign in to carry on watching. If you opened the ticket from a link, open the link again.</p>
-        <div className="row" style={{ gap: '0.6rem' }}>
-          <Link to={`/signin?next=${encodeURIComponent(`/${slug}`)}`} className="btn primary">
+      <NarrowPage>
+        <h1>This browser has been signed out</h1>
+        <p>Sign in to carry on watching. If you opened the tape from a link, open the link again.</p>
+        <div className="ui-btns">
+          <Link to={`/signin?next=${encodeURIComponent(`/${slug}`)}`} className="ui-btn ui-btn--primary">
             Sign in
           </Link>
-          <Link to="/" className="btn">
+          <Link to="/" className="ui-btn">
             Go to the front page
           </Link>
         </div>
-      </div>
+      </NarrowPage>
     );
   }
-  if (data === null) {
-    return (
-      <div className="narrow" style={{ paddingTop: '15vh' }}>
-        <h1 style={{ fontSize: '2rem', marginBottom: '0.8rem' }}>Nothing showing here</h1>
-        <p className="dim">If someone sent you a ticket, open the link they gave you. Tickets can also be cancelled or run out.</p>
-        <Link to="/" className="btn">
-          Go to the front page
-        </Link>
-      </div>
-    );
-  }
+  if (data === null) return <NothingHere />;
 
   const { film, access } = data;
-  const meta = [film.year, formatRuntime(film.runtimeMinutes), film.directors && `Directed by ${film.directors}`, film.country].filter(Boolean);
+  const meta = [film.year, formatRuntime(film.runtimeMinutes), film.directors && `directed by ${film.directors}`, film.country].filter(Boolean).join(', ');
 
   return (
-    <article className="film">
-      {film.backdropUrl && (
-        <div className="film-backdrop">
-          <img src={film.backdropUrl} alt="" />
-        </div>
-      )}
-
+    <article className="fl-page">
       {screening && (
-        <div className="theatre" ref={theatreRef}>
-          <Suspense fallback={<div style={{ aspectRatio: '16 / 9' }} />}>
-            <Player key={screening.key} film={film} screening={screening} onHalt={onHalt} onReclaim={play} />
-          </Suspense>
+        <div className="theatre fl-theatre" ref={theatreRef}>
+          <div className="fl-stage">
+            {picture ? (
+              <Suspense fallback={<div className="fl-stage__wait" />}>
+                <Player
+                  key={screening.key}
+                  film={film}
+                  screening={screening}
+                  onHalt={onHalt}
+                  onReclaim={play}
+                  comeBackBy={access.ticket?.openScreening?.resumableUntil ?? screening.resumableUntil}
+                />
+              </Suspense>
+            ) : (
+              <PlayScreen key={screening.key} counter={tapeCounter(screening.position)} onDone={() => setPicture(true)} />
+            )}
+          </div>
         </div>
       )}
 
-      <div className="wrap film-body">
-        <Poster film={film} />
-        <div>
-          <h1 className="film-title">{film.title}</h1>
-          {film.originalTitle && film.originalTitle !== film.title && <div className="dim" style={{ marginBottom: '0.4rem' }}>{film.originalTitle}</div>}
-          <div className="film-meta">
-            {meta.map((m) => (
-              <span key={m}>{m}</span>
-            ))}
+      <div className={`fl-film ui-w${film.recommendation ? '' : ' fl-film--nopick'}`}>
+        <div className="fl-info">
+          <h1>{film.title}</h1>
+          {film.originalTitle && film.originalTitle !== film.title && <p className="fl-original">{film.originalTitle}</p>}
+          {meta && <p className="fl-meta">{meta}</p>}
+        </div>
+        <div className="fl-sleeve">
+          <Sleeve film={film} logo={site?.logo} />
+        </div>
+        {(film.synopsis || film.contentNote) && (
+          <div className="fl-about">
+            {film.synopsis && <p className="fl-synopsis">{film.synopsis}</p>}
+            {film.contentNote && <p className="fl-note">{film.contentNote}</p>}
           </div>
-
-          {film.recommendation && (
-            <blockquote className="recommendation">
-              <span className="recommendation-label">Why you should watch it</span>
-              {film.recommendation}
-            </blockquote>
+        )}
+        {film.recommendation && (
+          <div className="fl-pickcell">
+            <PickCard text={film.recommendation} site={site} seed={film.slug} />
+          </div>
+        )}
+        <div className="fl-counter">
+          {message && (
+            <Line kind="warn" lead={message.lead} role="status" className="fl-message">
+              {message.text}
+            </Line>
           )}
-
-          {message && <div className="notice warn">{message}</div>}
           <NewPasskeys passkeys={newPasskeys} />
-          <TicketPanel
+          <Counter
             access={access}
             film={film}
             site={site}
-            signedIn={Boolean(me?.person)}
+            name={me?.person?.name}
             onPlay={play}
             starting={starting}
             playing={Boolean(screening) && !stopped}
             onKept={reload}
             onNewPasskeys={setNewPasskeys}
           />
-
-          {film.synopsis && <p className="synopsis">{film.synopsis}</p>}
-          {film.contentNote && <p className="faint">{film.contentNote}</p>}
         </div>
       </div>
     </article>
   );
 }
 
-const HOUR = 60 * 60 * 1000;
+// No such film here: none, or off the shelf, or no tape for it in this browser (a
+// tape taken back looks the same: the server says no more).
+function NothingHere() {
+  return (
+    <NarrowPage>
+      <h1>Nothing on the shelf here</h1>
+      <p>If someone sent you a tape, open the link they gave you. A tape can also have gone back to the shop.</p>
+      <div className="ui-btns">
+        <Link to="/" className="ui-btn">
+          Go to the front page
+        </Link>
+      </div>
+    </NarrowPage>
+  );
+}
 
-function TicketPanel({ access, film, site, signedIn, onPlay, starting, playing, onKept, onNewPasskeys }) {
+// The counter: what this browser's tape can do now.
+function Counter({ access, film, site, name, onPlay, starting, playing, onKept, onNewPasskeys }) {
   const t = access.ticket;
-  const windowHours = site?.resumeWindowHours ?? 48;
+  const signedIn = Boolean(name);
 
+  // The owner's own browser: Play never uses a play here. No sticker: no tape.
   if (access.preview) {
     return (
-      <div className="ticket-panel">
-        <div className="admit">Admin preview</div>
-        <p>Playing here doesn't use a screening. To try a ticket as a guest, open its link in a private window or another browser.</p>
-        {!access.published && <p>This film isn't published, so ticket holders can't see it yet.</p>}
+      <>
+        <TitleTape film={film} sticker={null} />
+        {!access.published && <Line kind="info">This film isn't on the shelf, so friends can't see it yet.</Line>}
         {!playing && (
-          <button className="btn primary big" onClick={onPlay} disabled={starting || access.mediaStatus === 'error' || access.mediaStatus === 'missing'}>
-            <PlayIcon />
-            Preview
-          </button>
+          <div className="fl-playrow">
+            <PlayTile onClick={onPlay} disabled={starting || access.mediaStatus === 'error' || access.mediaStatus === 'missing'} label="Play" />
+          </div>
         )}
-      </div>
+        <p className="fl-clock">Playing here doesn't use a play. To try a tape as a friend would, open its link in a private window or another browser.</p>
+      </>
     );
   }
 
-  // A film shown to members: the page is for reading. Nothing is recorded, so
+  // A film on the shelf for members: the page is for reading. Nothing is recorded, so
   // there's no privacy line.
   if (access.via === 'member') {
     return (
-      <div className="ticket-panel">
-        <div className="admit">Showing to members</div>
-        <p>
-          {access.ticketKept ? "The ticket you opened for this one has been kept in someone's account." : "You don't have a ticket for this one."} If
-          you'd like to see it, ask whoever runs {site?.cinemaName || 'this cinema'}.
-        </p>
-      </div>
+      <>
+        <TitleTape film={film} sticker={null} />
+        <Line kind="info" lead="On the shelf for members.">
+          {access.ticketKept ? "The tape you opened for this one is on someone's membership card now. " : ''}
+          {noTapeYet(site)}.
+        </Line>
+      </>
     );
   }
 
-  const lines = [];
-  let button = null;
-  if (access.canPlay) {
-    const open = t.openScreening;
-    if (open) {
-      lines.push(`Your screening is open until ${formatDateTime(open.resumableUntil)}. Pick up where you left off, on this device or another.`);
-    } else {
-      if (t.screeningLimit != null) lines.push(`${plural(t.screeningsLeft, 'screening')} left on this ticket.`);
-      // The ticket's expiry wins over the resume window: what it has left, or once
-      // played the days it lasts, may be the shorter.
-      const ticketLeft = t.expiresAt ? t.expiresAt - Date.now() : (t.daysAfterFirstPlay ?? Infinity) * 24 * HOUR;
-      lines.push(
-        ticketLeft < windowHours * HOUR
-          ? 'Pressing Play starts a screening. You can pause and come back to it until the ticket expires.'
-          : `Pressing Play starts a screening. You can pause and come back to it for ${plural(windowHours, 'hour')}.`,
-      );
-      // With its time: the deadline is the end of a day where the admin is, which
-      // may be another day, or another time of day, here.
-      if (t.startBy) lines.push(`Start watching by ${formatDateTime(t.startBy)}.`);
-      if (t.daysAfterFirstPlay && !t.firstPlayedAt) lines.push(`Once you start, the ticket lasts ${plural(t.daysAfterFirstPlay, 'day')}.`);
-    }
-    if (t.expiresAt) lines.push(`The ticket is valid until ${formatDateTime(t.expiresAt)}.`);
-    if (t.inAccount) lines.push("This ticket is in your account, so it's on every device you sign in on.");
-    const resumeAt = open && open.position > 15 ? ` at ${formatClock(open.position)}` : '';
-    button = !playing && (
-      <button className="btn primary big" onClick={onPlay} disabled={starting}>
-        <PlayIcon />
-        {open ? `Resume${resumeAt}` : 'Play'}
-      </button>
-    );
-  } else if (t?.state === 'used_up') {
-    lines.push(`You've used ${t.screeningLimit === 1 ? 'the screening' : `all ${t.screeningLimit} screenings`} on this ticket. If you'd like another, ask whoever sent it.`);
-  } else if (t?.state === 'expired') {
-    // With the year: a deadline that has passed may be last year's.
-    lines.push(t.expiresAt ? `This ticket expired on ${formatDate(t.expiresAt)}.` : `This ticket needed to be used by ${formatDateTimeYear(t.startBy)}.`);
-  } else {
-    lines.push("This film isn't available right now. Try again later.");
-  }
-
+  const gone = goneLine(t, site);
+  const open = t?.openScreening;
+  const sticker = gone ? null : stickerText(nextDeadline(t));
+  const left = !open && playsLeft(t);
+  const resumeAt = open && open.position > 15 ? formatClock(open.position) : null;
   return (
-    <div className="ticket-panel">
-      <div className="admit">Admit one · {film.title}</div>
-      {lines.map((l) => (
-        <p key={l}>{l}</p>
-      ))}
-      {button}
-      {access.canKeep && !playing && <KeepOffer film={film} signedIn={signedIn} onKept={onKept} onNewPasskeys={onNewPasskeys} />}
-      <p className="privacy">
-        {site?.cinemaName || 'The host'} can see when this ticket is opened and played, the kind of device (such as “Safari on iPhone”),{' '}
-        {signedIn ? "roughly how far playback gets and, because you're signed in, that it was you." : 'and roughly how far playback gets.'}
-      </p>
-    </div>
+    <>
+      <TitleTape film={film} sticker={sticker} forName={t?.inAccount ? name : null} />
+      {gone ? (
+        <Line kind={gone.kind} lead={gone.lead}>
+          {gone.text}
+        </Line>
+      ) : (
+        <>
+          {!playing &&
+            (open ? (
+              <ComingBack counter={tapeCounter(open.position)} at={resumeAt} onResume={() => !starting && onPlay()} />
+            ) : (
+              <div className="fl-playrow">
+                <PlayTile onClick={onPlay} disabled={starting} label="Play" />
+                {left && <p className="fl-left">{left}</p>}
+              </div>
+            ))}
+          <p className="fl-clock">{clockLines(t, { windowHours: site?.resumeWindowHours ?? 48 }).join(' ')}</p>
+          {t.inAccount && <p className="fl-keep">This tape is on your card, so it's on every device you sign in on.</p>}
+          {access.canKeep && !playing && <KeepOffer film={film} signedIn={signedIn} onKept={onKept} onNewPasskeys={onNewPasskeys} />}
+        </>
+      )}
+      <p className="fl-privacy">{privacyLine(site, signedIn)}</p>
+    </>
   );
 }
 
 const KEEP_ERRORS = {
-  'playing-elsewhere': "It's playing on another device right now. Once it's paused there, you can keep it.",
-  'cannot-keep': "This ticket can't be kept any more.",
+  'playing-elsewhere': { lead: "It's playing on another device right now.", text: "Once it's paused there, you can keep it." },
+  'cannot-keep': { lead: "This tape can't be kept any more." },
 };
-const KEEP_CONFIRM =
-  'Keeping this ticket links it to your account. Other browsers that opened the link will lose it, and the link will only work for you.';
+const KEEP_FAILED = { lead: "Couldn't keep it just now.", text: 'Try again in a moment.' };
+const KEEP_CONFIRM = 'Keeping this tape puts it on your membership card. Other browsers that opened the link will lose it, and the link will only work for you.';
 
-// A ticket for anyone that you've let them keep. Signed in: Keep it, after a
-// confirmation. Not signed in: Sign in and keep it, which signs in here (the
-// link tickets opened in this browser come along) and then keeps it.
+// A tape for anyone that the owner lets people keep. Signed in: Keep it, after a
+// confirmation. Not signed in: Sign in and keep it, which signs in here (the tapes
+// this browser opened from links come along) and then keeps it.
 function KeepOffer({ film, signedIn, onKept, onNewPasskeys }) {
   const { refresh } = useSite();
   const [signingIn, setSigningIn] = useState(false);
@@ -332,7 +359,7 @@ function KeepOffer({ film, signedIn, onKept, onNewPasskeys }) {
       await api.post(`/api/films/${film.slug}/keep`);
       await onKept();
     } catch (err) {
-      setError(KEEP_ERRORS[err.code] || "Couldn't keep it just now. Try again in a moment.");
+      setError(KEEP_ERRORS[err.code] || KEEP_FAILED);
       // The page may have changed underneath (kept by someone else, signed out).
       if (err.code === 'cannot-keep' || err.status === 401) await onKept();
     } finally {
@@ -347,39 +374,49 @@ function KeepOffer({ film, signedIn, onKept, onNewPasskeys }) {
     await keep();
   }
 
+  const problem = error && (
+    <Line kind="bad" lead={error.lead} role="alert">
+      {error.text}
+    </Line>
+  );
+
   if (signedIn) {
     return (
-      <div className="keep-offer">
-        {error && <div className="notice warn">{error}</div>}
-        <p>Keep this ticket in your account, so it's on every device you sign in on?</p>
-        <button className="btn" onClick={() => window.confirm(KEEP_CONFIRM) && keep()} disabled={busy}>
-          {busy ? 'Keeping…' : 'Keep it'}
-        </button>
+      <div className="fl-keepoffer">
+        {problem}
+        <p>Keep this tape on your membership card, so it's on every device you sign in on?</p>
+        <div className="ui-btns">
+          <button type="button" className="ui-btn" onClick={() => window.confirm(KEEP_CONFIRM) && keep()} disabled={busy}>
+            {busy ? 'Keeping…' : 'Keep it'}
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="keep-offer">
-      {error && <div className="notice warn">{error}</div>}
+    <div className="fl-keepoffer">
+      {problem}
       {!signingIn ? (
         <p>
-          Keep this ticket in your account?{' '}
-          <button className="linklike" onClick={() => setSigningIn(true)}>
+          Keep this tape on your membership card?{' '}
+          <button type="button" className="fl-linklike" onClick={() => setSigningIn(true)}>
             Sign in and keep it
           </button>
-          . You don't need an account to watch: just press Play.
+          . You don't need a card to watch: just press Play.
         </p>
       ) : canUsePasskeys ? (
         <>
           <p>{KEEP_CONFIRM}</p>
           <PasskeySignIn onSignedIn={signedInHere} />
-          <button className="linklike" style={{ marginTop: '0.6rem' }} onClick={() => setSigningIn(false)}>
-            Not now
-          </button>
+          <div className="ui-btns">
+            <button type="button" className="ui-btn ui-btn--quiet" onClick={() => setSigningIn(false)}>
+              Not now
+            </button>
+          </div>
         </>
       ) : (
-        <p>This browser can't use passkeys. To keep the ticket, open the link you were sent in Safari or Chrome and sign in there.</p>
+        <p>This browser can't use passkeys. To keep the tape, open the link you were sent in Safari or Chrome and sign in there.</p>
       )}
     </div>
   );

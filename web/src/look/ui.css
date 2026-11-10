@@ -1,0 +1,358 @@
+/* =====================================================================
+   look/ui.css: the interface layer. The app's own controls (header and
+   menus, the back office's menu, tabs, buttons, fields, lists, tables,
+   system lines, focus) as a quiet early-80s computer: a monochrome
+   monitor's warm white on the dark room, a fixed-pitch face for what the
+   machine says, lit (inverse) blocks for what is chosen and for the main
+   action, square boxes and 1px rules, and instant state changes.
+
+   Ported from the approved design (.claude/design/vhs/analogue/kit-ui.css)
+   for the app: its tokens are in tokens.css, and the two pictures it drew
+   as data: images (the select's arrow, the checkbox's tick) are drawn with
+   gradients, since the page's Content-Security-Policy allows no data:
+   images. README.md lists every class.
+
+   Every rule sits under .ui80, which is on <body> (web/index.html), so the
+   whole app has it. Nothing here is blue, nothing glows, blinks, moves or
+   transitions, and nothing lies over a printed object, a poster or the
+   picture.
+   ===================================================================== */
+
+.ui80 {
+  color: var(--ui-fg);
+  font-family: var(--ui-read);
+}
+
+/* ---------- the page's width: take 2's gutters (96, 48, 16px) ---------- */
+.ui80 .ui-w { width: 100%; max-width: var(--page-max); margin-left: auto; margin-right: auto; padding-left: var(--gutter); padding-right: var(--gutter); }
+
+/* ---------- the machine's face ---------- */
+.ui80 .ui-mono, .ui80 .ui-n { font-family: var(--ui-face); font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'calt' 0; }
+.ui80 .ui-n, .ui80 time, .ui80 .ui-table td.ui-n { font-variant-numeric: tabular-nums; }
+/* a date and time is one thing: it never breaks across lines */
+.ui80 time { white-space: nowrap; }
+.ui80 .ui-key { font: 500 13px/18px var(--ui-face); color: var(--ui-fg-2); margin: 0 0 8px; }
+
+/* ---------- focus: one chunky block for everything the keyboard reaches ----------
+   A 3px warm-white ring on a 2px dark gap: against a lit block the gap is the contrast,
+   against the dark room the ring is. Not inside the blue screen or a printed object,
+   which keep their own (objects.css). */
+.ui80 :where(a, button, input, select, textarea, summary, [tabindex]):not(:where(.crt *, .ob *)):focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--ui-focus-gap);
+}
+/* a field's own focus: its edge lights too (the ring still shows) */
+.ui80 :is(.ui-input, .ui-select, .ui-textarea):focus { border-color: var(--ui-fg); }
+/* a heading given the focus when a page changes: nothing to press, so no ring */
+.ui80 :is(h1, h2)[tabindex='-1']:focus { outline: none; box-shadow: none; }
+
+/* ---------- the shop's name in a bar: its own rub-down printing (ShopName) ---------- */
+/* each word stays whole (.nw); a name too long for the line breaks between words */
+.ui80 .ui-shopname { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; max-width: 100%; font: var(--shop-weight) 26px/28px var(--shop-face); font-variation-settings: var(--shop-vars); color: #f2ede1; text-decoration: none; padding: 8px 0; overflow-wrap: anywhere; }
+.ui80 .ui-shopname__print { min-width: 0; }
+.ui80 .ui-shopname .rub { display: inline-block; transform: translateY(var(--y, 0)) rotate(var(--r, 0deg)); margin-right: var(--m, 0); }
+.ui80 .ui-shopname .nw { white-space: nowrap; }
+.ui80 .ui-shopname__print { filter: var(--kp, none); }
+/* a logo: about a line of the bar high; a wide one shrinks, undistorted, before it pushes the menu off */
+.ui80 .ui-shopname__logo { width: auto; max-height: 40px; max-width: 100%; min-width: 0; object-fit: contain; object-position: left center; }
+@media (max-width: 767px) { .ui80 .ui-shopname { font-size: 22px; line-height: 24px; } .ui80 .ui-shopname__logo { max-height: 32px; } }
+@media (max-width: 359px) { .ui80 .ui-shopname { font-size: 18px; line-height: 22px; } }
+
+/* ---------- menu-bar items ---------- */
+.ui80 .ui-item {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px;
+  font: 500 15px/20px var(--ui-face); font-variant-ligatures: none; color: var(--ui-fg);
+  background: none; border: 0; border-radius: 0; text-decoration: none; white-space: nowrap; cursor: pointer;
+  touch-action: manipulation;
+}
+.ui80 .ui-item[aria-current]:not([aria-current='false']), .ui80 .ui-item.is-on, .ui80 .ui-item[aria-expanded='true'] { background: var(--ui-lit); color: var(--ui-lit-ink); }
+@media (hover: hover) and (pointer: fine) {
+  .ui80 .ui-item:not([aria-current]):not(.is-on):not([aria-expanded='true']):hover { background: var(--ui-raised); }
+}
+.ui80 .ui-item:disabled { color: var(--ui-fg-3); cursor: not-allowed; }
+/* the pull-down's mark: a stepped triangle, drawn in whole pixels (look/ui.jsx Tri) */
+.ui80 .ui-tri { width: 10px; height: 6px; flex: none; fill: currentColor; shape-rendering: crispEdges; }
+
+/* ---------- the friend's header: a menu bar ---------- */
+/* The shop's name keeps its size: a long one goes onto a second line between words (a
+   logo shrinks, undistorted). When the name and the items don't fit on one line, the
+   items go onto a line of their own, still at the right, so a menu opening leftwards
+   from them stays on the screen; there a long person's name ends in an ellipsis. */
+.ui80 .ui-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 16px; min-height: 64px; border-bottom: 1px solid var(--ui-rule); }
+.ui80 .ui-bar__name { flex: 0 1 auto; min-width: 0; }
+.ui80 .ui-bar__items { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; max-width: 100%; flex: 0 1 auto; margin-left: auto; }
+.ui80 .ui-bar__items > * { min-width: 0; }
+.ui80 .ui-bar__items:empty { display: none; }
+.ui80 .ui-bar .ui-item { max-width: 100%; }
+.ui80 .ui-item > .ui-item__t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* a person's name in the bar: only the first one under 360px (site.jsx PersonName) */
+@media (max-width: 359px) { .ui80 .ui-item__rest { display: none; } }
+@media (max-width: 767px) { .ui80 .ui-bar { min-height: 60px; gap: 12px; } .ui80 .ui-bar .ui-item { padding: 0 10px; } }
+@media (max-width: 399px) { .ui80 .ui-bar .ui-item, .ui80 .ui-menu__item { font-size: 14px; } .ui80 .ui-bar .ui-item { padding: 0 8px; gap: 6px; } }
+/* what moves into the menu on a phone: .ui-wide shows only on a wide screen, .ui-narrow only on a narrow one */
+@media (max-width: 599px) { .ui80 .ui-wide { display: none !important; } }
+@media (min-width: 600px) { .ui80 .ui-narrow { display: none !important; } }
+@media (pointer: coarse) { .ui80 .ui-item { min-height: 44px; } }
+
+/* ---------- pull-down menu (look/ui.jsx Menu) ---------- */
+.ui80 .ui-menu { position: relative; }
+.ui80 .ui-menu__list {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 220px; max-width: min(320px, calc(100vw - 32px));
+  margin: 0; padding: 4px; list-style: none; background: var(--ui-raised); border: 1px solid var(--ui-edge); border-radius: 0;
+}
+.ui80 .ui-menu__list[hidden] { display: none; }
+.ui80 .ui-menu__item {
+  display: flex; align-items: center; width: 100%; min-height: 40px; padding: 0 12px; text-align: left;
+  font: 500 15px/20px var(--ui-face); font-variant-ligatures: none; color: var(--ui-fg); background: none; border: 0; border-radius: 0;
+  text-decoration: none; cursor: pointer;
+}
+/* the lit menu item: under the pointer, or where the keyboard is. Lit is the focus mark here, as in any menu */
+.ui80 .ui-menu__item:focus-visible { outline: none; box-shadow: none; }
+.ui80 .ui-menu__item:focus-visible, .ui80 .ui-menu__item.is-on { background: var(--ui-lit); color: var(--ui-lit-ink); }
+@media (hover: hover) and (pointer: fine) { .ui80 .ui-menu__item:hover { background: var(--ui-lit); color: var(--ui-lit-ink); } }
+@media (pointer: coarse) { .ui80 .ui-menu__item { min-height: 44px; } }
+.ui80 .ui-menu__sep { height: 1px; margin: 4px 0; background: var(--ui-rule); }
+/* a line under the menu's button when something failed (Couldn't sign out.) */
+.ui80 .ui-menu__error { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; width: max-content; max-width: min(320px, calc(100vw - 32px)); margin: 0; padding: 10px 12px; background: var(--ui-raised); border: 1px solid var(--ui-edge); }
+
+/* ---------- the back office (admin/AdminApp.jsx) ---------- */
+.ui80 .ui-office { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; background: var(--ui-bg); }
+/* the menu's column, dark from top to bottom however long the page (the menu itself
+   stays in view as the page scrolls) */
+@media (min-width: 801px) {
+  .ui80 .ui-office { background: linear-gradient(to right, var(--ui-sunk) 0 231px, var(--ui-rule) 231px 232px, var(--ui-bg) 232px); }
+}
+.ui80 .ui-office__nav { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 24px; padding: 20px 12px; background: var(--ui-sunk); border-right: 1px solid var(--ui-rule); min-width: 0; overflow-y: auto; }
+/* the brand: the shop's name in its printing, "Back office" under it in the machine's face */
+.ui80 .ui-office__brand { display: grid; gap: 2px; padding: 0 12px; text-decoration: none; color: var(--ui-fg); min-width: 0; }
+.ui80 .ui-office__brand .ui-shopname { font-size: 21px; line-height: 26px; padding: 0; white-space: normal; overflow-wrap: anywhere; }
+.ui80 .ui-office__brand-k { font: 500 13px/18px var(--ui-face); color: var(--ui-fg-3); }
+/* on the sign-in page the brand lines up with the heading under it, not the menu's items */
+.ui80 .ui-office__brand.admin-login__brand { padding: 0; }
+.ui80 .ui-office__foot { margin-top: auto; display: grid; gap: 8px; }
+.ui80 .ui-office__main { min-width: 0; padding: 28px clamp(16px, 3vw, 40px) 0; display: flex; flex-direction: column; }
+.ui80 .ui-office__main > .ui-office__page { flex: 1 0 auto; padding-bottom: 48px; }
+.ui80 .ui-office__main > .ui-status { margin: auto calc(-1 * clamp(16px, 3vw, 40px)) 0; }
+
+.ui80 .ui-nav { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ui80 .ui-nav__item { display: flex; align-items: center; min-height: 40px; padding: 0 12px; font: 500 15px/20px var(--ui-face); font-variant-ligatures: none; color: var(--ui-fg-2); text-decoration: none; border-radius: 0; background: none; border: 0; cursor: pointer; text-align: left; }
+.ui80 .ui-nav__item[aria-current]:not([aria-current='false']) { background: var(--ui-lit); color: var(--ui-lit-ink); }
+@media (hover: hover) and (pointer: fine) { .ui80 .ui-nav__item:not([aria-current]):hover { background: var(--ui-raised); color: var(--ui-fg); } }
+.ui80 .ui-office__foot .ui-nav__item { color: var(--ui-fg-3); font-weight: 400; }
+
+/* the office's menu is a .ui-tabs: a column of items on a wide screen, one row of tabs on a narrow one */
+.ui80 .ui-office__nav > .ui-tabs .ui-tabs__row { flex-direction: column; gap: 8px; padding: 0; border: 0; overflow: visible; }
+.ui80 .ui-office__nav > .ui-tabs .ui-tab { width: 100%; padding: 0 12px; }
+
+/* phones and small tablets: the brand and its two quiet links on one row, the sections one row of tabs under them */
+@media (max-width: 800px) {
+  .ui80 .ui-office { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .ui80 .ui-office__nav { position: sticky; top: 0; z-index: 5; height: auto; overflow: visible; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; padding: 10px 16px 0; border-right: 0; border-bottom: 1px solid var(--ui-rule); }
+  .ui80 .ui-office__brand { padding: 0; }
+  .ui80 .ui-office__brand .ui-shopname { font-size: 19px; line-height: 24px; }
+  .ui80 .ui-office__foot { grid-column: 2; grid-row: 1; margin: 0; display: flex; gap: 8px; }
+  .ui80 .ui-office__foot .ui-nav__item { padding: 0 8px; font-size: 14px; }
+  .ui80 .ui-office__nav > .ui-tabs { grid-column: 1 / -1; margin: 0 -16px; }
+  .ui80 .ui-office__nav > .ui-tabs .ui-tabs__row { flex-direction: row; overflow-x: auto; border-bottom: 0; padding: 6px 16px; scroll-padding-inline: 16px 40px; }
+  .ui80 .ui-office__nav > .ui-tabs .ui-tab { width: auto; padding: 0 12px; }
+  .ui80 .ui-office__main { padding-top: 20px; }
+}
+
+/* ---------- tabs: one row; on a phone it scrolls sideways, and each end fades over what is hidden past it ---------- */
+.ui80 .ui-tabs { position: relative; min-width: 0; }
+.ui80 .ui-tabs__row {
+  display: flex; gap: 8px; margin: 0; padding: 6px; list-style: none; border-bottom: 1px solid var(--ui-rule);
+  overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+}
+.ui80 .ui-tabs__row::-webkit-scrollbar { display: none; }
+.ui80 .ui-tab {
+  flex: none; display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px;
+  font: 500 15px/20px var(--ui-face); font-variant-ligatures: none; color: var(--ui-fg-2); text-decoration: none; white-space: nowrap;
+  background: none; border: 0; border-radius: 0; cursor: pointer;
+}
+.ui80 .ui-tab[aria-selected='true'], .ui80 .ui-tab[aria-current]:not([aria-current='false']) { background: var(--ui-lit); color: var(--ui-lit-ink); }
+@media (hover: hover) and (pointer: fine) { .ui80 .ui-tab:not([aria-selected='true']):not([aria-current]):hover { background: var(--ui-raised); color: var(--ui-fg); } }
+.ui80 .ui-tab__n { font-weight: 400; margin-left: 8px; font-variant-numeric: tabular-nums; }
+/* a row that reaches the screen's edges but starts from the page's, and keeps a focus ring inside it */
+.ui80 .ui-tabs--edge .ui-tabs__row { padding: 6px 16px; scroll-padding-inline: 16px 40px; }
+.ui80 .ui-tabs[data-more] .ui-tabs__row {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 min(16px, var(--more-before, 0px)), #000 calc(100% - min(40px, var(--more-after, 0px))), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 min(16px, var(--more-before, 0px)), #000 calc(100% - min(40px, var(--more-after, 0px))), transparent);
+}
+@media (pointer: coarse) { .ui80 .ui-tab { min-height: 44px; } }
+
+/* ---------- buttons ---------- */
+.ui80 .ui-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 0 18px;
+  font: 500 15px/20px var(--ui-face); font-variant-ligatures: none; text-align: center; text-decoration: none; white-space: normal;
+  color: var(--ui-fg); background: transparent; border: 1px solid var(--ui-edge); border-radius: 0;
+  cursor: pointer; touch-action: manipulation; -webkit-user-select: none; user-select: none;
+}
+.ui80 .ui-btn--primary { background: var(--ui-lit); border-color: var(--ui-lit); color: var(--ui-lit-ink); }
+.ui80 .ui-btn--quiet { border-color: transparent; padding: 0 6px; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; text-decoration-color: rgb(233 223 201 / 0.5); color: var(--ui-fg); }
+.ui80 .ui-btn--danger { color: var(--ui-bad); border-color: var(--ui-bad); }
+.ui80 .ui-btn--big { min-height: 52px; padding: 0 24px; font-size: 16px; line-height: 22px; }
+.ui80 .ui-btn--small { min-height: 32px; padding: 0 12px; font-size: 14px; line-height: 18px; position: relative; }
+.ui80 .ui-btn--small::before { content: ''; position: absolute; inset: -5px 0; }
+.ui80 .ui-btn--wide { width: 100%; }
+/* pressed and hovered: instant, as a period machine redraws; nothing moves, so nothing needs reducing */
+@media (hover: hover) and (pointer: fine) {
+  .ui80 .ui-btn:not([disabled]):not([aria-disabled='true']):hover { background: var(--ui-raised); }
+  .ui80 .ui-btn--primary:not([disabled]):not([aria-disabled='true']):hover { background: var(--ui-lit-hover); border-color: var(--ui-lit-hover); }
+  .ui80 .ui-btn--quiet:not([disabled]):hover { background: none; text-decoration-color: currentColor; }
+}
+.ui80 .ui-btn:not([disabled]):not([aria-disabled='true']):active { background: var(--ui-raised); }
+.ui80 .ui-btn--primary:not([disabled]):not([aria-disabled='true']):active { background: var(--ui-lit-press); border-color: var(--ui-lit-press); }
+.ui80 .ui-btn--quiet:not([disabled]):active { background: none; }
+/* unavailable: greyed out the way a period menu greys an item, a dotted edge and dimmer words, never lit */
+.ui80 .ui-btn[disabled], .ui80 .ui-btn[aria-disabled='true'] { background: transparent; color: var(--ui-fg-3); border: 1px dashed rgb(154 146 132 / 0.7); cursor: not-allowed; }
+.ui80 .ui-btn--quiet[disabled] { border-color: transparent; text-decoration-style: dotted; }
+.ui80 .ui-btns { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+/* a label that is a button (a file input inside it stays reachable from the keyboard) */
+.ui80 .ui-btn:has(> input:focus-visible) { outline: 3px solid var(--ui-focus); outline-offset: 2px; box-shadow: 0 0 0 2px var(--ui-focus-gap); }
+.ui80 .ui-btn > input[type='file'] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+/* ---------- fields ---------- */
+.ui80 .ui-field { display: grid; gap: 6px; margin: 0 0 20px; min-width: 0; }
+.ui80 .ui-field__label { font: 500 15px/20px var(--ui-read); color: var(--ui-fg); }
+.ui80 .ui-field__label small { font-weight: 400; color: var(--ui-fg-3); font-size: 14px; }
+.ui80 .ui-field__hint { font: 400 14px/20px var(--ui-read); color: var(--ui-fg-3); margin: 0; max-width: 60ch; }
+.ui80 .ui-field__error { display: flex; gap: 10px; font: 500 15px/20px var(--ui-read); color: var(--ui-fg); margin: 0; }
+.ui80 .ui-field__error::before { content: ''; flex: none; width: 8px; height: 8px; margin-top: 6px; background: var(--ui-bad); }
+.ui80 .ui-input, .ui80 .ui-select, .ui80 .ui-textarea {
+  width: 100%; min-height: 44px; margin: 0; padding: 10px 12px;
+  font: 400 16px/22px var(--ui-read); color: var(--ui-fg); background-color: var(--ui-sunk);
+  border: 1px solid var(--ui-edge); border-radius: 0; caret-color: var(--ui-fg);
+  -webkit-appearance: none; appearance: none;
+}
+.ui80 .ui-input::placeholder, .ui80 .ui-textarea::placeholder { color: var(--ui-fg-3); opacity: 1; }
+.ui80 .ui-input--num { font-family: var(--ui-face); font-variant-numeric: tabular-nums; max-width: 12ch; }
+.ui80 .ui-textarea { min-height: 112px; resize: vertical; line-height: 24px; }
+/* the select's stepped triangle, three rows of whole pixels (10, 6 and 2 wide) */
+.ui80 .ui-select {
+  padding-right: 40px; cursor: pointer;
+  background-image: linear-gradient(var(--ui-fg), var(--ui-fg)), linear-gradient(var(--ui-fg), var(--ui-fg)), linear-gradient(var(--ui-fg), var(--ui-fg));
+  background-size: 10px 2px, 6px 2px, 2px 2px;
+  background-position: right 14px top calc(50% - 2px), right 16px top 50%, right 18px top calc(50% + 2px);
+  background-repeat: no-repeat;
+}
+.ui80 .ui-select option { background: var(--ui-raised); color: var(--ui-fg); }
+.ui80 [aria-invalid='true']:is(.ui-input, .ui-select, .ui-textarea) { border-color: var(--ui-bad); box-shadow: inset 4px 0 0 var(--ui-bad); }
+.ui80 [aria-invalid='true']:is(.ui-input, .ui-select, .ui-textarea):focus-visible { box-shadow: inset 4px 0 0 var(--ui-bad), 0 0 0 2px var(--ui-focus-gap); }
+.ui80 .ui-input[disabled], .ui80 .ui-select[disabled], .ui80 .ui-textarea[disabled] { border-style: dashed; color: var(--ui-fg-3); cursor: not-allowed; }
+
+/* checkbox and radio: a square box that fills with a lit block and a stepped tick; a round radio with a solid dot */
+.ui80 .ui-check { display: flex; gap: 12px; align-items: flex-start; min-height: 44px; padding: 10px 0; font: 400 16px/24px var(--ui-read); cursor: pointer; }
+.ui80 .ui-check small { display: block; font-size: 14px; line-height: 20px; color: var(--ui-fg-3); }
+.ui80 .ui-check input, .ui80 .ui-choice input {
+  -webkit-appearance: none; appearance: none; flex: none; width: 20px; height: 20px; margin: 2px 0 0;
+  background: var(--ui-sunk); border: 2px solid var(--ui-fg-2); border-radius: 0; cursor: pointer;
+}
+.ui80 .ui-check input[type='radio'], .ui80 .ui-choice input[type='radio'] { border-radius: 50%; }
+/* the tick: five 2px squares stepping up to the right, in the lit block's ink */
+.ui80 :is(.ui-check, .ui-choice) input[type='checkbox']:checked {
+  border-color: var(--ui-lit);
+  background-color: var(--ui-lit);
+  background-image: linear-gradient(var(--ui-lit-ink), var(--ui-lit-ink)), linear-gradient(var(--ui-lit-ink), var(--ui-lit-ink)), linear-gradient(var(--ui-lit-ink), var(--ui-lit-ink)), linear-gradient(var(--ui-lit-ink), var(--ui-lit-ink)), linear-gradient(var(--ui-lit-ink), var(--ui-lit-ink));
+  background-size: 2px 2px;
+  background-position: 12px 4px, 10px 6px, 8px 8px, 6px 10px, 4px 8px;
+  background-repeat: no-repeat;
+}
+.ui80 :is(.ui-check, .ui-choice) input[type='radio']:checked { border-color: var(--ui-lit); background: radial-gradient(circle, var(--ui-lit) 0 4.5px, var(--ui-sunk) 5px); }
+.ui80 :is(.ui-check, .ui-choice) input[disabled] { border-style: dashed; border-color: var(--ui-fg-3); cursor: not-allowed; }
+.ui80 :is(.ui-check, .ui-choice):has(input[disabled]) { color: var(--ui-fg-3); cursor: not-allowed; }
+.ui80 .ui-choice { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; margin: 0 0 8px; border: 1px solid var(--ui-rule); border-radius: 0; cursor: pointer; font: 400 16px/24px var(--ui-read); }
+.ui80 .ui-choice b { font-weight: 600; }
+.ui80 .ui-choice small { display: block; font-size: 14px; line-height: 20px; color: var(--ui-fg-3); margin-top: 2px; }
+.ui80 .ui-choice:has(input:checked) { border-color: var(--ui-fg-2); background: var(--ui-sunk); }
+.ui80 .ui-fieldset { border: 0; margin: 0 0 20px; padding: 0; min-width: 0; }
+.ui80 .ui-fieldset > legend { padding: 0; margin: 0 0 8px; font: 500 15px/20px var(--ui-read); color: var(--ui-fg); }
+/* a colour well: a square box in the edge colour */
+.ui80 .ui-color { width: 44px; height: 44px; flex: none; padding: 3px; background: var(--ui-sunk); border: 1px solid var(--ui-edge); border-radius: 0; cursor: pointer; }
+
+/* ---------- system lines: a block first, then plain words (look/ui.jsx Line) ---------- */
+.ui80 .ui-line { display: grid; grid-template-columns: 8px minmax(0, 1fr); gap: 0 12px; align-items: start; margin: 0 0 12px; font: 400 15px/22px var(--ui-read); color: var(--ui-fg); max-width: 64ch; }
+.ui80 .ui-line::before { content: ''; grid-column: 1; grid-row: 1; width: 8px; height: 8px; margin-top: 7px; background: var(--ui-fg); }
+.ui80 .ui-line > * { grid-column: 2; min-width: 0; }
+.ui80 .ui-line--info::before { background: none; box-shadow: inset 0 0 0 1.5px var(--ui-fg-2); }
+.ui80 .ui-line--warn::before { background: var(--ui-warn); }
+.ui80 .ui-line--bad::before { background: var(--ui-bad); }
+.ui80 .ui-line b { font-weight: 600; }
+.ui80 .ui-line p { margin: 0; }
+.ui80 .ui-line p + p, .ui80 .ui-line ul { margin-top: 4px; }
+.ui80 .ui-line ul { padding-left: 18px; margin-bottom: 0; }
+.ui80 .ui-line a { color: inherit; text-underline-offset: 3px; }
+.ui80 .ui-line .ui-btns { margin-top: 10px; }
+/* a line that needs more room (an error at the top of a form): ruled above and below, still no box */
+.ui80 .ui-line--block { padding: 12px 0; border-top: 1px solid var(--ui-rule); border-bottom: 1px solid var(--ui-rule); }
+.ui80 .ui-line--block::before { margin-top: 7px; }
+/* across the page, as the owner's preview line under the header */
+.ui80 .ui-line--wide { max-width: none; }
+
+/* ---------- lists ---------- */
+.ui80 .ui-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--ui-rule); }
+.ui80 .ui-list > li { border-bottom: 1px solid var(--ui-rule); }
+.ui80 .ui-list__row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 16px; align-items: center; padding: 12px 0; color: inherit; text-decoration: none; }
+.ui80 .ui-list__row:not(:has(.ui-list__thumb)) { grid-template-columns: minmax(0, 1fr) auto; }
+.ui80 a.ui-list__row { padding-left: 8px; padding-right: 8px; margin: 0 -8px; }
+@media (hover: hover) and (pointer: fine) { .ui80 a.ui-list__row:hover { background: var(--ui-raised); } }
+.ui80 .ui-list__row[aria-current]:not([aria-current='false']) { box-shadow: inset 4px 0 0 var(--ui-lit); background: var(--ui-raised); }
+.ui80 .ui-list__thumb { width: 44px; }
+.ui80 .ui-list__main { min-width: 0; }
+.ui80 .ui-list__main b { display: block; font: 600 16px/22px var(--ui-read); overflow-wrap: anywhere; }
+.ui80 .ui-list__meta { display: block; margin-top: 2px; font: 400 14px/20px var(--ui-face); color: var(--ui-fg-2); font-variant-numeric: tabular-nums; }
+.ui80 .ui-list__aside { font: 400 14px/20px var(--ui-face); color: var(--ui-fg-2); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) {
+  .ui80 .ui-list__row { grid-template-columns: auto minmax(0, 1fr); }
+  .ui80 .ui-list__row:not(:has(.ui-list__thumb)) { grid-template-columns: minmax(0, 1fr); }
+  .ui80 .ui-list__thumb { grid-row: span 2; align-self: start; }
+  .ui80 .ui-list__aside { grid-column: -2 / -1; text-align: left; white-space: normal; }
+}
+
+/* ---------- tables ---------- */
+.ui80 .ui-table-wrap { overflow-x: auto; border-top: 1px solid var(--ui-edge); }
+/* room for a focus block round a link in the first or last column, which the scrolling box would cut */
+.ui80 .ui-table th:first-child, .ui80 .ui-table td:first-child { padding-left: 6px; }
+.ui80 .ui-table th:last-child, .ui80 .ui-table td:last-child { padding-right: 6px; }
+.ui80 .ui-table { width: 100%; border-collapse: collapse; font: 400 15px/22px var(--ui-read); }
+.ui80 .ui-table th { text-align: left; font: 500 13px/18px var(--ui-face); color: var(--ui-fg-2); padding: 10px 12px; border-bottom: 1px solid var(--ui-edge); white-space: nowrap; vertical-align: bottom; background: none; text-transform: none; letter-spacing: 0; }
+.ui80 .ui-table td { padding: 12px; border-bottom: 1px solid var(--ui-rule); vertical-align: top; }
+.ui80 .ui-table td.ui-n, .ui80 .ui-table th.ui-n { text-align: right; font-family: var(--ui-face); font-size: 14px; white-space: nowrap; }
+.ui80 .ui-table td.ui-when { font: 400 14px/22px var(--ui-face); color: var(--ui-fg-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ui80 .ui-table a { color: inherit; text-underline-offset: 3px; text-decoration-color: rgb(233 223 201 / 0.5); }
+@media (max-width: 640px) {
+  .ui80 .ui-table--stack thead { display: none; }
+  .ui80 .ui-table--stack, .ui80 .ui-table--stack tbody { display: block; width: 100%; }
+  .ui80 .ui-table--stack tr { display: flex; flex-direction: column; padding: 12px 0; border-bottom: 1px solid var(--ui-rule); }
+  .ui80 .ui-table--stack td, .ui80 .ui-table--stack td:first-child, .ui80 .ui-table--stack td:last-child { display: flex; justify-content: space-between; gap: 16px; padding: 3px 0; border: 0; text-align: right; }
+  .ui80 .ui-table--stack td::before { content: attr(data-label); font: 500 13px/22px var(--ui-face); color: var(--ui-fg-2); text-align: left; flex: none; }
+  .ui80 .ui-table--stack td.ui-title { order: -1; display: block; text-align: left; font-weight: 600; padding: 0 0 6px; }
+  .ui80 .ui-table--stack td.ui-title::before, .ui80 .ui-table--stack td:not([data-label])::before { content: none; }
+  .ui80 .ui-table--stack td:empty { display: none; }
+  .ui80 .ui-table-wrap:has(> .ui-table--stack) { overflow-x: visible; }
+}
+
+/* ---------- the status line at the foot of a screen ---------- */
+.ui80 .ui-status { display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 0; padding: 10px clamp(16px, 3vw, 40px); border-top: 1px solid var(--ui-rule); background: var(--ui-sunk); font: 400 13px/20px var(--ui-face); color: var(--ui-fg-2); font-variant-numeric: tabular-nums; }
+.ui80 .ui-status b { font-weight: 500; color: var(--ui-fg); }
+
+/* ---------- the raster: the faintest static line every third device row, back office only ----------
+   Darker lines on the room, under everything: light text only gains contrast, and printed things
+   (opaque) and the blue screen lie on top of it. look/devicePixels.js snaps the pitch to whole device pixels. */
+.ui80 .ui-raster {
+  background-color: var(--ui-bg);
+  background-image: repeating-linear-gradient(to bottom, rgb(0 0 0 / var(--ui-raster-o)) 0 var(--ui-raster-line), transparent var(--ui-raster-line) var(--ui-raster-pitch));
+}
+@media (prefers-contrast: more) { .ui80 .ui-raster { background-image: none; } }
+@media print { .ui80 .ui-raster { background-image: none; } }
+
+/* ---------- forced colours (Windows High Contrast): the system's own colours, and lit is Highlight ---------- */
+@media (forced-colors: active) {
+  .ui80 :is(.ui-item, .ui-tab, .ui-nav__item, .ui-menu__item)[aria-current]:not([aria-current='false']),
+  .ui80 .ui-tab[aria-selected='true'], .ui80 .ui-btn--primary, .ui80 .ui-item[aria-expanded='true'] { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight; }
+  .ui80 .ui-menu__item:focus-visible { outline: 2px solid Highlight; }
+  .ui80 .ui-line::before, .ui80 .ui-field__error::before { forced-color-adjust: none; background: CanvasText; }
+  .ui80 :is(.ui-check, .ui-choice) input { forced-color-adjust: auto; -webkit-appearance: auto; appearance: auto; }
+  .ui80 .ui-select { background-image: none; -webkit-appearance: auto; appearance: auto; }
+}

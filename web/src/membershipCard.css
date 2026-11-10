@@ -2,31 +2,8 @@
    on cream card stock, in two inks a touch off register. Everything on it is sized
    in card widths (cqw), so it scales with the card.
 
-   Its three fonts are served by the app itself (web/public/fonts, under the SIL Open
-   Font License; the licences file has them) and are declared only here. A browser
-   downloads a font only for text that uses it, so only pages with a card fetch them. */
-
-@font-face {
-  font-family: 'Fraunces';
-  src: url('/fonts/Fraunces-Variable.ttf') format('truetype');
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Grape Nuts';
-  src: url('/fonts/GrapeNuts-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Courier Prime';
-  src: url('/fonts/CourierPrime-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
+   Its three fonts (Fraunces, Grape Nuts and Courier Prime) are served by the app
+   itself and declared with the rest in look/tokens.css. */
 
 .mc {
   /* the stocks and inks; --mc-ink, the shop's, is set on the element */

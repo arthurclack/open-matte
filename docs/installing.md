@@ -1,7 +1,9 @@
 # Installing Open Matte
 
-This takes you from a fresh Ubuntu server to a working cinema: the site on your own
-domain over HTTPS, your first film published, and a ticket played. Once it's running,
+This takes you from a fresh Ubuntu server to a working video shop: the site on your
+own domain over HTTPS, your first film on the shelf, and a tape played. (The pages say
+tape where the code and the logs say ticket, and play where they say screening:
+[access.md](access.md#words) has the list.) Once it's running,
 [deploying.md](deploying.md) covers updates, backups, restoring and the rest.
 
 Open Matte runs in one container, with Caddy in another in front of it to handle
@@ -22,28 +24,28 @@ server, or on your computer. The paths are the defaults, under `/srv/open-matte`
 
 ## Choices you make once
 
-Two settings stay with the cinema for as long as it runs. Decide them before you
+Two settings stay with the shop for as long as it runs. Decide them before you
 start.
 
-**`DOMAIN`, the address people visit.** Every ticket link and setup link you send
+**`DOMAIN`, the address people visit.** Every tape's link and setup link you send
 carries it. If the site moves to another name later, links already sent only keep
 working while the old name still points at the server and is listed in
 `REDIRECT_FROM` (below), which sends it on to the new one.
 
-**`WEBAUTHN_RP_ID`, the domain passkeys belong to.** People you add to the cinema sign
+**`WEBAUTHN_RP_ID`, the domain passkeys belong to.** Members you add to the shop sign
 in with a passkey, and every passkey is made for this domain and works only there.
 It must be `DOMAIN` itself or a parent of it. For `DOMAIN=cinema.example.com`:
 
 | `WEBAUTHN_RP_ID` | What it means |
 |---|---|
 | `cinema.example.com` | Passkeys work on this exact name only. Choose this when other people or services run sites under `example.com`. |
-| `example.com` | Passkeys would also work if the cinema moved to another name under `example.com`, such as `www.example.com`. In return, every subdomain of `example.com` must stay under your control, since browsers treat them all as one site. |
+| `example.com` | Passkeys would also work if the shop moved to another name under `example.com`, such as `www.example.com`. In return, every subdomain of `example.com` must stay under your control, since browsers treat them all as one site. |
 
 **Choose it before you create the first setup link.** Changing it later, or moving
 the site to a domain it doesn't cover, leaves every passkey useless, and each person
-needs a recovery link from you to make a new one. Tickets for anyone with the link
-don't use passkeys, so they aren't affected by this choice. The cinema's name,
-colours and logo, and people's names, can change whenever you like.
+needs a recovery link from you to make a new one. Tapes for anyone with the link
+don't use passkeys, so they aren't affected by this choice. The shop's name, colours
+and logo, and members' names, can change whenever you like.
 
 `WEBAUTHN_RP_ID` must be a lowercase domain name with at least one dot, with no
 `https://`, port or path, and not an IP address: browsers don't use passkeys on IP
@@ -52,13 +54,13 @@ the site is running.
 
 Cookies are another matter, whichever `WEBAUTHN_RP_ID` you choose. Any site under
 `example.com` can set cookies that browsers also send to `cinema.example.com`. The
-cinema ignores its session cookie when a browser sends two different ones, so such
-a site can stop someone's browser using the cinema. It can also hand its own session
-to a browser with no cookie from the cinema, and it can make that so, by setting
-more cookies than the browser keeps for `example.com` so the cinema's is dropped.
-Ticket links opened in that browser then work for whoever runs that site too, until
+shop ignores its session cookie when a browser sends two different ones, so such
+a site can stop someone's browser using the shop. It can also hand its own session
+to a browser with no cookie from the shop, and it can make that so, by setting
+more cookies than the browser keeps for `example.com` so the shop's is dropped.
+Tape links opened in that browser then work for whoever runs that site too, until
 the browser next signs in. So if other people run sites under `example.com`, give
-the cinema a domain of its own.
+the shop a domain of its own.
 
 ## DNS
 
@@ -256,7 +258,7 @@ when it started, so if you mount the storage while the app is running, the app s
 the empty folder underneath until you run `docker compose restart app` in
 `/srv/open-matte/app/deploy`.
 
-The same storage can hold the off-server copy of the backups, once the cinema is
+The same storage can hold the off-server copy of the backups, once the shop is
 running ([Keeping a copy off the server](deploying.md#keeping-a-copy-off-the-server)).
 
 ## Getting the code
@@ -314,15 +316,15 @@ nano .env
 | `DOMAIN` | The address people visit, without `https://`, such as `cinema.example.com`. Its DNS must point at the server. Required. |
 | `REDIRECT_FROM` | Optional. Other names to send to `DOMAIN`, separated by spaces, such as `example.com` when `DOMAIN` is `www.example.com`. Caddy gets their certificates and answers every request on them with a permanent redirect to the same path on `DOMAIN`. Nothing else is served there, so passkeys only ever run on `DOMAIN`. |
 | `WEBAUTHN_RP_ID` | The domain passkeys belong to: `DOMAIN` or a parent of it ([Choices you make once](#choices-you-make-once)). Left empty, the site works but passkeys are off, and the log says why. |
-| `ADMIN_PASSWORD` | The admin password, at least 12 characters. Required. `openssl rand -base64 24` makes a good one. |
-| `TMDB_API_KEY` | Optional. A TMDB key, for film details and posters ([metadata.md](metadata.md)). You can paste one in the admin instead; one set here takes precedence. |
+| `ADMIN_PASSWORD` | The back office password, at least 12 characters. Required. `openssl rand -base64 24` makes a good one. |
+| `TMDB_API_KEY` | Optional. A TMDB key, for film details and posters ([metadata.md](metadata.md)). You can paste one in the back office instead; one set here takes precedence. |
 | `DATA_PATH` | Where the database lives on the server. Default `/srv/open-matte/data`. |
 | `MEDIA_PATH` | Where the film folders are. Default `/srv/open-matte/media`. |
 | `BACKUP_PATH` | Where the daily backups go, on the server's own disk. Default `/srv/open-matte/backups`. |
 | `BACKUP_HOUR` | Optional. The hour (UTC, 0 to 23) the daily backup runs. Default 4. |
 | `BACKUP_KEEP_DAYS` | Optional. How many days' newest backups to keep, at least 1. Default 14. Every backup of the last three days (or of the last `BACKUP_KEEP_DAYS` days, if that's fewer) is kept as well. |
 | `BACKUP_KEEP_MONTHS` | Optional. How many months' first backups to keep; 0 keeps none. Default 12. |
-| `BACKUP_COPY_DIR` | Optional, and best left until later: where the off-server copy of the backups appears inside the app's container, so the admin can show it ([deploying.md](deploying.md#keeping-a-copy-off-the-server)). |
+| `BACKUP_COPY_DIR` | Optional, and best left until later: where the off-server copy of the backups appears inside the app's container, so the back office can show it ([deploying.md](deploying.md#keeping-a-copy-off-the-server)). |
 
 `deploy/.env` is read by Docker Compose, which treats `$` as the start of a variable.
 If you choose your own password with a `$`, a space or a `#` in it, put it in single
@@ -342,7 +344,7 @@ docker compose up -d --build
 ```
 
 The first build takes a few minutes. Then Compose starts two containers: `app`, the
-cinema, and `caddy`, which gets the certificate and passes requests to the app. With
+shop, and `caddy`, which gets the certificate and passes requests to the app. With
 `scripts/deploy.sh`, run it again from your computer instead; it does the same.
 
 Check both are up. Within a minute the app should say `(healthy)`:
@@ -377,10 +379,12 @@ Look for `certificate obtained successfully`. If you see errors about a challeng
 instead, check the DNS record and that ports 80 and 443 are open. Caddy keeps trying
 by itself, so once they're right the certificate follows within a few minutes.
 
-Now open `https://cinema.example.com/admin` and sign in with `ADMIN_PASSWORD`. Under
-**Settings**, give the cinema its name. **Branding** (colours, a logo, a tab icon) and
-**Film information** (a TMDB key) can wait. **People and passkeys** on the same page
-should say which domain passkeys belong to.
+Now open `https://cinema.example.com/admin`, the back office, and sign in with
+`ADMIN_PASSWORD`. Under **Settings**, give the shop its name under **Shop name**, and
+your own under **Your name** if you'd like friends to see it on your staff picks and
+wherever the pages say whom to ask (left empty, they see the shop's name). **Colours
+and the card**, **Logo** and **Film information** (a TMDB key) can wait. **Members and
+passkeys** on the same page should say which domain passkeys belong to.
 
 ## The first film
 
@@ -399,7 +403,8 @@ npm run encode -- ~/Films/Arrival.mkv media/arrival --subs --seconds 60
 
 It writes `media/arrival` with `hls/`, `subtitles/` and a `film.json`. Add a
 `poster.jpg` to the folder and `"poster": "poster.jpg"` to `film.json` (or let TMDB
-supply one, if you've set a key), and write your recommendation in `film.json`.
+supply one, if you've set a key), and write your staff pick (`recommendation`) in
+`film.json`.
 [encoding.md](encoding.md) has the options.
 
 **With films you've already encoded.** Put the HLS files in a folder and write its
@@ -427,28 +432,27 @@ a folder with one of them, or with a name that breaks the rules, and says why.
 rsync -av --partial-dir=.rsync-partial --progress media/arrival/ my-server:/srv/open-matte/media/arrival/
 ```
 
-**Scan and publish.** In the admin, on **Films**, press **Scan media folder**. The
-film appears as a **Draft**. If the scan reports missing segments, the copy didn't
-finish: run the same `rsync` again and scan again. Open the film, check its details,
-and press **Publish**.
+**Scan and put it on the shelf.** In the back office, on **Films**, press **Scan media
+folder**. The film appears **Off the shelf**. If the scan reports missing segments,
+the copy didn't finish: run the same `rsync` again and scan again. Open the film,
+check its details, and press **Put on the shelf**.
 
-## The first ticket
+## The first tape
 
-On the film's page in the admin, under **Tickets**:
+On the film's page in the back office, on its **Tapes** tab, under **Lend a tape**:
 
 1. Choose **Anyone with the link**.
 2. Under **Who is it for?**, write `Test`. It's only a note for you.
-3. Leave **Screenings** at 1, and press **Issue ticket for anyone with the link**.
+3. Leave **Plays** at 1, and press **Lend a tape for anyone with the link**.
 4. Press **Copy link**. The link looks like `https://cinema.example.com/t/...`.
 
 Open the link on your phone, or in a private window on your computer, so it isn't
-signed in to the admin, and press Play. A screening starts, and **Activity** in the
-admin shows rows for `Test` reading **Opened the film page** and then **Started a new
-screening**.
+signed in to the back office, and press Play. A play starts, and the **Ledger** in the
+back office shows rows for `Test` reading **Opened the film page** and then **Started
+a new play**.
 
-That test used the ticket's one screening, so it's spent once the screening's resume
-window (48 hours by default) is over. Issue a fresh ticket for each person you send
-one to.
+That test used the tape's one play, so it's spent once the time to come back to it
+(48 hours by default) is over. Lend a fresh tape to each person you send one to.
 
 If the site works everywhere except on your home network, the network may be blocking
 or rewriting your domain: see [Testing from home](deploying.md#testing-from-home).
@@ -458,19 +462,18 @@ or rewriting your domain: see [Testing from home](deploying.md#testing-from-home
 - **`docker compose ps`** shows `app` as `(healthy)`, and `caddy` up.
 - **HTTPS works**, and plain HTTP sends you there. On your computer,
   `curl -sI http://cinema.example.com` shows a redirect to `https://`, and
-  `curl -s https://cinema.example.com/api/site` answers with the cinema's name.
+  `curl -s https://cinema.example.com/api/site` answers with the shop's name.
 - **The log has a `Passkeys:` line** naming your `WEBAUTHN_RP_ID`, not
   `Passkeys unavailable:`.
-- **Status** in the admin (the projection booth) shows the media folder as
-  **Readable**, with your film's folder among those it counts and the last scan having
+- **Status** in the back office shows the media folder as **Readable**, with your film's folder among those it counts and the last scan having
   found the film, the free disk space, a backup file (the first is written about a minute after the first
   start), and the version running.
-- **A ticket plays** on a phone over mobile data, away from your own network.
-- **Passkeys work.** Under **People**, add yourself as a person. On your page, press
-  **Create a setup link**, then **Create link**, then **Copy link** (the link is shown
-  only once), and open the link on your phone. Create the passkey, then sign out and
-  sign in again with it. Recovery links and how people sign in are in
-  [access.md](access.md#people-and-passkeys).
+- **A tape plays** on a phone over mobile data, away from your own network.
+- **Passkeys work.** Under **Members**, make yourself a membership card. On your page,
+  press **Create a setup link**, then **Create link**, then **Copy link** (the link is
+  shown only once), and open the link on your phone. Create the passkey, then sign out
+  and sign in again with it (**Show your card**). Recovery links and how members sign
+  in are in [access.md](access.md#people-and-passkeys).
 
 ## What next
 
@@ -479,7 +482,7 @@ or rewriting your domain: see [Testing from home](deploying.md#testing-from-home
   sets up a daily copy.
 - **Read [deploying.md](deploying.md)** before your first update: it covers updating,
   backups and restoring, rolling back and moving to a new server.
-- **Read [access.md](access.md)** for the rules: the two kinds of ticket, people and
+- **Read [access.md](access.md)** for the rules: the two kinds of tape, members and
   passkeys, and what is recorded about viewers and for how long.
 - **Before each update, read [CHANGELOG.md](../CHANGELOG.md).** Each release says
   whether it needs a backup first, and whether you can go back without a restore.

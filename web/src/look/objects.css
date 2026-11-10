@@ -1,0 +1,221 @@
+/* =====================================================================
+   look/objects.css: the flat real objects (objects.jsx) and the shop's
+   video machine (crt.jsx). Ported from the approved kit
+   (.claude/design/vhs/analogue/kit.css) and take 2's player
+   (.claude/design/vhs/app/friend/friend.css), for the app: the grain, tone
+   and wear are <canvas> elements, not data: images.
+
+   Printed things are opaque and stay as printed: the interface's focus
+   block, raster and lit blocks never touch them. Blue is the machine's
+   screen and nothing else; orange (the sticker) is only the next deadline.
+   ===================================================================== */
+
+.look-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.ob-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- every flat object ---------- */
+.ob { position: relative; display: block; margin: 0; transform: rotate(var(--rot, 0deg)); transform-origin: var(--origin, 50% 50%); color: var(--ink); }
+span.ob { display: inline-block; }
+.ob__body { position: relative; display: block; filter: var(--contact, none); }
+.ob__sheet { position: relative; display: block; background-color: var(--stock); overflow: hidden; }
+.ob__tone, .ob__wear, .ob__gloss, .ob__grain { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; display: block; }
+/* the order on the sheet: the stock's tone, the ink, the ink wearing back to the stock, the grain over all
+   (a thin film of ink takes the paper's texture), then anything stuck on */
+.ob__tone { z-index: 0; }
+.ob__ink { position: relative; z-index: 1; display: block; }
+.ob__wear { z-index: 2; }
+.ob__gloss { z-index: 2; }
+.ob__grain { z-index: 2; opacity: var(--grain-o, 0.6); }
+.ob__stuck { position: absolute; z-index: 3; }
+/* only a contact shadow, as deep as the thing is thick; things stuck onto something else cast none */
+.ob--sleeve, .ob--kraft { --contact: drop-shadow(0 1.5px 1.2px rgb(0 0 0 / 0.62)); }
+.ob--pick { --contact: drop-shadow(0 0.75px 0.6px rgb(0 0 0 / 0.55)); }
+.ob--label .ob__sheet { box-shadow: inset 0 0 0 0.5px rgb(60 48 34 / 0.22); }
+
+/* ---------- lettering ---------- */
+/* printed ink, and the second plate (the shop's blue) a touch off register */
+.ob .pr { filter: var(--kp, none); }
+.ob .ink-2 { color: var(--ink-blue); transform: translate(var(--rx, 0px), var(--ry, 0px)); }
+.ob .hand { font-family: var(--hand); font-weight: 400; font-feature-settings: 'calt' 1, 'liga' 1; filter: var(--kh, none); }
+.ob .hw { display: inline-block; transform: translateY(var(--y, 0)) rotate(var(--r, 0deg)) scale(var(--s, 1)); opacity: var(--o, 1); }
+.ob .typed { font-family: var(--type); font-weight: 400; filter: var(--kt, none); }
+.ob .tc { position: relative; top: var(--y, 0); left: var(--x, 0); opacity: var(--o, 1); }
+.ob .gun { filter: var(--kg, none); }
+/* a price gun prints from a band of wheels: every character has the same narrow cell */
+.ob .gc { display: inline-block; width: 0.46em; text-align: center; transform: translateY(var(--y, 0)) scaleX(var(--sx, 0.8)); opacity: var(--o, 1); }
+.ob .gc--sp { width: 0.26em; }
+.rub { display: inline-block; transform: translateY(var(--y, 0)) rotate(var(--r, 0deg)); margin-right: var(--m, 0); }
+.nw { white-space: nowrap; }
+
+/* ---------- the sleeve: the poster printed on card ---------- */
+/* where the ink thins, the white board shows, so flat colour takes a mottle */
+.ob--sleeve { --stock: #e6e0d2; --grain-o: 0.32; width: min(100%, var(--w, 240px)); }
+.ob--sleeve .ob__sheet { aspect-ratio: 2 / 3; }
+.ob--sleeve .ob__ink { position: absolute; inset: 0; }
+.ob--sleeve img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* the plain sleeve, for a film with no artwork: kraft board, the title typed on a label, and the shop's logo (if it has one) printed at its foot */
+.ob--kraft { --stock: var(--stock-kraft); --grain-o: 0.9; width: min(100%, var(--w, 240px)); }
+.ob--kraft > .ob__body > .ob__sheet { aspect-ratio: 2 / 3; container-type: inline-size; }
+.ob--kraft > .ob__body > .ob__sheet > .ob__ink { position: absolute; inset: 0; }
+.ob--kraft .sl__logo { position: absolute; left: 22%; right: 22%; bottom: 9%; height: 15%; display: flex; align-items: flex-end; justify-content: center; }
+.ob--kraft .sl__logo img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; filter: url(#look-logo); opacity: 0.88; }
+.ob--kraft > .ob__body > .ob__sheet > .ob__stuck { left: 11%; right: 11%; top: 9%; }
+.ob--kraft .ob--label .ob__ink { display: block; font-size: max(12px, 6.4cqw); line-height: 1.35; padding: 10px 12px 9px; overflow-wrap: anywhere; }
+/* as small as a phone's (96px): the label widens and tightens so a long word fits */
+@container (max-width: 140px) {
+  .ob--kraft > .ob__body > .ob__sheet > .ob__stuck { left: 6%; right: 6%; }
+  .ob--kraft .ob--label .ob__ink { padding: 7px 6px 6px; }
+}
+
+/* ---------- a typed label, stuck on ---------- */
+.ob--label { --stock: var(--stock-label); --grain-o: 0.7; }
+.ob--label .ob__ink { padding: 9px 12px 8px; color: var(--ink); font: 400 15px/20px var(--type); }
+
+/* ---------- the staff-pick card ---------- */
+.ob--pick { --stock: var(--stock-pick); --grain-o: 0.75; --origin: 0% 100%; --hs: 27px; width: min(100%, var(--w, 440px)); }
+.ob--pick .ob__ink { padding: 18px 24px; }
+.pick__head { margin: 0 0 10px; font: var(--shop-weight) 21px/24px var(--shop-face); font-variation-settings: var(--shop-vars); color: var(--ink-blue); }
+.pick__text { margin: 0; color: var(--ink-pen); font-size: var(--hs); line-height: 1.32; text-wrap: pretty; overflow-wrap: break-word; white-space: pre-line; }
+.pick__by { margin: 12px 0 0; display: flex; justify-content: flex-end; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.pick__byk { font: 600 15px/20px var(--sans); color: var(--ink-blue); }
+.pick__by .hand { font-size: calc(var(--hs) * 0.95); color: var(--ink-pen); line-height: 1.1; }
+/* a long pick is written smaller (words.js pickSize), never under 19px */
+.ob--pick.pick--long { --hs: 23px; }
+.ob--pick.pick--longer { --hs: 20px; }
+@media (max-width: 767px) {
+  .ob--pick { --w: 358px; --hs: 23px; }
+  .ob--pick.pick--long { --hs: 21px; }
+  .ob--pick.pick--longer { --hs: 19px; }
+  .ob--pick .ob__ink { padding: 14px 18px; }
+  .pick__head { font-size: 19px; margin-bottom: 6px; }
+}
+
+/* ---------- the price-gun sticker: fluorescent orange, only for the next deadline ---------- */
+.ob--sticker { --stock: var(--stock-sticker); --grain-o: 0.55; width: fit-content; max-width: 100%; vertical-align: middle; position: relative; top: var(--sy, 0px); }
+/* where it can't be one line (a phone, a long date and time), the gun's line goes under the printed words */
+.ob--sticker .ob__ink { padding: 8px 11px 8px 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 7px; color: var(--ink); white-space: nowrap; }
+.stk__k { font: 600 13px/18px var(--sans); }
+.stk__v { font: 700 20px/24px var(--sans); font-variant-numeric: tabular-nums; }
+
+/* ---------- black label-maker tape ---------- */
+/* embossed: black plastic, glossy, the letters stress-whitened where the wheel pressed them up.
+   Black, so blue keeps one meaning on the page: the machine's screen */
+.ob--tape { --stock: var(--stock-tape); --grain-o: 0.16; width: max-content; max-width: 100%; }
+.ob--tape > .ob__body > .ob__sheet::after { content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none; box-shadow: inset 0 1px 0 rgb(255 248 236 / 0.11), inset 0 -1px 0 rgb(0 0 0 / 0.45); }
+.ob--tape .ob__ink { padding: 5px 10px 4px; }
+/* the blank tail a label maker leaves after the last letter: the sticker goes over it */
+.ob--tape.tail .ob__ink { padding-right: 84px; }
+.emb-line { display: block; white-space: pre; font: 700 18px/24px var(--sans); color: var(--tape-letter); }
+/* one wheel per letter, so every letter gets the same cell; whitening is soft-edged and uneven */
+.emb { display: inline-block; width: 0.68em; text-align: center; opacity: var(--o, 1); transform: translateY(var(--y, 0)) scaleX(var(--sx, 1)); text-shadow: 0 0 1.2px rgb(226 222 213 / 0.45), 0 0.75px 0.5px rgb(0 0 0 / 0.5); }
+.etape { display: inline-grid; justify-items: start; gap: 6px; max-width: 100%; }
+.etape__end { display: flex; align-items: center; max-width: 100%; }
+/* the sticker is stuck across the tape's end, a little over the edges, at every width */
+.etape__end > .ob--sticker { position: relative; z-index: 2; flex: 0 1 auto; min-width: 0; margin-left: -76px; }
+
+/* ---------- the blue screen: the machine ---------- */
+/* VT323 would join "ff" into one cell ("Off" read squeezed): a character generator has no ligatures */
+.crt {
+  position: relative; display: block; overflow: hidden; isolation: isolate; container-type: inline-size;
+  background: var(--blue); color: var(--osd); border-radius: 10px / 12px; border: 0;
+  font-family: var(--osd-face); font-weight: 400; font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'calt' 0;
+}
+/* what a tube does to a flat blue: static scanlines in whole device pixels (devicePixels.js),
+   darker edges, and a soft bloom on the letters. Nothing flickers or moves. */
+.crt::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2; border-radius: inherit;
+  background:
+    repeating-linear-gradient(to bottom, rgb(6 8 48 / 0.17) 0 var(--scan-l), rgb(6 8 48 / 0.05) var(--scan-s), transparent calc(var(--scan-s) + 0.5px) var(--scan-p)),
+    radial-gradient(ellipse 80% 75% at 50% 48%, transparent 58%, rgb(6 8 40 / 0.32) 100%);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25);
+}
+.crt__screen { position: relative; z-index: 1; display: block; height: 100%; }
+.crt p { margin: 0; }
+.crt .osd p, .crt .osd__opt, .crt .osd__k, .crt .crt-play__ctr, .crt .crt-telly__ctr, .crt .osd__left {
+  text-shadow: 0 0 1px rgb(246 247 253 / 0.5), 1px 0 1px rgb(246 247 253 / 0.18), -1px 0 1px rgb(246 247 253 / 0.18), 0 0 7px rgb(160 176 255 / 0.26);
+}
+.crt .px { display: inline-block; width: auto; height: 0.62em; vertical-align: 0.02em; fill: currentColor; shape-rendering: crispEdges; margin-left: 0.3em; filter: drop-shadow(0 0 3px rgb(160 176 255 / 0.45)); }
+/* inverse video: the lit block a VCR draws round the item you're on; a real button when it does something */
+.crt .osd-inv { background: var(--osd); color: var(--osd-inverse-ink); text-shadow: none; box-shadow: 0 0 7px rgb(160 176 255 / 0.4); }
+.crt .osd-inv .px { filter: none; }
+/* the machine's own focus: the same 3px ring, in the screen's white */
+.crt :focus-visible, .crt-play:focus-visible { outline: 3px solid var(--osd); outline-offset: 2px; box-shadow: none; }
+.crt-play:focus-visible { outline-color: var(--ui-focus); box-shadow: 0 0 0 2px var(--ui-focus-gap); }
+.crt.crt--tube { border-radius: 3.4% / 4.6%; }
+/* a strip under the picture, or in the picture's place: square, as wide as it */
+.crt.crt--strip, .crt.crt--picture { border-radius: 0; }
+.crt.crt--picture { aspect-ratio: 16 / 9; width: 100%; }
+
+/* the OSD's parts */
+.osd { position: relative; height: 100%; }
+.osd__mode { font-size: max(30px, 1em); line-height: 1; white-space: nowrap; }
+.osd__btn { font: inherit; font-size: max(24px, 1em); line-height: 1; border: 0; border-radius: 0; padding: 8px 12px 6px; min-height: 44px; max-width: 100%; white-space: nowrap; cursor: pointer; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.osd--play { padding: 6.5% 7.5%; display: flex; flex-direction: column; justify-content: space-between; height: 100%; }
+.osd--play .osd__mode { font-size: max(32px, 5.2cqw); }
+.osd--play .osd__counter { align-self: flex-end; font-size: max(24px, 3.4cqw); line-height: 1; font-variant-numeric: tabular-nums; }
+
+/* Play: a piece of the blue screen it turns into, with the tape counter */
+.crt-play { display: block; width: 300px; max-width: 100%; height: 72px; padding: 0; cursor: pointer; text-align: left; touch-action: manipulation; -webkit-user-select: none; user-select: none; border-radius: 8px / 10px; }
+.crt-play__in { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 100%; padding: 0 20px 0 12px; }
+.crt-play__mode { font-size: 34px; line-height: 1; padding: 7px 12px 5px; white-space: nowrap; }
+.crt-play__ctr { font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
+.crt-play:active:not(:disabled) { background: var(--blue-press); }
+.crt-play:disabled { cursor: not-allowed; }
+.crt-play:disabled .crt-play__in { opacity: 0.6; }
+@media (prefers-reduced-motion: no-preference) {
+  .crt-play { transition: transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
+  .crt-play:active:not(:disabled) { transform: scale(0.97); }
+}
+@media (max-width: 767px) { .crt-play { width: 100%; max-width: 360px; } }
+
+/* paused: PAUSE and the way back on the left, the VCR's menu as a vertical list beside it, the time to come back on the right */
+.osd--pause { display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); column-gap: 72px; row-gap: 14px; align-items: start; padding: 18px 28px 16px; font-size: 22px; line-height: 1.1; }
+.osd__state { display: grid; justify-items: start; align-content: start; gap: 10px; }
+.osd--pause .osd__mode { font-size: 34px; }
+.osd__menu { display: grid; gap: 8px; align-content: start; }
+.osd--pause > .osd__left { margin: 0; justify-self: end; text-align: right; }
+@container (max-width: 700px) {
+  .osd--pause { grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; padding: 14px 16px 12px; }
+  .osd--pause > .osd__menu { grid-column: 1 / -1; grid-row: 2; }
+  .osd--pause > .osd__left { grid-column: 2; grid-row: 1; }
+}
+/* a phone: PAUSE and the way back, then the time to come back, then the menu, one under another */
+@container (max-width: 520px) {
+  .osd--pause { grid-template-columns: minmax(0, 1fr); }
+  .osd--pause > .osd__left { grid-column: 1; grid-row: 2; justify-self: start; text-align: left; }
+  .osd--pause > .osd__menu { grid-row: 3; }
+}
+
+/* the VCR's menu: a vertical list, the item then its values */
+.osd-menu { display: grid; gap: 8px; font-size: 22px; line-height: 1; }
+.osd__title { margin-bottom: 6px; }
+.osd__row { display: grid; grid-template-columns: 10ch minmax(0, 1fr); align-items: start; min-height: 40px; }
+.osd__k { padding-top: 9px; }
+.osd__opts { display: flex; flex-wrap: wrap; gap: 2px 0.3em; }
+/* a long choice ("Off · signs and foreign dialogue shown") wraps rather than run off a phone */
+.osd__opt { font: inherit; color: inherit; background: none; border: 0; padding: 4px 0.2em 2px; min-height: 40px; cursor: pointer; border-radius: 0; white-space: normal; text-align: left; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.crt .osd__opt[aria-checked='true'] { background: var(--osd); color: var(--osd-inverse-ink); box-shadow: 0 0 7px rgb(160 176 255 / 0.4); text-shadow: none; }
+@container (max-width: 330px) { .osd__row { grid-template-columns: minmax(0, 1fr); } .osd__k { padding-top: 4px; } }
+
+/* coming back to a paused tape: the telly */
+.crt-telly { width: 100%; max-width: 360px; container-type: inline-size; }
+.crt-telly > .crt { display: flex; flex-direction: column; min-height: 75cqw; }
+.crt-telly > .crt > .crt__screen { flex: 1 0 auto; display: flex; flex-direction: column; height: auto; }
+.crt-telly__in { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: space-between; gap: 16px; padding: 7.5% 8% 8.5%; font-size: 26px; line-height: 1.1; height: auto; }
+.crt-telly__top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.crt-telly__top .osd__mode { font-size: 34px; }
+.crt-telly__ctr { font-variant-numeric: tabular-nums; }
+.crt-telly__bottom { display: flex; }
+
+/* more contrast asked for: the tube's effects go, the blue and the words stay */
+@media (prefers-contrast: more) {
+  .crt::after { display: none; }
+  .crt .osd p, .crt .osd__opt, .crt .osd__k, .crt .crt-play__ctr, .crt .crt-telly__ctr, .crt .osd__left { text-shadow: none; }
+}
+/* forced colours: the system's own; what is lit is Highlight */
+@media (forced-colors: active) {
+  .crt { border: 1px solid CanvasText; }
+  .crt::after { display: none; }
+  .crt .osd-inv, .crt .osd__opt[aria-checked='true'] { forced-color-adjust: none; background: Highlight; color: HighlightText; box-shadow: none; }
+  .ob__tone, .ob__wear, .ob__gloss, .ob__grain { display: none; }
+}

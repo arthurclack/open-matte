@@ -1,27 +1,49 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, Route, Routes, useLocation, useMatch } from 'react-router-dom';
-import { api } from '../api.js';
-import { scrollBehavior } from '../motion.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, NavLink, Route, Routes, useLocation, useMatch } from 'react-router-dom';
+import { api, formatTime, plural } from '../api.js';
+import { InkFilters, ShopName } from '../look/objects.jsx';
+import { Line, TabRow } from '../look/ui.jsx';
+import { embeddedSite } from '../site.jsx';
 import Activity from './Activity.jsx';
 import FilmDetail from './FilmDetail.jsx';
 import Films from './Films.jsx';
 import People from './People.jsx';
 import PersonDetail from './PersonDetail.jsx';
 import Settings from './Settings.jsx';
+import { serverTrouble } from './facts.js';
 import Status, { AttentionStrip } from './Status.jsx';
 import TicketDetail from './TicketDetail.jsx';
 import Tickets from './Tickets.jsx';
 import { AdminContext } from './ui.jsx';
+// The back office's own stylesheet, after the shared ones (main.jsx).
+import '../look/office.css';
+
+// How long a reading of the booth is shown before the next screen reads it again.
+const BOOTH_FRESH_MS = 60_000;
 
 export default function AdminApp() {
   const [state, setState] = useState('checking'); // checking | in | out
   const [signOutError, setSignOutError] = useState(null);
-  // A film's own page is part of Films, so Films stays marked there. The link itself
-  // keeps `end`, or it would be marked on every other section too.
+  // The shop's name and logo, for the brand, as the server wrote them into the page.
+  // A page that saves them (Settings) passes the new ones to setSite.
+  const [site, setSite] = useState(embeddedSite);
+  // The films and the booth: the status line at the foot, the attention strip on Films
+  // and the still 12:00 on Status read them here. The films are read again on each
+  // screen; the booth's checks (the media folder, free space, the backup's copy) only
+  // when the last reading is a minute old, or when asked.
+  const [facts, setFacts] = useState({ films: null, booth: null });
+  const boothAt = useRef(0);
+  const { pathname } = useLocation();
+  // A film's own page is part of Films, so Films stays lit there.
+  const onShelf = useMatch('/admin');
   const onFilm = useMatch('/admin/films/:id');
+  const onFilms = Boolean(onShelf || onFilm);
 
   useEffect(() => {
-    document.title = 'Admin · Open Matte';
+    document.title = `Back office · ${site?.cinemaName || 'Open Matte'}`;
+  }, [site?.cinemaName]);
+
+  useEffect(() => {
     api
       .get('/api/admin/session')
       .then(() => setState('in'))
@@ -29,20 +51,54 @@ export default function AdminApp() {
   }, []);
 
   const signedOut = useCallback(() => setState('out'), []);
-  const ctx = useMemo(() => ({ signedOut }), [signedOut]);
+
+  // Each part on its own: a booth that can't be read leaves the films' counts showing.
+  // refreshFacts() reads the films, and the booth if its reading is a minute old;
+  // refreshFacts('now') reads both; refreshFacts(false) only the films; and
+  // refreshFacts(booth) takes a booth a page has just read itself (Status).
+  const refreshFacts = useCallback(
+    (booth) => {
+      if (booth && typeof booth === 'object') {
+        boothAt.current = Date.now();
+        setFacts((f) => ({ ...f, booth }));
+        return;
+      }
+      const read = (url, key) =>
+        api.get(url).then(
+          (data) => setFacts((f) => ({ ...f, [key]: data })),
+          (err) => {
+            if (key === 'booth') boothAt.current = 0;
+            if (err.status === 401) signedOut();
+          },
+        );
+      read('/api/admin/films', 'films');
+      if (booth === 'now' || (booth !== false && Date.now() - boothAt.current >= BOOTH_FRESH_MS)) {
+        boothAt.current = Date.now();
+        read('/api/admin/booth', 'booth');
+      }
+    },
+    [signedOut],
+  );
+  // On each screen. Status reads the booth itself, and hands it over.
+  const onStatus = Boolean(useMatch('/admin/status'));
+  useEffect(() => {
+    if (state === 'in') refreshFacts(onStatus ? false : undefined);
+  }, [state, pathname, onStatus, refreshFacts]);
+
+  const ctx = useMemo(() => ({ signedOut, site, setSite, facts, refreshFacts }), [signedOut, site, facts, refreshFacts]);
 
   if (state === 'checking') return null;
-  if (state === 'out') return <Login onSignedIn={() => setState('in')} />;
+  if (state === 'out') return <Login site={site} onSignedIn={() => setState('in')} />;
 
-  // The admin only looks signed out once the server has ended the session. If it
-  // never heard, the cookie still works: on a borrowed computer, the next person to
-  // open the admin would be in.
+  // The back office only looks signed out once the server has ended the session. If
+  // it never heard, the cookie still works: on a borrowed computer, the next person
+  // to open the back office would be in.
   async function signOut() {
     setSignOutError(null);
     try {
       await api.post('/api/admin/logout');
     } catch {
-      setSignOutError("Couldn't sign out. Check your connection and try again.");
+      setSignOutError('Check your connection and try again.');
       return;
     }
     setState('out');
@@ -50,108 +106,106 @@ export default function AdminApp() {
 
   return (
     <AdminContext.Provider value={ctx}>
-      <div className="admin">
-        <nav className="admin-nav">
-          <div className="brand">Open Matte</div>
-          <Tabs>
-            <NavLink to="/admin" end className={({ isActive }) => (isActive || onFilm ? 'active' : undefined)}>
+      <InkFilters />
+      <div className="ui-office admin">
+        <nav className="ui-office__nav" aria-label="Back office">
+          <Link to="/admin" className="ui-office__brand">
+            <ShopName site={{ ...site, logo: null }} />
+            <span className="ui-office__brand-k">Back office</span>
+          </Link>
+          <TabRow watch={pathname}>
+            <Link to="/admin" className="ui-tab" aria-current={onFilms ? 'page' : undefined}>
               Films
+            </Link>
+            <NavLink to="/admin/tickets" className="ui-tab">
+              Tapes
             </NavLink>
-            <NavLink to="/admin/tickets">Tickets</NavLink>
-            <NavLink to="/admin/people">People</NavLink>
-            <NavLink to="/admin/activity">Activity</NavLink>
-            <NavLink to="/admin/status">Status</NavLink>
-            <NavLink to="/admin/settings">Settings</NavLink>
-          </Tabs>
-          <div className="bottom">
-            <a href="/">View site</a>
-            <button style={{ textAlign: 'left' }} onClick={signOut}>
+            <NavLink to="/admin/people" className="ui-tab">
+              Members
+            </NavLink>
+            <NavLink to="/admin/activity" className="ui-tab">
+              Ledger
+            </NavLink>
+            <NavLink to="/admin/status" className="ui-tab">
+              Status
+            </NavLink>
+            <NavLink to="/admin/settings" className="ui-tab">
+              Settings
+            </NavLink>
+          </TabRow>
+          <div className="ui-office__foot">
+            <a className="ui-nav__item" href="/">
+              View the shop
+            </a>
+            <button type="button" className="ui-nav__item" onClick={signOut}>
               Sign out
             </button>
           </div>
         </nav>
-        <main className="admin-main">
-          {signOutError && <div className="notice bad">{signOutError}</div>}
-          <Routes>
-            {/* The first page starts with what needs attention, if anything does. */}
-            <Route
-              index
-              element={
-                <>
-                  <AttentionStrip />
-                  <Films />
-                </>
-              }
-            />
-            <Route path="films/:id" element={<FilmDetail />} />
-            <Route path="tickets" element={<Tickets />} />
-            <Route path="tickets/:id" element={<TicketDetail />} />
-            <Route path="people" element={<People />} />
-            <Route path="people/:id" element={<PersonDetail />} />
-            <Route path="activity" element={<Activity />} />
-            <Route path="status" element={<Status />} />
-            <Route path="settings" element={<Settings />} />
-          </Routes>
+        <main className="ui-office__main ui-raster admin-main" id="main">
+          <div className="ui-office__page">
+            {signOutError && (
+              <Line kind="bad" lead="Couldn't sign out." role="alert">
+                {signOutError}
+              </Line>
+            )}
+            <Routes>
+              {/* The first page starts with what needs attention, if anything does. */}
+              <Route
+                index
+                element={
+                  <Films>
+                    <AttentionStrip />
+                  </Films>
+                }
+              />
+              <Route path="films/:id" element={<FilmDetail />} />
+              <Route path="tickets" element={<Tickets />} />
+              <Route path="tickets/:id" element={<TicketDetail />} />
+              <Route path="people" element={<People />} />
+              <Route path="people/:id" element={<PersonDetail />} />
+              <Route path="activity" element={<Activity />} />
+              <Route path="status" element={<Status />} />
+              <Route path="settings" element={<Settings />} />
+            </Routes>
+          </div>
+          <StatusLine facts={facts} />
         </main>
       </div>
     </AdminContext.Provider>
   );
 }
 
-// Sideways only, as far as it needs, and keeping clear of the row's ends (styles.css).
-const reveal = (tab, behavior) => {
-  const row = tab?.parentElement;
-  // Not while every tab fits: the end padding alone would move the row off the page's edge.
-  if (!row || row.scrollWidth - row.clientWidth <= parseFloat(getComputedStyle(row).paddingRight)) return;
-  tab.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior });
-};
-
-// The sections. On a phone they are one row that scrolls sideways (styles.css), so
-// the current one is scrolled into view when the admin opens and whenever it
-// changes, and so is any tab the keyboard reaches.
-function Tabs({ children }) {
-  const ref = useRef(null);
-  const { pathname } = useLocation();
-  const opened = useRef(false);
-
-  // At once when the admin opens, with nothing to move from; smoothly after that,
-  // unless the person has asked for less motion.
-  // Before the fades are first measured, below, so they start from where it lands.
-  useLayoutEffect(() => {
-    reveal(ref.current.querySelector('a.active'), opened.current ? scrollBehavior() : 'auto');
-    opened.current = true;
-  }, [pathname]);
-
-  // How much of the tabs is hidden past each end of the row, for its fades. Measured
-  // from the tabs, not the scroll, so the row's own padding never counts.
-  useLayoutEffect(() => {
-    const row = ref.current;
-    const measure = () => {
-      const edges = row.getBoundingClientRect();
-      const before = edges.left - row.firstElementChild.getBoundingClientRect().left;
-      const after = row.lastElementChild.getBoundingClientRect().right - edges.right;
-      row.style.setProperty('--more-before', `${Math.max(0, before)}px`);
-      row.style.setProperty('--more-after', `${Math.max(0, after)}px`);
-    };
-    measure();
-    row.addEventListener('scroll', measure, { passive: true });
-    const resized = new ResizeObserver(measure);
-    resized.observe(row);
-    for (const tab of row.children) resized.observe(tab);
-    return () => {
-      row.removeEventListener('scroll', measure);
-      resized.disconnect();
-    };
-  }, []);
-
+// The foot of every screen: how many films, how many on the shelf, and whether the
+// server is well, as the booth last said and when.
+function StatusLine({ facts: { films, booth } }) {
+  if (!films && !booth) return null;
+  const trouble = booth ? serverTrouble(booth.server) : 0;
   return (
-    <div className="tabs" ref={ref} onFocus={(e) => reveal(e.target, scrollBehavior())}>
-      {children}
-    </div>
+    <p className="ui-status">
+      {films && (
+        <>
+          <span>
+            <b>{films.length}</b> {films.length === 1 ? 'film' : 'films'}
+          </span>
+          <span>
+            <b>{films.filter((f) => f.published).length}</b> on the shelf
+          </span>
+        </>
+      )}
+      {booth &&
+        (trouble ? (
+          <span>
+            {plural(trouble, 'thing')} on the server to look at: <Link to="/admin/status">Status</Link>
+          </span>
+        ) : (
+          <span>Server well, checked {formatTime(booth.checkedAt)}</span>
+        ))}
+    </p>
   );
 }
 
-function Login({ onSignedIn }) {
+function Login({ site, onSignedIn }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -168,10 +222,10 @@ function Login({ onSignedIn }) {
       // server restarting during a deploy) says nothing about the password.
       setError(
         err.status === 401
-          ? 'That password is not right.'
+          ? { lead: 'That password is not right.', wrong: true }
           : err.status === 429
-            ? 'Too many attempts. Wait a few minutes and try again.'
-            : "Couldn't sign in just now. Check your connection and try again in a moment.",
+            ? { lead: 'Too many attempts.', text: 'Wait a few minutes and try again.' }
+            : { lead: "Couldn't sign in just now.", text: 'Check your connection and try again in a moment.' },
       );
     } finally {
       setBusy(false);
@@ -179,18 +233,40 @@ function Login({ onSignedIn }) {
   }
 
   return (
-    <div className="login">
-      <form onSubmit={submit} className="card">
-        <h1 style={{ fontSize: '1.5rem', marginBottom: '1.2rem' }}>Open Matte admin</h1>
-        {error && <div className="notice bad">{error}</div>}
-        <label className="field">
-          <span>Admin password</span>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus autoComplete="current-password" />
-        </label>
-        <button className="btn primary" disabled={busy || !password}>
-          Sign in
-        </button>
-      </form>
-    </div>
+    <main className="admin-login ui-raster">
+      <InkFilters />
+      <div className="admin-login__box">
+        <div className="ui-office__brand admin-login__brand">
+          <ShopName site={{ ...site, logo: null }} />
+          <span className="ui-office__brand-k">Back office</span>
+        </div>
+        <h1>Sign in to the back office</h1>
+        <form onSubmit={submit}>
+          {error && (
+            <Line kind="bad" role="alert" lead={error.lead}>
+              {error.text}
+            </Line>
+          )}
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="admin-password">
+              Back office password
+            </label>
+            <input
+              id="admin-password"
+              className="ui-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoFocus
+              autoComplete="current-password"
+              aria-invalid={error?.wrong || undefined}
+            />
+          </div>
+          <button className="ui-btn ui-btn--primary ui-btn--wide" disabled={busy || !password}>
+            Sign in
+          </button>
+        </form>
+      </div>
+    </main>
   );
 }

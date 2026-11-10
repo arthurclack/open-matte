@@ -77,22 +77,22 @@ test('a passkey set up from a link signs in, keeps a ticket, and shows on the ac
     await expect(page.getByRole('heading', { level: 1, name: film.title })).toBeVisible();
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Keep it' }).click();
-    await expect(page.getByText("This ticket is in your account, so it's on every device you sign in on.")).toBeVisible();
+    await expect(page.getByText("This tape is on your card, so it's on every device you sign in on.")).toBeVisible();
     await expect(page.getByRole('button', { name: 'Keep it' })).toBeHidden();
   });
 
   await test.step('the other browser is told it has been kept', async () => {
     await other.reload();
-    await expect(other.getByRole('heading', { name: 'This ticket has been kept' })).toBeVisible();
+    await expect(other.getByRole('heading', { name: 'This tape has been kept' })).toBeVisible();
   });
 
   await test.step('the account page lists this browser and the passkey', async () => {
     await menu.click();
-    await page.getByRole('menuitem', { name: 'Your account' }).click();
-    await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+    await page.getByRole('menuitem', { name: 'Your membership card' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Your membership card' })).toBeVisible();
     const browsers = page.locator('h2:has-text("Signed in on") + ul > li');
     await expect(browsers.filter({ hasText: 'This browser' })).toHaveCount(1);
     await expect(browsers.filter({ hasText: 'This browser' })).toContainText(/Chrome on \w+/);
-    await expect(page.getByText('Signed in here with this')).toBeVisible();
+    await expect(page.getByText('Used to sign in here')).toBeVisible();
   });
 });
