@@ -46,7 +46,7 @@ this page; the pages' names are in bold where a button or a heading is quoted.
 
 Every ticket is one of two kinds, chosen when you issue it:
 
-- **For anyone with the link**: a **bearer invitation**. Whoever has the link can use
+- **Anyone with the link**: a **bearer invitation**. Whoever has the link can use
   it, in any browser. The name you give it is a label for you, not an identity check,
   and signing in doesn't change that.
 - **Only one member, signed in**: it works only in a browser signed in as that
@@ -135,8 +135,8 @@ For a ticket for one person:
 - **Signed in as someone else**: told the ticket is for someone else. Again nothing
   is created or recorded.
 - **This browser opened the link while it was for anyone**, and someone has kept it
-  since (or you gave it to someone): told it has been kept in someone's account, and
-  to ask whoever sent it.
+  since (or you gave it to someone): told it has been kept on someone's membership
+  card, and to ask you.
 
 Until the person signs in, the code stays in the `/t/` address, so "Open in Safari"
 from an app's built-in browser, which can't use passkeys, takes the ticket with it.
@@ -144,8 +144,8 @@ The code is useless to anyone but that person, and pages send no Referer.
 
 The person doesn't need the link at all once they're signed in: the ticket is under
 Your tapes on every device they sign in on. For such a ticket, **Opened** on the
-admin's ticket page is the first time they opened its link or its film page, signed
-in.
+ticket's page in the back office is the first time they opened its link or its film
+page, signed in.
 
 ### Link previews
 
@@ -202,7 +202,7 @@ and the link works for nobody else.
 | | Before | After Sam keeps it | After you choose **Let anyone with the link use it** |
 |---|---|---|---|
 | Who can use it | Any browser that opened the link | Only Sam, signed in | Any browser that opened the link, again |
-| Browsers that opened the link | Hold it | Lose it from their next request, and are told "This ticket has been kept in someone's account. Ask whoever sent it." (no name) | Hold it again, unless you signed them out of it or revoked it meanwhile |
+| Browsers that opened the link | Hold it | Lose it from their next request, and are told "This tape has been kept": it's on someone's membership card now (not whose) | Hold it again, unless you signed them out of it or revoked it meanwhile |
 | Sam's devices | Only browsers that opened it | Every device Sam signs in on | Lose it, unless they opened the link |
 | An open screening | Where it is | Sam can take it over at once, at the same place | The same rule |
 | Screenings used, first play, expiry, resume deadline | Unchanged throughout | | |
@@ -231,15 +231,16 @@ On the ticket's page you can also:
   unless you tick the box again. The person loses it from their next request (an open
   screening can then be taken over at once), and browsers that opened the link get it
   back, if they haven't been signed out since.
-- **Give it to a person** (or to someone else): only they, signed in, can use it from
+- **Give it to a member** (or to someone else): only they, signed in, can use it from
   the next request. You can do this with any ticket, kept or not; browsers that opened
   the link lose it and are told it has been kept. A ticket you gave shows as "Only Sam,
   signed in"; one Sam kept shows as "Only Sam · kept from a link".
 - See which browsers opened the link before it was kept or given, and **Forget it in
   these browsers**, so a release gives it to nobody until the link is opened again.
   Only browsers still signed in are listed and counted, here and under **Browsers
-  holding this ticket**: one signed out since (by its viewer, by you, or by **Sign
-  out every viewer**), or whose session expired, can't use the ticket or get it back.
+  holding this tape**: one signed out since (by its viewer, by you, or by **Sign
+  out every friend and member**), or whose session expired, can't use the ticket or
+  get it back.
 
 Revoking a kept ticket also forgets those browsers, as it does for any ticket.
 
@@ -360,8 +361,8 @@ film again into its folder never leaves a browser mixing old and new.
 
 If the films' folder stops answering, as network storage can, a request that has
 had no answer within 5 seconds gets an error that players retry. The films' files
-only ever use half of the threads the app reads files with, so the pages, the
-admin and Status keep working meanwhile.
+only ever use half of the threads the app reads files with, so the pages and the
+back office, Status included, keep working meanwhile.
 
 One browser can't take all of those places, however many files it asks for and
 however slowly it reads them. In the Docker image there are 16. One browser holds 4
@@ -381,6 +382,9 @@ shop's own logo and tab icon (`/branding/<file>`) and Open Matte's icon drawn in
 its colours (`/favicon.svg`) are public, unlike a film's artwork: the sign-in page
 and every link preview show them to anyone. An uploaded logo or icon is only ever a
 PNG, JPEG or WebP image, checked by its bytes, never an SVG, which can carry script.
+
+The shop's name and Your name (in Settings) are in every page, so anyone who opens
+the address can read them.
 
 A browser signed in to the back office plays in preview mode and never uses a screening.
 Who a ticket is for doesn't matter there either, so check tickets for one person in
@@ -648,14 +652,14 @@ included.
 - Every page sends a Content-Security-Policy, which tells the browser what the page
   may load and run: only the app's own scripts, from this server; only its own
   stylesheets, and the shop's colours the server writes into the page, allowed by
-  their hash; images, the film and the app's requests from this server only, apart
-  from TMDB's thumbnails in the back office's Find details, which come from TMDB's image
-  server (`TMDB_IMAGE_BASE`) and are allowed on the back office's pages alone. Forms may
-  only be sent here, and no other site may show the page in a frame. So if a film's
-  details, a name or anything else ever got markup into a page, the browser would
-  refuse to run it, or to load or send anything from or to another site, except
-  through a link someone follows or a page redirect. Everything else the server sends
-  (the API, films, artwork, the logo, the app's files) may run and load nothing,
+  their hash; images, fonts, the film and the app's requests from this server only,
+  apart from TMDB's thumbnails in the back office's Find details, which come from
+  TMDB's image server (`TMDB_IMAGE_BASE`) and are allowed on the back office's pages
+  alone. Forms may only be sent here, and no other site may show the page in a frame.
+  So if a film's details, a name or anything else ever got markup into a page, the
+  browser would refuse to run it, or to load or send anything from or to another site,
+  except through a link someone follows or a page redirect. Everything else the server
+  sends (the API, films, artwork, the logo, the app's files) may run and load nothing,
   should it be opened as a page of its own; only the styles a browser gives its own
   page for an image or a text file are let through. Browsers report what the policy
   blocks to `/api/csp-report`, which takes reports from any site, as browsers send
@@ -758,7 +762,7 @@ records**:
 | Every other event: **opened**, **play**, **finished**, and all those under People and passkeys and Keeping tickets above | 365 days | 30 to 3,650 days |
 | A browser's session, once it has ended (signed out or expired) | 30 days from when it ended | 1 to 365 days |
 
-The same card shows what the clean-up would delete right now and what it last
+The same section shows what the clean-up would delete right now and what it last
 deleted, and **Clear now** runs it at once.
 
 **A session lives as long as its events.** The Ledger finds the person and device
@@ -770,11 +774,11 @@ never is. The link tickets a browser held go with its session.
 **The clean-up never changes tickets or screenings.** Screening limits, **finished**,
 resume positions, start-by deadlines, expiry, and when a ticket was first opened and
 first played all come from those, so the clean-up changes nothing a viewer can do,
-and a test checks it. The counts on a film's and a person's admin page come from
-tickets and screenings too, and a person's **Last signed in** is kept with the
-person, not worked out from their sessions. On the ticket list, a ticket whose events
-have gone shows its latest screening as its last activity, or else when it was first
-opened.
+and a test checks it. The counts on a film's and a person's page in the back office
+come from tickets and screenings too, and a person's **Last signed in** is kept with
+the person, not worked out from their sessions. On the ticket list, a ticket whose
+events have gone shows its latest screening as its last activity, or else when it was
+first opened.
 
 **Backups keep what they had.** A backup is the database as it was when it was
 written, so the events and sessions deleted since stay in it until the backup itself

@@ -106,7 +106,7 @@ export default function Settings() {
             aria-describedby={field('owner-h')}
           />
           <p className="ui-field__hint" id={field('owner-h')}>
-            Friends see it on your staff picks and wherever the pages say whom to ask: “{pickedBy(form)}”, “{askHost(form)}”.
+            On your staff picks and wherever the pages say whom to ask: “{pickedBy(form)}”, “{askHost(form)}”. Like the shop’s name, anyone who opens the shop’s address can see it.
           </p>
         </div>
         <div className="ui-field">

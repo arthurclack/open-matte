@@ -8,7 +8,7 @@ optional: without a key, everything comes from `film.json` and the back office.
 
 1. Create a free TMDB account, then go to **Settings → API** and request a
    developer key for personal use.
-2. In Open Matte's admin, open **Settings → Film information** and paste either
+2. In Open Matte's back office, open **Settings → Film information** and paste either
    value from that page: the **API Key** or the **API Read Access Token**. The key
    is checked with TMDB before it's saved.
 3. Pick the language for titles and synopses (English (US) by default).
@@ -43,10 +43,10 @@ If it isn't sure (two films called *Twins* from 1988, say), it changes nothing
 and the film is marked **Choose a TMDB match** in the back office. Saving a key also
 looks up every film that hasn't been matched yet.
 
-**By hand**, on a film's admin page under *Film information*: **Find details…**
-searches TMDB, you choose the right film, then tick which fields to take and
-pick a poster and backdrop from TMDB's options. Fields you tick replace what's
-there; nothing else changes.
+**By hand**, on a film's **Details** tab in the back office, under *Film
+information*: **Find details…** searches TMDB, you choose the right film, then
+tick which fields to take and pick a poster and backdrop from TMDB's options.
+Fields you tick replace what's there; nothing else changes.
 
 To pin a match from the start, put the film's TMDB number in `film.json` as
 `tmdbId`: it's the number in the film's TMDB address, such as

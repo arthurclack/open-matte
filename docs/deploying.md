@@ -69,7 +69,7 @@ the new password signs in.
    below 3), however many backups are made after it.
 
 4. **Note the version you run now**, in case you need to go back. **Status** in the
-   admin shows it, and so does the foot of **Settings**. With git,
+   back office shows it, and so does the foot of **Settings**. With git,
    `git -C /srv/open-matte/app describe --tags` gives the release.
 
 ### Updating with git
@@ -582,8 +582,8 @@ media 404: /artwork/arrival/poster-1a2b3c4d5e6f.jpg - no session cookie - Chrome
 ```
 
 Each line gives the status the browser was answered with, the address it asked for
-(only its start, if it's long), why, and the browser and device, as your account page
-names them. On an iPhone, Safari's own player fetches the video itself, so those
+(only its start, if it's long), why, and the browser and device, as the Ledger names
+them. On an iPhone, Safari's own player fetches the video itself, so those
 requests are named "Apple media player (iPhone)". A poster or backdrop downloaded from
 TMDB that a browser may not have is answered 404, as if there were no such film
 ([access.md](access.md#media-requests)), and logged with that 404 and the reason. A
@@ -624,9 +624,9 @@ CSP blocked img-src https://tracker.example.com on /arrival (Chrome on Android):
 ```
 
 Each line gives the rule that blocked it, what was blocked, the page's path, and the
-browser and device that said so, as your account page names them. The rules:
-`img-src` is images, `media-src` the film itself, `font-src` the membership card's
-fonts, `script-src` and `style-src` scripts and styles, `connect-src` the app's own
+browser and device that said so, as the Ledger names them. The rules:
+`img-src` is images, `media-src` the film itself, `font-src` the fonts the pages are
+set in, `script-src` and `style-src` scripts and styles, `connect-src` the app's own
 requests. A rule's name may end in
 `-elem` (a script or style element) or `-attr` (a script or style written on an
 element: `onclick=` and the like, or `style=`), as in `script-src-elem`,
@@ -698,9 +698,9 @@ A passkey works only on the site's own address: `https://` and `DOMAIN`, exactly
 Names in `REDIRECT_FROM` only redirect there, so a passkey is never used on them.
 
 TV browsers and the built-in browsers of apps such as Instagram and Facebook usually
-can't use passkeys, so they can't use tickets for one person. For a TV, issue a ticket
-for anyone with the link. Someone who opens their ticket in an app's browser can open
-it again in Safari or Chrome: the code stays in the address until they sign in.
+can't use passkeys, so they can't use tapes for one member. For a TV, lend a tape for
+anyone with the link. Someone who opens their tape in an app's browser can open it
+again in Safari or Chrome: the code stays in the address until they sign in.
 
 In development you don't set it: with no `PUBLIC_URL`, or one on `localhost`, passkeys
 belong to `localhost` and work at `http://localhost` on any port. Use `localhost`,

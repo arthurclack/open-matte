@@ -8,41 +8,37 @@ A release has an **Upgrading** note when updating to it takes more than copying 
 new code and rebuilding: a backup first, a setting to choose, or a migration you can't
 undo without a restore. Read it before you update.
 
-## Unreleased
+## 1.1.0 — 2026-11-10
 
 ### Added
 
 - **A new look: a one-shelf video shop.** Every page, the back office included, now
-  looks and reads like a small video shop run by a friend, with a quiet early-80s
-  computer for its controls. Nothing works differently: the same rules, the same
-  links, the same data, and no migration.
+  looks and reads like a small video shop. The rules, links and data are the same,
+  and there's no migration.
   - **Your films are tapes on the shelf.** A film's poster is printed as its sleeve,
     and a film with no artwork gets a plain kraft sleeve with its title on a typed
     label (and your logo at its foot, if you have one). Your recommendation is a
-    handwritten staff pick card beside it, signed "Picked by" you, and only shows when
-    you've written one. The content note and the synopsis are always in plain type.
+    handwritten staff pick card beside it, signed "Picked by" you.
   - **The counter.** The title is on black label-maker tape, and the next deadline is
     an orange price-gun sticker: "Start by Fri 6 Nov" before the first play, "Due back
     Sun 8 Nov" after it, or "Come back by Sat 7 Nov 19:40" while it's paused, when
     that comes first. The exact time is in words beside it, and the plays left beside
-    Play. A tape that has run out, been taken back or is unavailable says so in plain
-    words, and its place on the counter is empty. "This tape has gone back to the
-    shop." is only for one that expired.
+    Play. A tape that has run out or is unavailable says so in plain words, and its
+    place on the counter is empty.
   - **The video machine.** Blue, with a soft screen, means the machine and only the
     machine: the Play tile, a short PLAY screen as playback starts (left out when your
     device asks for less motion), and, when you pause, a strip under the picture with
     PAUSE, Resume at the place you stopped, the time left to come back (counted down
     each minute), and the audio, subtitles and picture as a VCR's menu. Opening a
-    paused tape again shows it on a small telly. Nothing on it moves, and it's never
-    over the film: while the film plays, the player is plain, with the browser's own
-    controls and the Audio, Subtitles, Aa and Picture menus as before.
+    paused tape again shows it on a small telly. The machine is never over the film:
+    while the film plays, the player is plain, with the browser's own controls and the
+    Audio, Subtitles, Aa and Picture menus.
   - **The interface** is IBM Plex Mono for the machine's own words (menus, tabs,
     buttons, dates and counts) and Libre Franklin for headings and reading text, in
     square boxes and thin rules. What's selected and the main button are lit in warm
     white; messages are short lines with a small block in front, a warning or an error
-    starting with a word in bold. The back office has the faintest static raster
-    behind its work. Every page works at 320px wide, keeps 4.5:1 contrast for small
-    text, and respects reduced motion and forced colours.
+    starting with a word in bold. Every page works at 320px wide, keeps 4.5:1 contrast
+    for small text, and respects reduced motion and forced colours.
   - **The front page** is Your tapes, face out on a shelf, each with its sticker and
     the same facts in words, and On the shelf for members with "No tape yet: ask"
     you. Signed out, it's the shop's name and your welcome.
@@ -57,7 +53,8 @@ undo without a restore. Read it before you update.
     whether the server is well.
 - **Your name**, in Settings: friends see it on your staff picks ("Picked by Arthur")
   and wherever the pages say whom to ask ("ask Arthur"). Left empty, they see the
-  shop's name, as before. It's in `/api/site` and `/api/me` with the shop's name.
+  shop's name, as before. Like the shop's name, it's in every page the site sends and
+  in `/api/site`, so anyone who opens its address can read it.
 - **A membership card for everyone you add.** It's a printed card that turns over:
   the front is all yours, with your shop's name (and logo, if you have one) and
   "Membership card" knocked out of a solid band of ink; the back has their name in
@@ -67,58 +64,66 @@ undo without a restore. Read it before you update.
   colour it prints in blue. Your membership card (the page that was Your account)
   shows it beside the keys to it, and the page that makes a passkey now ends on it,
   the name written on as it appears ("Your membership card is ready"); a recovery
-  link ends on the same card as before ("Your new passkey is ready"). With less
-  motion asked for, it turns and the name appears at once.
+  link ends on the same card, with "Your new passkey is ready". With less motion
+  asked for, it turns and the name appears at once.
   - **It looks printed, stamped and written by hand.** Your ink soaks into the card,
     a little deeper and warmer than on screen, with the card's grain showing through
     it and the odd pin-hole of bare card in the band. The back's printed words bleed a
     hair into the card's fibres. Member since is stamped at the counter in a stamp
-    pad's violet, a little crooked, faded and patchy, and always clear of the print
-    around it. The name is a ballpoint's: full on the downstrokes, lighter elsewhere,
-    now and then a short dry skip or a small blob of ink, every name as legible as the
-    next. It all reads at 4.5:1 or more where it's lightest, in every browser, Safari
-    on an iPhone included. Turning over, it shows its thickness, the cut edge of the
-    card. With more contrast or forced colours asked for, it's plain ink.
+    pad's violet, a little crooked, faded and patchy. The name is a ballpoint's: full
+    on the downstrokes, lighter elsewhere, now and then a short dry skip or a small
+    blob of ink. It all reads at 4.5:1 or more where it's lightest. Turning over, it
+    shows its thickness, the cut edge of the card. With more contrast or forced
+    colours asked for, it's plain ink.
 - **A membership number**, 11 digits, worked out from what each person already has,
   so nothing new is stored: the same number for good, through a new phone, a change
   of name or a lost phone. It's never their place in the list, and it opens nothing:
   no screen asks for it. Only they (their card, and the page that makes their
-  passkey) and you (their page in the back office, with Member since) are sent it.
-  Member since is the month you added them, in UTC, so the card and the back office
-  agree wherever they're looked at.
+  passkey) and you (their page in the back office, with Member since) are sent it, as
+  `membership: { number, since }` in `/api/account`, `/api/enroll/finish` and
+  `/api/admin/people/:id`. Member since is the month you added them, in UTC.
 - **The fonts come from your server**, in `fonts/`: Libre Franklin, IBM Plex Mono,
-  Fraunces (the shop's own printing), Courier Prime (typed labels), Grape Nuts (the
-  one hand) and VT323 (only on the machine's blue screen). They're under the SIL Open
-  Font License, not the GPL; the licences file names them and gives each licence in
-  full. The pages' Content-Security-Policy now allows fonts from the shop's own
-  address (`font-src 'self'`), and nowhere else.
+  Fraunces (the shop's name, "Staff pick" and "Membership card"), Courier Prime
+  (typed labels), Grape Nuts (handwriting) and VT323 (only on the machine's blue
+  screen). They're under the SIL Open Font License, not the GPL; the licences file
+  names them and gives each licence in full. The pages' Content-Security-Policy now
+  allows fonts from the shop's own address (`font-src 'self'`), and nowhere else.
 
 ### Changed
 
-- **New words on every page.** Ticket is now tape (Issue ticket is Lend a tape, Revoke
-  is Take the tape back), screening is play, the recommendation is the staff pick,
-  Publish and Unpublish are Put on the shelf and Take off the shelf, People is
-  Members, Activity is the Ledger, the projection booth is Status, Your account is
-  Your membership card, Disable and Enable are Turn the card off and back on, Reset
-  after loss is Lost phone: take back the keys, Admin is the Back office, the resume
-  window is Time to come back, the cinema's name is the Shop name, and Accent is Your
-  colour. "Admit one" is gone. Routes, links, the API, the database, settings and the
-  log's event kinds keep their names: a tape's link is still `/t/...`, and
-  [docs/access.md](docs/access.md#words) has the full list.
+- **New words on every page**, and in link previews ("A tape from" your shop). Ticket
+  is now tape (Issue ticket is Lend a tape, Revoke is Take the tape back), screening
+  is play, the recommendation is the staff pick, Publish and Unpublish are Put on the
+  shelf and Take off the shelf, People is Members, Activity is the Ledger, the
+  projection booth is Status, Your account is Your membership card, Disable and
+  Enable are Turn the card off and back on, Reset after loss is Lost phone: take back
+  the keys, Admin is the Back office, the resume window is Time to come back, the
+  cinema's name is the Shop name, the player's Quality menu is Picture, and Accent is
+  Your colour. "Admit one" is gone. Routes, links, the API, the database, settings
+  and the log's event kinds keep their names: a tape's link is still `/t/...`, and
+  [docs/access.md](docs/access.md#words) has the full list. The back office API's
+  error messages use the new words.
 - **Fewer, plainer words.** Hints that only repeated their label, or answered a worry
   nobody had, are gone; the privacy line, TMDB's notice, "Only share films you have
   the right to share." and the passkey explanations stay, in the new nouns. A friend
   who has lost a phone is told you'll take back their keys and send a link to make a
-  new one, which is what the reset does.
-- **The default background is the shop's room, `#171513`**, a little warmer than
+  new one.
+- **The default background is now `#171513`**, a little lighter and warmer than
   before. A shop still on the old default, `#0d0c0f`, gets the new one; a background
-  you chose is kept, with the same checks. The same goes for the front page message:
-  the old default, word for word, now reads "This is a private video shop. If someone
-  sent you a tape, open the link they gave you."; one you wrote is yours.
+  you chose is kept, and every background allowed before still is. The same goes for
+  the front page message: the old default, word for word, now reads "This is a
+  private video shop. If someone sent you a tape, open the link they gave you."; one
+  you wrote is kept.
 - **Your colour no longer colours buttons and links.** It prints the membership card,
   colours the tab icon, and tints what's selected and the main button (up to 22%,
-  always keeping 7:1 for their words). The colours refused are the same as before; a
-  refused one is now "too close to the background for the tab icon to show up".
+  always keeping 7:1 for their words). On a background of your own, the colours
+  refused are the same as before. On the new default background, a few colours that
+  passed on the old one, such as `#ff0000`, are refused; one you've already saved is
+  kept. A refused colour is now "too close to the background for the tab icon to show
+  up".
+
+### Removed
+
 - **A plain sleeve no longer prints Open Matte's frame mark**: it carries your logo,
   or nothing.
 - The film page no longer has the backdrop behind it. The backdrop is still the

@@ -382,9 +382,10 @@ by itself, so once they're right the certificate follows within a few minutes.
 Now open `https://cinema.example.com/admin`, the back office, and sign in with
 `ADMIN_PASSWORD`. Under **Settings**, give the shop its name under **Shop name**, and
 your own under **Your name** if you'd like friends to see it on your staff picks and
-wherever the pages say whom to ask (left empty, they see the shop's name). **Colours
-and the card**, **Logo** and **Film information** (a TMDB key) can wait. **Members and
-passkeys** on the same page should say which domain passkeys belong to.
+wherever the pages say whom to ask (left empty, they see the shop's name; like the
+shop's name, anyone who opens its address can see it). **Colours and the card**,
+**Logo** and **Film information** (a TMDB key) can wait. **Members and passkeys** on
+the same page should say which domain passkeys belong to.
 
 ## The first film
 

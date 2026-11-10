@@ -3,7 +3,7 @@
 This is the contract between your encoding workflow and Open Matte. You prepare a
 film folder on your own computer, copy it into the server's media directory
 ([adding films](deploying.md#adding-films)), and press **Scan media folder** in the
-admin. The server never encodes anything.
+back office. The server never encodes anything.
 
 ## Folder layout
 

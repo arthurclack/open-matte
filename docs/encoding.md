@@ -11,7 +11,7 @@ npm run encode -- ~/Films/Arrival.mkv media/arrival --subs
 That probes the source, picks a ladder, and writes `hls/`, `subtitles/` and a
 `film.json` to fill in. The title and year come from the file name, so
 `Paris.Texas.1984.1080p.BluRay.x264-GRP.mkv` gives "Paris Texas" (1984). With
-[film information](metadata.md) turned on, the server fills in the rest from TMDB. Add a `poster.jpg`, write your recommendation, then copy
+[film information](metadata.md) turned on, the server fills in the rest from TMDB. Add a `poster.jpg`, write your staff pick (`recommendation`), then copy
 the folder to the server (see [adding films](deploying.md#adding-films)).
 
 A `poster.jpg` or `backdrop.jpg` already in the output folder is listed in
