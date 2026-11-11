@@ -1,0 +1,67 @@
+/* The back office scene's place on the page (LendScene.tsx): How it works,
+   step 3's picture, figure.step__pic--office[data-scene="lend"]. Part of the
+   page's own stylesheet (site.css imports it, before its own rules: select
+   with [data-scene] to win over them), so it holds before any script runs.
+
+   The place is as wide as the scene's design, so the still and the live
+   stage fill the same box (a stage stops at its design width and centres
+   itself in anything wider). How wide it is:
+     under 36rem   the column, at most 358: the phone's design (358 x 586)
+     36rem-60rem   the column (544 to 704), at most 600: wide (600 x 700),
+                   at 0.9 to 1
+     from 60rem    the steps' 7fr column, 485 at 60rem, 600 from about
+                   72.3rem: wide, at 0.81 to 1
+   The scene's compact `below` is 480, so it is compact only where this file
+   narrows the place to 358. The stills carry the scene's own 1px edge down
+   its sides and across its top (the stage draws it), so the pictures here
+   have none of their own; at its foot the place fades the scene instead. */
+
+.step__pic--office[data-scene] {
+  display: block;
+  width: 100%;
+  max-width: 600px;
+  margin-inline: auto;
+}
+
+.step__pic--office[data-scene] img {
+  width: 100%;
+  border: 0;
+}
+
+@media (min-width: 60rem) {
+  .step__pic--office[data-scene] {
+    margin-inline: 0;
+  }
+}
+
+/* The crop's foot fades into the room, so the back office reads as going on
+   under it: its last 40px at its design size (of 700 wide, of 586 on the
+   phone), as a share of its height, so the fade keeps to the scene's filler
+   at every scale it is drawn at. On the picture and the live layer, not the
+   figure, so Pause is never faded; a mask, so only its alpha counts */
+.step__pic--office[data-scene] > picture,
+.step__pic--office[data-scene] > .scene-live {
+  -webkit-mask-image: linear-gradient(to bottom, var(--room) 94.29%, transparent);
+  mask-image: linear-gradient(to bottom, var(--room) 94.29%, transparent);
+}
+
+@media (max-width: 35.99rem) {
+  .step__pic--office[data-scene] {
+    max-width: 358px;
+  }
+
+  .step__pic--office[data-scene] > picture,
+  .step__pic--office[data-scene] > .scene-live {
+    -webkit-mask-image: linear-gradient(to bottom, var(--room) 93.17%, transparent);
+    mask-image: linear-gradient(to bottom, var(--room) 93.17%, transparent);
+  }
+}
+
+/* Where the figure sits under the step's words (under 60rem), the scene's
+   Pause, which hangs over the place's top-right corner (mount.css), gets a
+   row of its own above it, clear of the words' last line */
+@media (max-width: 59.99rem) {
+  .step__pic--office[data-scene] {
+    margin-top: 20px;
+  }
+}

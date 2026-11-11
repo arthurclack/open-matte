@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 // Turns the baked pictures into the WebP files the pages show, in
-// site/public/img/.
+// site/public/img/: the printed objects, the paper's grain, and the film
+// playing that the link preview (tools/og.mjs) is drawn with. The pictures
+// of the app on the page itself are the scenes' stills, in public/stage/
+// (tools/stills.mjs).
 //
 //   node site/tools/images.mjs <folder>
 //
 // <folder> holds the pictures as the design folder's render script bakes
-// them: PNG, the printed objects and the app stills at 3x, the wide back
-// office at 2x, the grain tile at 2x (README.md, "The pictures"). Each one is
-// drawn at twice the largest width the page shows it at, so it is sharp on a
-// 2x screen, and encoded as WebP by Chromium itself; transparency is kept.
-// Quality: 0.93 for the printed objects and the film page, or their paper
-// grain smooths away; 0.95 for the app's flat screens, where less leaves
-// pale 8px blocks around words on flat colour (the lit button's above all);
-// 0.9 for the grain tile, which is noise.
+// them: PNG, the printed objects and the app still at 3x, the grain tile at
+// 2x (README.md, "The pictures"). Each one is drawn at twice the largest
+// width the page shows it at, so it is sharp on a 2x screen, and encoded as
+// WebP by Chromium itself; transparency is kept. Quality: 0.93 for the
+// printed objects, or their paper grain smooths away; 0.95 for the app's
+// flat screen, where less leaves pale 8px blocks around words on flat
+// colour; 0.9 for the grain tile, which is noise.
 //
 // Uses Playwright's Chromium from the repository's node_modules (run
 // `npx playwright install chromium` once if it isn't there).
@@ -27,10 +29,7 @@ import { chromium } from 'playwright'
 // picture's exact shape: a picture a fraction of a pixel taller or shorter
 // moves everything under it by that fraction.
 const PICTURES = [
-  ['app-film-page', 780, 0.93], // the hero: the friend's film page, 390 wide
-  ['app-lend', 1200, 0.95], // How it works, step 3: the back office, 600 wide from 36rem
-  ['app-lend-compact', 716, 0.95], // the same under 36rem, the office's phone layout, 358 wide
-  ['app-playing', 780, 0.95], // the close: the film playing, 390 wide
+  ['app-playing', 780, 0.95], // the link preview (tools/og.mjs): the film playing, 390 wide
   ['obj-sleeve', 440, 0.93], // step 1: the kraft sleeve, 196 wide (220 x 326, so 440)
   ['obj-pick', 804, 0.93], // step 2: the staff-pick card, 402 wide
   ['obj-dueback', 771, 0.93], // Due back: the tape and its sticker, 292 wide (257 x 90, so its 3x bake as it is)

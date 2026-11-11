@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cut the site's four fonts down to what the pages draw, as WOFF2.
+"""Cut the site's fonts down to what the pages and the scenes draw, as WOFF2.
 
     python3 site/tools/fonts.py [SOURCE]
 
@@ -10,7 +10,7 @@ licence. It needs fontTools and brotli:
     python3 -m venv /tmp/fonttools && /tmp/fonttools/bin/pip install fonttools brotli
 
 Each font keeps the Latin characters only, and only the weights and settings
-the stylesheets ask for (src/site.css):
+the stylesheets ask for. The page's four (src/tokens.css):
 
 - Libre Franklin: the variable font, weights 400 to 700.
 - Fraunces: one fixed style, weight 800, opsz 72, SOFT 100, WONK 0, the
@@ -18,6 +18,17 @@ the stylesheets ask for (src/site.css):
 - IBM Plex Mono Regular, renamed Matte Mono. Its licence reserves the name
   "Plex", and a cut-down copy is a modified version, so it can't keep it.
 - Courier Prime Regular.
+
+And two that only the scenes of the app set (src/stage/look.css, loaded
+with a scene, never with the page):
+
+- IBM Plex Mono SemiBold, renamed Matte Mono like the Regular: the machine's
+  heavier words (the app asks for 500 and 600 from this one file). It also
+  keeps the left arrow (U+2190), for the back office's "← Films".
+- VT323 Regular: the blue screen's lettering (the PLAY tile, the counter).
+
+VT323's licence reserves no name, so it keeps its own. The staff pick's hand,
+Grape Nuts, is never set as text: the pick is a picture baked from the app.
 
 Two runs give byte-identical files.
 """
@@ -52,7 +63,8 @@ def reload(font):
     return TTFont(buffer, recalcTimestamp=False)
 
 
-def cut(font, out):
+def cut(font, out, extra=""):
+    """Cut a font to LATIN (and any EXTRA characters, as a unicode range string) and write it as WOFF2."""
     options = subset.Options()
     options.flavor = "woff2"
     options.layout_features += ["tnum", "lnum", "pnum", "onum"]
@@ -60,7 +72,7 @@ def cut(font, out):
     options.notdef_outline = True
     options.drop_tables += ["meta"]  # Libre Franklin's language tags, which the subsetter can't cut
     sub = subset.Subsetter(options)
-    sub.populate(unicodes=subset.parse_unicodes(LATIN))
+    sub.populate(unicodes=subset.parse_unicodes(LATIN + ("," + extra if extra else "")))
     sub.subset(font)
     font.flavor = "woff2"
     font.recalcTimestamp = False  # keep the source's date, so two runs match
@@ -104,6 +116,14 @@ def main():
     cut(plex, "MatteMono-Regular.woff2")
 
     cut(TTFont(SOURCE / "CourierPrime-Regular.ttf", recalcTimestamp=False), "CourierPrime-Regular.woff2")
+
+    # the scenes' faces. The SemiBold also keeps the left arrow: the back
+    # office's "← Films" sets it at 500 (the page's four stay Latin only)
+    plex_semibold = TTFont(SOURCE / "IBMPlexMono-SemiBold.ttf", recalcTimestamp=False)
+    rename_plex(plex_semibold)
+    cut(plex_semibold, "MatteMono-SemiBold.woff2", extra="U+2190")
+
+    cut(TTFont(SOURCE / "VT323-Regular.ttf", recalcTimestamp=False), "VT323-Regular.woff2")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,701 @@
+/* The back office lending a tape (LendScene.tsx): 1.1.0's back office, its
+   own rules from web/src/look/ui.css and office.css (and web/src/styles.css
+   for the page's base), at its own sizes, under the app's own class names,
+   every rule scoped under .ln so nothing here meets the page's classes
+   (site.css) or the other scene's. The scene's width is the page's width, so
+   1.1.0's narrow rules are the ones written here: under 800px (the menu as a
+   bar), under 680px (the form in one column) and, for the phone's layout
+   (.ss-stage[data-layout='compact']), under 520px.
+
+   Left out on purpose: the raster 1.1.0 draws behind the back office's work
+   (a line every third device pixel would resample into bands in the
+   stills), and everything that moves in it, since nothing in 1.1.0's
+   interface moves: hover, press and the button's labels change at once, as
+   a period machine redraws. Only the page's scroll travels. */
+
+/* ---------- the page ---------- */
+.ln .ln-page,
+.ln .ln-page * {
+  box-sizing: border-box;
+}
+
+/* Laid out at its screen's width (LendScene.tsx SCREEN), scaled into the
+   stage from its top-left corner */
+.ln .ln-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ui-bg);
+  color: var(--ui-fg);
+  font: 400 16px/1.5 var(--ui-read);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The page's room is the site's room: a 1px rule down the crop's sides and
+   across its top parts them, over everything. None at its foot: there the
+   page fades the stage into the room (lend-place.css), so the back office
+   goes on under the crop rather than stop on a line */
+.ln .ln-edge {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--rule);
+  border-bottom: 0;
+  pointer-events: none;
+}
+
+.ln .ln-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.ln b {
+  font-weight: 600;
+}
+
+.ln small {
+  font-size: 14px;
+}
+
+/* ---------- the menu: a bar across the top, sticky (ui.css, under 800px) ---------- */
+.ln .ui-office__nav {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 16px 0;
+  border-bottom: 1px solid var(--ui-rule);
+  background: var(--ui-sunk);
+}
+
+.ln .ui-office__brand {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  color: var(--ui-fg);
+}
+
+/* the shop's name in its own rub-down printing (ShopName) */
+.ln .ui-shopname {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  max-width: 100%;
+  padding: 0;
+  font: var(--shop-weight) 19px/24px var(--shop-face);
+  font-variation-settings: var(--shop-vars);
+  color: #f2ede1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ln .ui-shopname__print {
+  min-width: 0;
+}
+
+.ln .ln-page[data-ink] .ui-shopname__print {
+  filter: url(#ln-kp);
+}
+
+.ln .ui-shopname .rub {
+  display: inline-block;
+}
+
+.ln .ui-shopname .nw {
+  white-space: nowrap;
+}
+
+.ln .ui-office__brand-k {
+  font: 500 13px/18px var(--ui-face);
+  color: var(--ui-fg-3);
+}
+
+.ln .ui-office__foot {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  gap: 8px;
+  margin: 0;
+}
+
+.ln .ui-nav__item {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 8px;
+  font: 400 14px/20px var(--ui-face);
+  font-variant-ligatures: none;
+  color: var(--ui-fg-3);
+  white-space: nowrap;
+}
+
+.ln .ui-office__nav > .ui-tabs {
+  grid-column: 1 / -1;
+  margin: 0 -16px;
+}
+
+/* ---------- tabs ---------- */
+.ln .ui-tabs {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.ln .ui-tabs__row {
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border-bottom: 1px solid var(--ui-rule);
+  overflow: hidden;
+}
+
+.ln .ui-office__nav > .ui-tabs .ui-tabs__row {
+  padding: 6px 16px;
+  border-bottom: 0;
+}
+
+.ln .ui-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  font: 500 15px/20px var(--ui-face);
+  font-variant-ligatures: none;
+  color: var(--ui-fg-2);
+  white-space: nowrap;
+}
+
+.ln .ui-office__nav > .ui-tabs .ui-tab {
+  padding: 0 12px;
+}
+
+.ln .ui-tab[data-on] {
+  background: var(--ui-lit);
+  color: var(--ui-lit-ink);
+}
+
+.ln .ui-tab__n {
+  margin-left: 8px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* On a phone the row runs past the screen, and its end fades over what is
+   hidden past it (TabRow's data-more), as 1.1.0's does */
+.ln .ss-stage[data-layout='compact'] .ui-office__nav > .ui-tabs .ui-tabs__row {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+}
+
+/* ---------- the page under the bar, scrolled by the script ---------- */
+.ln .ln-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ln .ui-office__main {
+  display: block;
+  padding: 20px 18px 0;
+  will-change: transform;
+  transition: transform 1.1s cubic-bezier(0.45, 0, 0.1, 1);
+}
+
+/* the second scroll is a short one */
+.ln .ui-office__main[data-scroll='ready'] {
+  transition-duration: 0.8s;
+}
+
+.ln .ss-stage[data-layout='compact'] .ui-office__main {
+  padding: 20px 16px 0;
+}
+
+.ln .ui-office__page {
+  display: block;
+  padding-bottom: 48px;
+  font: 400 16px/1.5 var(--ui-read);
+}
+
+/* ---------- a film's page (office.css) ---------- */
+.ln .of-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  margin: -8px 0 4px;
+  font: 500 14px/20px var(--ui-face);
+  color: var(--ui-fg-2);
+}
+
+/* A flex row that wraps in 1.1.0 (the title takes 420px or more, the
+   buttons what is left): at the page's widths here (600, and a phone's 390)
+   the buttons always wrap under the title, so it is drawn as the two rows it
+   lays out to, 16px apart */
+.ln .of-head {
+  display: grid;
+  justify-items: start;
+  gap: 16px;
+  margin: 0 0 24px;
+}
+
+.ln .of-filmhead {
+  display: grid;
+  justify-self: stretch;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 16px 20px;
+  min-width: 0;
+}
+
+.ln .of-filmhead__sleeve {
+  display: block;
+  width: 72px;
+  padding-top: 4px;
+}
+
+.ln .of-filmhead__main {
+  display: block;
+  min-width: 0;
+}
+
+.ln .of-h1 {
+  display: block;
+  margin: 0 0 8px;
+  font: 600 30px/36px var(--ui-read);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.ln .of-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  margin: 0;
+  font: 400 14px/22px var(--ui-face);
+  color: var(--ui-fg-2);
+}
+
+.ln .of-facts > * {
+  white-space: nowrap;
+}
+
+.ln .of-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 4px;
+}
+
+/* a state in words, with the interface's 8px block (ui.jsx Mark) */
+.ln .of-mark {
+  display: inline-grid;
+  grid-template-columns: 8px minmax(0, auto);
+  align-items: start;
+  gap: 8px;
+  font: 400 14px/20px var(--ui-read);
+  color: var(--ui-fg);
+}
+
+.ln .of-mark::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  background: var(--ui-fg);
+}
+
+/* On a phone the two buttons don't fit one line: each takes its own, 12px apart */
+.ln .ss-stage[data-layout='compact'] .of-head .ui-btns {
+  display: grid;
+  justify-items: start;
+}
+
+/* The plain kraft sleeve as a thumbnail (objects.jsx Sleeve, thumb): kraft
+   board with no label at this size, cut a hair off square, lying on the
+   room. The board is the step's own sleeve (/img/obj-sleeve.webp), its
+   plain lower part */
+.ln .ln-sleeve {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 1.5px;
+  transform: rotate(-0.2deg);
+  filter: drop-shadow(0 1.5px 1.2px rgb(0 0 0 / 0.62));
+}
+
+.ln .ln-sleeve img {
+  position: absolute;
+  top: -37.78%;
+  left: -23.33%;
+  width: 146.67%;
+  max-width: none;
+  height: auto;
+}
+
+.ln .of-tabs {
+  margin: 0 0 24px;
+}
+
+.ln .of-h2 {
+  display: block;
+  margin: 40px 0 12px;
+  font: 600 21px/28px var(--ui-read);
+  letter-spacing: -0.01em;
+}
+
+/* the first thing in the tab's panel */
+.ln .of-tabs + .of-h2 {
+  margin-top: 0;
+}
+
+/* a box for a form: square, 1px, opaque */
+.ln .of-box {
+  display: block;
+  min-width: 0;
+  margin: 0 0 24px;
+  padding: 20px;
+  border: 1px solid var(--ui-rule);
+  background: var(--ui-bg);
+}
+
+.ln .of-w {
+  max-width: 760px;
+}
+
+.ln .of-grid2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ln .of-under {
+  margin: 0 0 12px 34px;
+}
+
+.ln .of-dim {
+  display: block;
+  color: var(--ui-fg-2);
+}
+
+/* ---------- buttons (ui.css) ---------- */
+.ln .ui-btns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.ln .ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--ui-edge);
+  background: transparent;
+  color: var(--ui-fg);
+  font: 500 15px/20px var(--ui-face);
+  font-variant-ligatures: none;
+  text-align: center;
+  white-space: normal;
+  /* A label that wraps (the phone's full-width Lend a tape for anyone with
+     the link) breaks into even lines, never one word alone. Not in 1.1.0's
+     ui.css: README, "Where the pictures differ from 1.1.0" */
+  text-wrap: balance;
+}
+
+.ln .ui-btn--primary {
+  border-color: var(--ui-lit);
+  background: var(--ui-lit);
+  color: var(--ui-lit-ink);
+}
+
+/* the pointer's hover: on a computer only (1.1.0's hover rules ask for
+   (hover: hover)), so never in the phone's design */
+.ln .ss-stage[data-layout='wide'] .ui-btn--primary[data-hover] {
+  border-color: var(--ui-lit-hover);
+  background: var(--ui-lit-hover);
+}
+
+/* (as specific as the hover, and after it: a press is also a hover) */
+.ln .ss-stage[data-layout] .ui-btn--primary[data-pressed] {
+  border-color: var(--ui-lit-press);
+  background: var(--ui-lit-press);
+}
+
+/* unavailable while the back office asks: a dotted edge and dimmer words */
+.ln .ss-stage[data-layout] .ui-btn[data-disabled] {
+  border: 1px dashed rgb(154 146 132 / 0.7);
+  background: transparent;
+  color: var(--ui-fg-3);
+}
+
+.ln .ui-btn--small {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.ln .ss-stage[data-layout='wide'] .ui-btn--small[data-hover],
+.ln .ss-stage[data-layout] .ui-btn--small[data-pressed] {
+  background: var(--ui-raised);
+}
+
+/* ---------- the form (ui.css fields, choices) ---------- */
+.ln .ui-fieldset {
+  display: block;
+  min-width: 0;
+  margin: 0 0 20px;
+}
+
+.ln .ui-legend {
+  display: block;
+  margin: 0 0 8px;
+  font: 500 15px/20px var(--ui-read);
+}
+
+.ln .ui-choice,
+.ln .ui-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font: 400 16px/24px var(--ui-read);
+}
+
+.ln .ui-choice {
+  margin: 0 0 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--ui-rule);
+}
+
+.ln .ui-choice[data-on] {
+  border-color: var(--ui-fg-2);
+  background: var(--ui-sunk);
+}
+
+.ln .ui-check {
+  min-height: 44px;
+  padding: 10px 0;
+}
+
+.ln .ui-choice small,
+.ln .ui-check small {
+  display: block;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ui-fg-3);
+}
+
+.ln .ui-choice small {
+  margin-top: 2px;
+}
+
+/* the radio and the box: drawn square or round in whole pixels */
+.ln .ui-radio,
+.ln .ui-box {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  border: 2px solid var(--ui-fg-2);
+  background: var(--ui-sunk);
+}
+
+.ln .ui-radio {
+  border-radius: 50%;
+}
+
+.ln .ui-radio[data-on] {
+  border-color: var(--ui-lit);
+  background: radial-gradient(circle, var(--ui-lit) 0 4.5px, var(--ui-sunk) 5px);
+}
+
+.ln .ui-field {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  margin: 0 0 20px;
+}
+
+.ln .ui-field__label {
+  display: block;
+  font: 500 15px/20px var(--ui-read);
+  color: var(--ui-fg);
+}
+
+.ln .ui-field__label small {
+  font-weight: 400;
+  color: var(--ui-fg-3);
+}
+
+.ln .ui-field__hint {
+  display: block;
+  max-width: 60ch;
+  margin: 0;
+  font: 400 14px/20px var(--ui-read);
+  color: var(--ui-fg-3);
+}
+
+.ln .ui-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-edge);
+  background: var(--ui-sunk);
+  color: var(--ui-fg);
+  font: 400 16px/22px var(--ui-read);
+  white-space: pre;
+}
+
+.ln .ui-input--num {
+  max-width: 12ch;
+  font-family: var(--ui-face);
+  font-variant-numeric: tabular-nums;
+}
+
+.ln .ui-input__ph {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  color: var(--ui-fg-3);
+}
+
+/* the focus: the field's edge lights, and the 3px warm-white ring on its
+   2px dark gap, as the keyboard's focus does everywhere in 1.1.0 */
+.ln .ui-input[data-focused] {
+  border-color: var(--ui-fg);
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--ui-focus-gap);
+}
+
+/* the caret: solid while a key is pressed, then blinking as macOS blinks it */
+.ln .ui-input__caret {
+  display: block;
+  width: 2px;
+  height: 20px;
+  margin-left: 1px;
+  background: var(--ui-fg);
+  animation: ln-caret 1.05s steps(1, end) 0.5s infinite;
+}
+
+@keyframes ln-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ---------- a system line: a block first, then plain words (ui.jsx Line) ---------- */
+.ln .ui-line {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: start;
+  gap: 0 12px;
+  max-width: 64ch;
+  margin: 0 0 12px;
+  font: 400 15px/22px var(--ui-read);
+  color: var(--ui-fg);
+}
+
+.ln .ui-line::before {
+  content: '';
+  grid-column: 1;
+  grid-row: 1;
+  width: 8px;
+  height: 8px;
+  margin-top: 7px;
+  background: var(--ui-fg);
+}
+
+.ln .ui-line > * {
+  display: block;
+  grid-column: 2;
+  min-width: 0;
+}
+
+.ln .ui-line--block {
+  padding: 12px 0;
+  border-top: 1px solid var(--ui-rule);
+  border-bottom: 1px solid var(--ui-rule);
+}
+
+.ln .of-ready {
+  margin: 16px 0 0;
+}
+
+/* the link to copy: the address in the machine's face, and its two buttons,
+   in a row that wraps (8px between lines, 12px between boxes) */
+.ln .of-linkbox {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.ln .of-linkbox__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ln .of-linkbox .ln-code {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-edge);
+  background: var(--ui-sunk);
+  color: var(--ui-fg);
+  font: 400 14px/20px var(--ui-face);
+  font-variant-ligatures: none;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- the phone's layout (under 520px in 1.1.0) ---------- */
+.ln .ss-stage[data-layout='compact'] .of-h1 {
+  font-size: 26px;
+  line-height: 32px;
+}
+
+.ln .ss-stage[data-layout='compact'] .of-filmhead__sleeve {
+  width: 56px;
+}
+
+.ln .ss-stage[data-layout='compact'] .of-box {
+  margin-right: -4px;
+  margin-left: -4px;
+  padding: 16px;
+}
+
+.ln .ss-stage[data-layout='compact'] .of-under {
+  margin-left: 0;
+}
+
+/* The scene never plays under reduced motion (its still stands in), but
+   should it be drawn there, nothing in it moves */
+@media (prefers-reduced-motion: reduce) {
+  .ln .ui-office__main {
+    transition: none;
+  }
+
+  .ln .ui-input__caret {
+    animation: none;
+  }
+}

@@ -1,0 +1,158 @@
+/* The video shop's look (Open Matte 1.1.0), for the scenes. Loaded with a
+   scene's code (each scene imports it), never with the page. Scoped to a
+   scene's root: the Stage's className carries "om".
+
+   Three parts:
+   1. The faces only the scenes use, cut by tools/fonts.py like the page's
+      four: the machine's heavier words (Matte Mono 500 to 700, the app's
+      IBM Plex Mono SemiBold, renamed) and the blue screen's VT323 (the PLAY
+      tile, the counter, the player's on-screen words). A browser fetches
+      one only when a scene sets text in it. The shopkeeper's hand (Grape
+      Nuts, the staff pick) is never set live: the pick is a picture baked
+      from 1.1.0 (tools/prints.mjs), so --hand below has no face here.
+   2. 1.1.0's own tokens, under 1.1.0's own names (web/src/look/tokens.css),
+      so CSS taken from the app works here unchanged. The ones the page
+      already has (--room, --deep, --surface, --text, --text-2, --text-3,
+      --rule, --ui-edge, --ui-lit and its shades, --ui-lit-ink, --ui-focus,
+      --stock-card, --stock-tape, --ink, --tape-letter, --sans, --type) are
+      the page's, from tokens.css, with the same values; the rest are set
+      here. Two page tokens differ from the app's: --gutter (the page's, not
+      the app's 16/48/96) and --ui, which on the page is the face (Matte
+      Mono); the app's face token is --ui-face, set below.
+   3. The kit's tokens (--ss-*) mapped onto those, so the kit's parts (a
+      Field, a Menu, a Bar, the cursor) wear the shop's look by default. */
+
+/* ---------- 1. the scenes' faces ---------- */
+@font-face {
+  font-family: "Matte Mono";
+  src: url("/fonts/MatteMono-SemiBold.woff2") format("woff2");
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "VT323";
+  src: url("/fonts/VT323-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------- 2. 1.1.0's tokens (values from web/src/look/tokens.css) ---------- */
+.om {
+  /* the theme's own values, as a shop on Open Matte's own colours has them */
+  --bg: var(--room);
+  --bg-raised: var(--surface);
+  --bg-sunk: var(--deep);
+  --bg-high: #29251f;
+  --bg-rgb: 23, 21, 19;
+  --bg-raised-rgb: 31, 28, 25;
+  --line: #33312f;
+  --line-strong: #42403f;
+  --good-line: #415a43;
+  --good-tint: #1e211b;
+  --warn-line: #6b5329;
+  --warn-tint: #262017;
+  --bad-line: #693c37;
+  --bad-tint: #251c19;
+  --poster-from: #2d2b29;
+  --poster-to: #1c1a18;
+
+  /* the room */
+  --raised: var(--bg-high);
+  --hair: rgb(233 223 201 / 0.09);
+
+  /* the interface layer: the shop's computer */
+  --ui-face: var(--ui);
+  --ui-read: var(--sans);
+  --ui-bg: var(--room);
+  --ui-sunk: var(--deep);
+  --ui-raised: var(--surface);
+  --ui-fg: var(--text);
+  --ui-fg-2: var(--text-2);
+  --ui-fg-3: var(--text-3);
+  --ui-rule: var(--rule);
+  --ui-focus-gap: var(--deep);
+  --ui-bad: #ee9a86;
+  --ui-warn: #d9b35f;
+  --ui-raster-o: 0.2;
+  --ui-raster-line: 1px;
+  --ui-raster-pitch: 3px;
+
+  /* printed things: the stocks and inks the page doesn't use */
+  --stock-pick: #f3ecdf;
+  --stock-label: #eee7d7;
+  --stock-kraft: #b39b78;
+  --stock-sticker: #f26b21;
+  --ink-pen: #1a1714;
+  --ink-blue: #2030c8;
+
+  /* the machine: the blue screen */
+  --blue: #2030c8;
+  --blue-press: #1b29b4;
+  --osd: #f6f7fd;
+  --osd-inverse-ink: #17208f;
+  --scan-p: 3px;
+  --scan-l: 1px;
+  --scan-s: 1.5px;
+
+  /* faces */
+  --osd-face: "VT323", ui-monospace, monospace;
+  --hand: "Bradley Hand", "Segoe Print", cursive; /* no scene sets it: the pick is baked */
+  --shop-face: var(--shop);
+  --shop-weight: 800;
+  --shop-vars: "SOFT" 100, "WONK" 0, "opsz" 72;
+}
+
+/* ---------- 3. the kit's tokens, in the shop's look ---------- */
+/* The page is the ground: no plate behind a scene. Everything inside the
+   stage is masked by it. */
+.om .ss-stage {
+  overflow: hidden;
+  background: transparent;
+
+  --ss-canvas: var(--room);
+  --ss-surface: var(--surface);
+  --ss-chrome: var(--surface);
+  --ss-raised: var(--bg-high);
+  --ss-well: var(--deep);
+
+  --ss-ink-1: rgb(233 223 201 / 0.05);
+  --ss-ink-2: rgb(233 223 201 / 0.07);
+  --ss-ink-3: rgb(233 223 201 / 0.1);
+  --ss-fill: #34302a;
+  --ss-ink-4: rgb(233 223 201 / 0.13);
+  --ss-ink-5: rgb(233 223 201 / 0.2);
+
+  --ss-line: var(--rule);
+  --ss-line-faint: var(--hair);
+  --ss-text: var(--text-2);
+  --ss-text-strong: var(--text);
+  --ss-text-faint: var(--text-3);
+  --ss-icon: var(--text-2);
+  --ss-icon-faint: var(--text-3);
+
+  /* the one accent is the computer's lit block */
+  --ss-accent: var(--ui-lit);
+  --ss-accent-2: var(--ui-lit-hover);
+  --ss-accent-soft: rgb(233 223 201 / 0.14);
+  --ss-accent-text: var(--text);
+  --ss-warning: var(--ui-warn);
+  --ss-danger: var(--ui-bad);
+  --ss-success-soft: var(--good-tint);
+  --ss-warning-soft: var(--warn-tint);
+  --ss-danger-soft: var(--bad-tint);
+  --ss-warning-text: var(--ui-warn);
+  --ss-danger-text: var(--ui-bad);
+
+  --ss-font: var(--sans);
+  --ss-mono: var(--ui);
+
+  /* square boxes: the shop's computer has no rounded corners. The phone,
+     its chat app and its bubbles keep their own geometry (the kit's) */
+  --ss-radius-sm: 0;
+  --ss-radius-md: 0;
+  --ss-radius-lg: 0;
+  --ss-radius-window: 0;
+  --ss-radius-pill: 0;
+}

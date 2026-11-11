@@ -1,0 +1,25 @@
+/* stage.html only: the page's own stylesheet (its tokens, its base rules,
+   which reach into a scene on the page too, and its classes, which a scene's
+   must not meet), then the preview's few rules. */
+@import url("../site.css");
+
+#preview {
+  display: grid;
+  gap: 64px;
+  padding: 48px 16px 96px;
+}
+
+.pv-shot {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+.pv-label {
+  color: var(--text-3);
+  font: 400 13px/18px var(--ui);
+}
+
+.pv-slot {
+  width: 100%;
+}

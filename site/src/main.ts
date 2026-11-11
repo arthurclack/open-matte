@@ -1,7 +1,15 @@
-// The page's one script, and all it does: the phone's menu (a <details> in
-// the bar, which opens and closes without it) closes once a link in it has
-// been followed, on Escape, with focus back on Menu, on a tap or click
-// anywhere outside it, or when focus leaves it. The page works fully without it.
+// The page's one script. Everything here only adds to a page that already
+// works without it:
+// - the scenes of the app: mountScenes (stage/mount.ts) loads each, with
+//   React, only as it nears the screen, and never under reduced motion;
+//   until then, and without script, its stills stand in;
+// - the phone's menu (a <details> in the bar, which opens and closes
+//   without it) closes once a link in it has been followed, on Escape, with
+//   focus back on Menu, on a tap or click anywhere outside it, or when focus
+//   leaves it.
+import { mountScenes } from './stage/mount'
+
+mountScenes()
 
 document.querySelectorAll<HTMLDetailsElement>('details.menu').forEach((menu) => {
   menu.addEventListener('click', (event) => {

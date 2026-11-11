@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Scene preview</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <!-- Development only (not in the build): every scene at its wide and
+         compact sizes on the page's own ground and stylesheet, for filming
+         and for exporting the stills (src/stage/preview.tsx).
+         ?only=tape-wide (or tape-compact, lend-wide, lend-compact) shows one
+         cut, ?only=tape both of a scene; &still=start (or another frame a
+         scene names) draws that frame as the reduced-motion still. -->
+    <main id="preview"></main>
+    <script type="module" src="/src/stage/preview.tsx"></script>
+  </body>
+</html>

@@ -35,9 +35,9 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      # The project website (site/) builds with the app's own Vite, from these
-      # node_modules, so an update to Vite is checked against it too.
-      # Once is enough.
+      # The project website (site/) builds with the app's own Vite, React and
+      # React plugin, from these node_modules, so an update to any of them is
+      # checked against it too. Once is enough.
       - name: Build the project website
         if: matrix.node == 26
         run: node_modules/.bin/vite build --config site/vite.config.mjs

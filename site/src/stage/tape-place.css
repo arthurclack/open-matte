@@ -1,0 +1,49 @@
+/* The hero scene's place on the page (TapeScene.tsx): the hero's right
+   column, figure.hero__app[data-scene="tape"]. Part of the page's own
+   stylesheet (site.css imports it, before its own rules: select with
+   [data-scene] to win over them), so it holds before any script runs.
+
+   How wide the place is, from site.css (.hero__grid, .hero__app):
+     under 64rem   min(100%, 360px), centred under the hero's words
+     64rem-75rem   360, the grid's right column, at its right edge
+     from 75rem    392, the grid's right column
+   The scene is wide (392 x 684) from 75rem and compact (358 x 625)
+   everywhere else: its compact `below` is 380. Its stills (public/stage/
+   tape*.webp) are the same sizes, so nothing moves as the scene takes over.
+
+   The phone fills its column's width, its top on the column's top (level
+   with the poster's), and goes on past the stage's foot rather than stop
+   on it: its last 3rem fade into the room. The room is its ground, so it
+   has no edge or plate of its own. The scene keeps that band to filler at
+   every beat (TapeScene.tsx, "Framing"). */
+
+.hero__app[data-scene] {
+  margin: 0;
+}
+
+/* The fade: on the picture and the live layer, not the figure, so the
+   Pause set above the figure's box is never faded. A mask, so the phone
+   dissolves into whatever it lies on; only its alpha counts (any opaque
+   colour token draws it) */
+.hero__app[data-scene] > picture,
+.hero__app[data-scene] > .scene-live {
+  -webkit-mask-image: linear-gradient(to bottom, var(--room) calc(100% - 3rem), transparent);
+  mask-image: linear-gradient(to bottom, var(--room) calc(100% - 3rem), transparent);
+}
+
+/* On one column, the phone stands a little clear of the buttons, so its
+   Pause (above its top-right corner) never touches their row */
+@media (max-width: 63.99rem) {
+  .hero__app[data-scene] {
+    margin-top: 8px;
+  }
+}
+
+/* Pause sits just above the phone's top-right corner, 4px clear of its
+   frame, in the room between the bar and the hero (on one column, between
+   the buttons and the phone) */
+.hero__app[data-scene] > .scene-toggle {
+  top: auto;
+  bottom: 100%;
+  margin-bottom: 4px;
+}

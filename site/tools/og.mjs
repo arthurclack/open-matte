@@ -2,7 +2,7 @@
 // Renders site/public/og-v2.png, the 1200 x 630 picture a link to
 // openmatte.dev shows in chat apps and social sites: the dark room, the
 // wordmark, the shop poster with the page's headline, and the film playing
-// for the friend (public/img/app-playing.webp, the close's picture), in the
+// for the friend (public/img/app-playing.webp, the app's own crop), in the
 // page's own faces, tokens and grain. No sticker: a link preview has no
 // deadline. Its alt text is index.html's og:image:alt; change both together.
 //

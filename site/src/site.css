@@ -13,6 +13,10 @@
    ===================================================================== */
 @import url("./tokens.css");
 @import url("./base.css");
+/* the scenes' places: the still that holds each, the live layer, Pause (stage/mount.ts loads the scenes) */
+@import url("./stage/mount.css");
+@import url("./stage/tape-place.css");
+@import url("./stage/lend-place.css");
 
 /* the skip link: a lit block when focused, 44px tall, over the wordmark and centred in the bar */
 .skip { position: absolute; left: max(var(--gutter), calc(50% - var(--wrap) / 2)); top: -100px; z-index: 10; padding: 12px 16px; background: var(--ui-lit); color: var(--ui-lit-ink); font: 400 15px/20px var(--ui); text-decoration: none; }
@@ -155,7 +159,7 @@
 @media (min-width: 48rem) { .hero { padding-top: 48px; } }
 .hero__grid { display: grid; gap: 48px; }
 @media (min-width: 64rem) { .hero__grid { grid-template-columns: minmax(0, 1fr) 360px; gap: 64px; align-items: start; } }
-/* 392: the app's 390 at 1:1 inside its 1px edge, as the close and the back office are shown */
+/* 392: the phone's wide design at 1:1 (the tape scene, stage/tape-place.css), as in the close */
 @media (min-width: 75rem) { .hero__grid { grid-template-columns: minmax(0, 1fr) 392px; gap: 96px; } }
 .poster {
   max-width: 46rem;
@@ -183,13 +187,9 @@
 .hero__under p { max-width: 46ch; margin-bottom: 24px; }
 /* one headline on the poster; the room's sentence supports it */
 .hero__under .lead { color: var(--text-2); }
+/* the friend's phone (the tape scene): 358 wide under 75rem, never shown larger than 1:1 */
 .hero__app { justify-self: center; width: min(100%, 360px); }
 @media (min-width: 64rem) { .hero__app { justify-self: end; width: 100%; } }
-
-/* the app, shown as it is: a plain crop at phone width with a 1px edge, as in take 2.
-   No drawn device, status bar or address bar. */
-.app-crop { margin: 0; }
-.app-crop img { width: 100%; border: 1px solid var(--rule); }
 
 /* the story */
 .prose .story__end { margin-top: 24px; font-weight: 600; }
@@ -213,11 +213,7 @@
 .step__pic--sleeve img { width: 171px; }
 @media (min-width: 48rem) { .step__pic--sleeve img { width: 196px; } }
 .step__pic--pick img { width: 402px; }
-/* the back office: 600 wide at 1:1 inside its 1px edge; under 36rem, the office's own phone layout */
-.step__pic--office picture { display: block; min-width: 0; }
-.step__pic--office img { width: 602px; border: 1px solid var(--rule); }
-/* the phone cut is 358 wide: never shown larger than 1:1, as the hero and the close aren't */
-@media (max-width: 35.99rem) { .step__pic--office img { width: 360px; } }
+/* the back office (the lend scene): its place and size are stage/lend-place.css */
 
 /* due back: two screens. The rules beside the tape, then what pressing Play starts, a section's space below */
 .due__grid { display: grid; gap: 36px; }
@@ -274,8 +270,14 @@
 @media (min-width: 64rem) { .close__grid { grid-template-columns: minmax(0, 1fr) 360px; gap: 64px; align-items: center; } }
 @media (min-width: 75rem) { .close__grid { grid-template-columns: minmax(0, 1fr) 392px; gap: 96px; } }
 .close__text p { max-width: 46ch; margin-bottom: 28px; }
-.close__app { justify-self: center; width: min(100%, 360px); }
+/* the film playing on the friend's phone: the tape scene's still, the player and its bar, and the film's
+   page under them as far as its details (392 x 526 from 75rem, 358 x 480 below it). The hero's column and
+   sizes, centred in its column as the hero's phone is. Its last 3rem fade into the room, as the hero's do
+   (stage/tape-place.css): the film's title stays clear of the fade, its details go into it */
+.close__app { justify-self: center; width: min(100%, 360px); margin: 0; }
 @media (min-width: 64rem) { .close__app { justify-self: end; width: 100%; } }
+.close__app picture, .close__app img { display: block; max-width: 100%; height: auto; margin-inline: auto; }
+.close__app > picture { -webkit-mask-image: linear-gradient(to bottom, var(--room) calc(100% - 3rem), transparent); mask-image: linear-gradient(to bottom, var(--room) calc(100% - 3rem), transparent); }
 
 /* footer */
 .foot { margin-top: var(--section); padding: 40px 0 48px; border-top: 1px solid var(--rule); font-size: 15px; line-height: 22px; color: var(--text-2); }

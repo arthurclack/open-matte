@@ -1,0 +1,704 @@
+/* The hero scene (TapeScene.tsx). Everything inside the phone is in iOS
+   points: the kit lays the screen out at true size and scales it down whole.
+   Every class is tp- prefixed and under .tp, so nothing here meets the
+   page's own classes (site.css) or the other scene's (ln-).
+
+   Two looks inside one phone: the chat app (the phone's own: the system's
+   face, neutral greys, no one app's colour) and the film's page in its
+   built-in browser, which is Open Matte 1.1.0 as it draws itself at 402
+   points (web/src/look/friend.css, objects.css, ui.css at v1.1.0), in
+   1.1.0's own tokens (look.css). */
+
+.tp {
+  /* The pane the conversation fits in: from the status bar to 662 points
+     down. The stage's foot crops the screen at 734 points (both sizes), and
+     the page fades its last 3rem (52 to 57 points) into the room, so the
+     newest bubble always ends on empty chat above the fade */
+  & .ss-stage {
+    --tp-pane: 600px;
+  }
+
+  .tp-phone {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  /* ---------- the chat app ---------- */
+
+  /* A stacking context of its own, so its header (raised over the thread)
+     stays under the browser when that comes up over it */
+  .tp-chat {
+    position: absolute;
+    z-index: 0;
+    top: 62px;
+    right: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    height: var(--tp-pane);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  }
+
+  .tp-head {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    flex: none;
+    justify-items: center;
+    padding: 2px 0 10px;
+    border-bottom: 0.5px solid rgb(255 255 255 / 0.14);
+  }
+
+  /* The conversation softens as it goes under the header, as iOS's scroll
+     edge does, so a line half under it never reads as cut */
+  .tp-head::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    height: 28px;
+    background: linear-gradient(#000, rgb(0 0 0 / 0));
+    pointer-events: none;
+  }
+
+  .tp-head__who {
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+  }
+
+  /* A neutral monogram, the chat app's own grey */
+  .tp-avatar {
+    background: linear-gradient(180deg, #8e8e93, #6c6c70);
+    font-size: 19px;
+  }
+
+  .tp-head__name {
+    font-size: 12px;
+    line-height: 15px;
+    color: #fff;
+  }
+
+  .tp-back {
+    position: absolute;
+    top: 14px;
+    left: 18px;
+    color: #e5e5ea;
+  }
+
+  /* The conversation stands on the pane's foot, over its (unseen) composer
+     and the empty chat the page's fade dissolves, and runs up under the
+     header */
+  .tp-thread {
+    flex: 1;
+    padding: 0 16px;
+    /* A chat app's sent bubble in a neutral grey, a step above the received
+       ones: no one platform's colour */
+    --ss-me: #4a4a4e;
+  }
+
+  /* Earlier messages: the chat app's quieter grey, so the reply and the
+     friend's question are what the eye finds */
+  .tp-earlier .ss-bubble {
+    color: #8e8e93;
+  }
+
+  /* ---------- the link, as it previews ---------- */
+
+  /* What a chat app makes of a link with a title and a line and no picture:
+     the preview on a panel of its own at the top of the message, the link
+     under it */
+  .tp-link {
+    display: grid;
+    gap: 7px;
+    width: 252px;
+    padding: 0.06em 0 0.02em;
+  }
+
+  .tp-card {
+    display: grid;
+    gap: 1px;
+    margin: -0.18em -0.5em 0;
+    padding: 9px 12px 10px;
+    border-radius: 0.74em;
+    background: rgb(255 255 255 / 0.075);
+  }
+
+  .tp-card__title {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 19px;
+    letter-spacing: -0.01em;
+    color: #fff;
+  }
+
+  .tp-card__desc {
+    font-size: 14px;
+    line-height: 18px;
+    color: #aeaeb2;
+  }
+
+  .tp-card__site {
+    font-size: 13px;
+    line-height: 17px;
+    color: #8e8e93;
+  }
+
+  .tp-url {
+    color: #f2f2f7;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-decoration-color: rgb(242 242 247 / 0.55);
+    text-underline-offset: 2px;
+    overflow-wrap: anywhere;
+  }
+
+  /* The card is taller than a line of text, so it doesn't fade in where it
+     lands (over the messages still gliding up out of its way): it comes up
+     from below with them, on the thread's own curve, its height behind it */
+  .tp-linkrow {
+    animation: tp-rise 0.55s cubic-bezier(0.25, 1, 0.5, 1) both;
+  }
+
+  /* A held bubble lightens a step, as iOS shows a press */
+  .tp-linkrow .ss-bubble::before {
+    transition: background-color 0.15s ease;
+  }
+
+  .tp-linkrow .ss-bubble[data-pressed]::before {
+    background-color: #38373d;
+  }
+
+  /* ---------- the built-in browser ---------- */
+
+  .tp-sheet {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--room);
+    visibility: hidden;
+    transform: translate3d(0, 100%, 0);
+    /* Dismissed: down and away, quicker than it came; gone once it is out */
+    transition: transform 0.42s cubic-bezier(0.4, 0, 0.6, 1), visibility 0s linear 0.42s;
+    will-change: transform;
+  }
+
+  /* Presented the way iOS presents a screen: quick off the tap, a long settle */
+  .tp-sheet[data-open] {
+    visibility: visible;
+    transform: translate3d(0, 0, 0);
+    transition: transform 0.56s cubic-bezier(0.3, 0.75, 0.1, 1), visibility 0s linear 0s;
+  }
+
+  .tp-bar {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    height: 106px;
+    padding: 62px 16px 0;
+    background: #1c1c1e;
+    border-bottom: 0.5px solid rgb(255 255 255 / 0.12);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  }
+
+  .tp-bar__done {
+    position: absolute;
+    bottom: 0;
+    left: 16px;
+    display: flex;
+    align-items: center;
+    height: 44px;
+    padding: 0 10px 0 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: #f2f2f7;
+    transition: opacity 0.12s ease;
+  }
+
+  .tp-bar__done[data-pressed] {
+    opacity: 0.5;
+  }
+
+  /* A fixed, even width, so the lock never sits on a half pixel */
+  .tp-bar__url {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 160px;
+    gap: 5px;
+    height: 44px;
+    font-size: 15px;
+    font-weight: 500;
+    color: #e5e5ea;
+  }
+
+  .tp-lock {
+    color: #a1a1a6;
+  }
+
+  .tp-viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* ---------- the film's page: 1.1.0 at 402 points ---------- */
+
+  .tp-page,
+  .tp-page * {
+    box-sizing: border-box;
+  }
+
+  .tp-page {
+    position: relative;
+    min-height: 1400px;
+    background: var(--room);
+    color: var(--text);
+    font: 400 16px/1.5 var(--sans);
+    letter-spacing: 0;
+    -webkit-font-smoothing: antialiased;
+    will-change: transform;
+  }
+
+  /* The shop's bar (site.jsx, ui.css .ui-bar): 60 tall on a phone, its rule
+     the screen's whole width */
+  .tp-shopbar {
+    position: relative;
+    height: 61px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .tp-print {
+    position: absolute;
+    display: block;
+    max-width: none;
+  }
+
+  /* Sign in, a menu-bar item (ui.css .ui-item): 15px Plex at 500, 10px to a
+     side on a phone, 44 tall to a finger */
+  .tp-signin {
+    position: absolute;
+    top: 8px;
+    left: 303px;
+    display: flex;
+    align-items: center;
+    width: 83px;
+    height: 44px;
+    padding: 0 10px;
+    font: 500 15px/20px var(--ui-face);
+    font-variant-ligatures: none;
+    color: var(--ui-fg);
+    white-space: nowrap;
+    transition: opacity 0.2s ease;
+  }
+
+  .tp-signin[data-hide] {
+    opacity: 0;
+  }
+
+  /* The film's details, beside the 96px sleeve (friend.css, under 768px) */
+  .tp-body {
+    position: relative;
+    height: 851px;
+  }
+
+  .tp-title {
+    position: absolute;
+    top: 16px;
+    left: 128px;
+    width: 258px;
+    font: 600 28px/32px var(--sans);
+    letter-spacing: -0.015em;
+    color: var(--text);
+  }
+
+  .tp-meta {
+    position: absolute;
+    top: 54px;
+    left: 128px;
+    width: 258px;
+    font: 400 15px/22px var(--sans);
+    color: var(--text-2);
+  }
+
+  /* Placeholder lines where the page has words the story doesn't need: one
+     bar to a line, on the line's own pitch */
+  .tp-lines {
+    position: absolute;
+    left: 16px;
+    width: 370px;
+    display: grid;
+    grid-auto-rows: 24px;
+    align-items: center;
+  }
+
+  .tp-synopsis {
+    top: 176px;
+  }
+
+  /* Under Play: what pressing it starts (friend.css .fl-clock, the page's
+     16/24 in --text-2), then what Arthur can see (.fl-privacy, 14/20 in
+     --text-3), each three lines at the page's 370 */
+  .tp-clock,
+  .tp-privacy {
+    position: absolute;
+    left: 16px;
+    width: 370px;
+    margin: 0;
+  }
+
+  .tp-clock {
+    top: 646.73px;
+    font: 400 16px/24px var(--sans);
+    color: var(--text-2);
+  }
+
+  .tp-privacy {
+    top: 742.73px;
+    font: 400 14px/20px var(--sans);
+    color: var(--text-3);
+  }
+
+  /* The shop's footer (styles.css .site-footer): a hairline across the
+     screen, then its lines; only its rule and first line are ever in view,
+     under the page's fade */
+  .tp-foot {
+    padding: 28px 16px 40px;
+    border-top: 1px solid var(--hair);
+    font: 400 14px/20px var(--sans);
+    color: var(--text-3);
+  }
+
+  /* Play and the plays left, under the tape; on a phone the tile takes the
+     row and its line goes under it (objects.css, friend.css) */
+  .tp-playrow {
+    position: absolute;
+    top: 516.73px;
+    left: 16px;
+    width: 370px;
+    height: 110px;
+    transition: opacity 0.25s ease;
+  }
+
+  .tp-playrow[data-gone] {
+    opacity: 0;
+  }
+
+  .tp-left {
+    position: absolute;
+    top: 88px;
+    left: 0;
+    font: 400 15px/22px var(--ui-face);
+    font-variant-ligatures: none;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-2);
+  }
+
+  /* ---------- the machine's blue screen (objects.css .crt) ---------- */
+
+  .tp-crt {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    isolation: isolate;
+    background: var(--blue);
+    color: var(--osd);
+    font-family: var(--osd-face);
+    font-weight: 400;
+    font-variant-ligatures: none;
+    font-feature-settings: 'liga' 0, 'calt' 0;
+  }
+
+  /* What a tube does to a flat blue: static scanlines, darker edges and a
+     soft bloom on the letters. Nothing flickers or moves */
+  .tp-crt::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    border-radius: inherit;
+    background:
+      repeating-linear-gradient(to bottom, rgb(6 8 48 / 0.17) 0 var(--scan-l), rgb(6 8 48 / 0.05) var(--scan-s), transparent calc(var(--scan-s) + 0.5px) var(--scan-p)),
+      radial-gradient(ellipse 80% 75% at 50% 48%, transparent 58%, rgb(6 8 40 / 0.32) 100%);
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25);
+  }
+
+  .tp-px {
+    display: inline-block;
+    width: auto;
+    height: 0.62em;
+    max-width: none;
+    margin-left: 0.3em;
+    vertical-align: 0.02em;
+    fill: currentColor;
+    shape-rendering: crispEdges;
+  }
+
+  /* The Play tile: a piece of the screen it turns into, PLAY lit and the
+     tape counter beside it. Pressed: a hair smaller and a darker blue, at
+     once; then, while the play starts, disabled */
+  .tp-play {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 360px;
+    height: 72px;
+    border-radius: 8px / 10px;
+    transition: transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+    /* on a layer for good, so its letters don't hop as the press lets go */
+    will-change: transform;
+  }
+
+  .tp-play[data-pressed] {
+    background: var(--blue-press);
+    transform: scale(0.97);
+  }
+
+  .tp-play__in {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    height: 100%;
+    padding: 0 20px 0 12px;
+    transition: opacity 0.12s ease;
+  }
+
+  .tp-play[data-starting] .tp-play__in {
+    opacity: 0.6;
+  }
+
+  /* Inverse video: the lit block a VCR draws round the item you're on */
+  .tp-play__mode {
+    padding: 7px 12px 5px;
+    background: var(--osd);
+    color: var(--osd-inverse-ink);
+    box-shadow: 0 0 7px rgb(160 176 255 / 0.4);
+    font-size: 34px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .tp-play__ctr,
+  .tp-osd__mode,
+  .tp-osd__ctr {
+    text-shadow:
+      0 0 1px rgb(246 247 253 / 0.5),
+      1px 0 1px rgb(246 247 253 / 0.18),
+      -1px 0 1px rgb(246 247 253 / 0.18),
+      0 0 7px rgb(160 176 255 / 0.26);
+  }
+
+  .tp-play__ctr {
+    font-size: 24px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tp-osd__mode .tp-px,
+  .tp-play__ctr .tp-px {
+    filter: drop-shadow(0 0 3px rgb(160 176 255 / 0.45));
+  }
+
+  /* ---------- the player (friend.css .fl-theatre, Player.jsx) ---------- */
+
+  /* Over what follows it, so the bar can be tucked under the picture */
+  .tp-theatre {
+    position: relative;
+    z-index: 1;
+    display: none;
+  }
+
+  .tp-theatre[data-open] {
+    display: block;
+  }
+
+  /* The bar and the page under it: tucked up under the picture while the
+     PLAY screen shows (the page opens by the picture's height only, as 1.1.0
+     draws no bar with the PLAY screen), then let down as the picture comes,
+     carrying the page with it */
+  .tp-after {
+    position: relative;
+    z-index: 0;
+    transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+    /* on a layer for good, so its words don't hop as it lands */
+    will-change: transform;
+  }
+
+  /* Tucked at once (it opens out of sight, with the page's scroll taking
+     it in), let down with a transition */
+  .tp-after[data-tucked] {
+    transform: translate3d(0, -117px, 0);
+    transition: none;
+  }
+
+  .tp-picture {
+    position: relative;
+    height: 226.125px;
+    background: #000;
+  }
+
+  /* The short PLAY screen in the picture's place, then the film */
+  .tp-playscreen {
+    position: absolute;
+    inset: 0;
+    transition: opacity 0.12s linear, visibility 0s linear;
+  }
+
+  .tp-picture[data-on] .tp-playscreen {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.12s linear, visibility 0s linear 0.12s;
+  }
+
+  .tp-osd {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    padding: 6.5% 7.5%;
+  }
+
+  .tp-osd__mode {
+    align-self: flex-start;
+    font-size: 32px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .tp-osd__ctr {
+    align-self: flex-end;
+    font-size: 24px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The film's title card, in plain type: it fades up out of black, then
+     its second line comes up, as titles do */
+  .tp-film {
+    position: absolute;
+    inset: 0;
+  }
+
+  .tp-film img {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 0.9s ease;
+  }
+
+  .tp-film img[data-show] {
+    opacity: 1;
+  }
+
+  /* Playing, under Safari's own player: one quiet row of the machine's
+     words, rows on a phone (an empty spacer; Picture and its menu, the
+     label and the select sharing the grid's columns; then Playback help, a
+     quiet small button, on a row of its own). 116 tall and its rule */
+  .tp-playerbar {
+    display: none;
+    justify-items: start;
+    row-gap: 12px;
+    height: 117px;
+    padding: 20px 16px 8px;
+    font: 400 14px/20px var(--ui-face);
+    font-variant-ligatures: none;
+    color: var(--text-2);
+    background: var(--deep);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  /* The label: "Picture" (58.8 wide), 8px, then the select to the grid's
+     last 20px gap (x 82.8 to 366 on the screen) */
+  .tp-pic {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 350px;
+    height: 44px;
+  }
+
+  /* ui.css .ui-select in the bar (friend.css .fl-bar .ui-select, 16px on a
+     phone): the field's sunk box and edge, Auto, and the stepped triangle
+     drawn as three bars at its right */
+  .tp-select {
+    display: flex;
+    flex: none;
+    align-items: center;
+    width: 283.2px;
+    height: 44px;
+    padding: 6px 36px 6px 10px;
+    border: 1px solid var(--ui-edge);
+    background-color: var(--ui-sunk);
+    background-image: linear-gradient(var(--ui-fg), var(--ui-fg)), linear-gradient(var(--ui-fg), var(--ui-fg)), linear-gradient(var(--ui-fg), var(--ui-fg));
+    background-size: 10px 2px, 6px 2px, 2px 2px;
+    background-position: right 14px top calc(50% - 2px), right 16px top 50%, right 18px top calc(50% + 2px);
+    background-repeat: no-repeat;
+    font: 400 16px/20px var(--ui-face);
+    color: var(--text);
+  }
+
+  .tp-playerbar[data-open] {
+    display: grid;
+  }
+
+  /* Its words come up as it comes out from under the picture */
+  .tp-playerbar > * {
+    opacity: 0;
+    transition: opacity 0.3s ease 0.1s;
+  }
+
+  .tp-playerbar[data-on] > * {
+    opacity: 1;
+  }
+
+  .tp-help {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 12px;
+    font: 500 14px/18px var(--ui-face);
+    color: var(--ui-fg);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-decoration-color: rgb(233 223 201 / 0.5);
+    text-underline-offset: 4px;
+  }
+
+  /* At the phone column the phone is drawn smaller, so its smallest type
+     steps up to stay readable */
+  & .ss-stage[data-layout='compact'] .tp-head__name {
+    font-size: 13.5px;
+  }
+}
+
+@keyframes tp-rise {
+  from {
+    transform: translate3d(0, calc(100% + 3px), 0);
+  }
+}
+
+/* Reduced motion: the Stage shows its still and runs no script; nothing here
+   moves on its own but the link's rise, which a still never plays */
+@media (prefers-reduced-motion: reduce) {
+  .tp .tp-linkrow {
+    animation: none;
+  }
+}

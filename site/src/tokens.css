@@ -11,8 +11,10 @@
    in public/fonts. IBM Plex Mono's licence reserves the name "Plex", so its
    cut-down copy is called Matte Mono. index.html and 404.html preload the
    three faces the first screen sets; Courier Prime waits for the till slip.
-   Plex Mono SemiBold, Grape Nuts and VT323 are not sent: no text on the page
-   uses them (Grape Nuts and VT323 appear only in the pictures). ---------- */
+   No text on the page uses Plex Mono SemiBold, Grape Nuts or VT323: the
+   scenes declare the SemiBold and VT323 (stage/look.css) and bring them with
+   their code; Grape Nuts, the staff pick's hand, is only ever inside a
+   picture, and no file of it is sent. ---------- */
 @font-face {
   font-family: "Libre Franklin";
   src: url("/fonts/LibreFranklin-400-700.woff2") format("woff2");
