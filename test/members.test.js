@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { softAuthenticator } from './softauth.js';
-import { adminBrowser, browser, enroll, makeFilm, newPerson, playbackFiles, setupLink, signIn, startServer, tempDir } from './helpers.js';
+import { addFilm, adminBrowser, browser, enroll, makeFilm, newPerson, playbackFiles, setupLink, signIn, startServer, tempDir } from './helpers.js';
 
 const mediaDir = tempDir();
 const dataDir = tempDir();
@@ -16,7 +16,8 @@ const SLUGS = { arrival: 'Arrival', heat: 'Heat', solaris: 'Solaris', stalker: '
 const RECOMMENDATION = 'Watch it with the lights off.';
 // Artwork: each folder's poster, and for Arrival a backdrop downloaded from TMDb.
 const BACKDROP = 'backdrop-0123456789ab.jpg';
-const artworkOf = (slug) => [`/media/${slug}/poster.jpg`, ...(slug === 'arrival' ? [`/artwork/arrival/${BACKDROP}`] : [])];
+const withBackdrop = new Set(['arrival']);
+const artworkOf = (slug) => [`/media/${slug}/poster.jpg`, ...(withBackdrop.has(slug) ? [`/artwork/${slug}/${BACKDROP}`] : [])];
 // Refused, the folder's artwork is a 403, like the rest of /media; downloaded
 // artwork is a 404, exactly as if there were no such film (media.js).
 const refusedArtwork = (urls) => urls.map((u) => (u.startsWith('/artwork/') ? 404 : 403));
@@ -64,6 +65,20 @@ const setFilm = async (slug, body) => {
   assert.equal(r.status, 200, JSON.stringify(r.data));
   return r.data;
 };
+
+// A film of its own for a test that presses Play: published, shown to members and with
+// a downloaded backdrop, as Arrival is. Made inside the test, so the lists the earlier
+// tests check are as they were.
+async function memberFilm(slug, title) {
+  SLUGS[slug] = title;
+  films[slug] = (await addFilm(admin, mediaDir, slug, { title })).id;
+  await setFilm(slug, { memberVisible: true });
+  fs.mkdirSync(path.join(dataDir, 'artwork', slug), { recursive: true });
+  fs.writeFileSync(path.join(dataDir, 'artwork', slug, BACKDROP), 'jpeg');
+  srv.db.prepare('UPDATE films SET artwork = ? WHERE slug = ?').run(JSON.stringify({ backdrop: { file: BACKDROP } }), slug);
+  withBackdrop.add(slug);
+  return slug;
+}
 
 // A person with one passkey, signed in on their phone. device() signs another
 // browser in as them.
@@ -243,35 +258,38 @@ describe('when the person has a ticket', () => {
 
   test('so does a link ticket opened in this browser', async () => {
     const { phone } = await member();
-    await opened(phone, await issue());
-    await playsEverything(phone);
+    const slug = await memberFilm('ran', 'Ran');
+    await opened(phone, await issue({}, slug), slug);
+    await playsEverything(phone, slug);
   });
 
   test('a revoked ticket gives the listing back, and playback stops from the next request', async () => {
     const { p, phone } = await member();
-    const t = await issue({ personId: p.id });
-    await playsEverything(phone);
+    const slug = await memberFilm('alien', 'Alien');
+    const t = await issue({ personId: p.id }, slug);
+    await playsEverything(phone, slug);
     assert.equal((await admin.post(`/api/admin/tickets/${t.id}/revoke`)).status, 200);
-    await readableOnly(phone);
+    await readableOnly(phone, slug);
     assert.equal((await admin.post(`/api/admin/tickets/${t.id}/restore`)).status, 200);
-    await playsEverything(phone);
+    await playsEverything(phone, slug);
   });
 
   test('a used-up ticket says so, rather than offering the film as a member film', async () => {
     const { p, phone } = await member();
-    const t = await issue({ personId: p.id, screeningLimit: 1 });
-    await playsEverything(phone);
+    const slug = await memberFilm('paris-texas', 'Paris, Texas');
+    const t = await issue({ personId: p.id, screeningLimit: 1 }, slug);
+    await playsEverything(phone, slug);
     // The one screening's resume window has run out.
     srv.db.prepare('UPDATE screenings SET resumable_until = ? WHERE ticket_id = ?').run(Date.now() - 1, t.id);
-    const page = await phone.get('/api/films/arrival');
+    const page = await phone.get(`/api/films/${slug}`);
     assert.equal(page.status, 200);
     assert.equal(page.data.access.via, 'ticket');
     assert.equal(page.data.access.ticket.state, 'used_up');
-    const p2 = await phone.post('/api/films/arrival/screenings');
+    const p2 = await phone.post(`/api/films/${slug}/screenings`);
     assert.equal(p2.status, 409);
     assert.equal(p2.data.error, 'used_up');
-    assert.deepEqual(await ticketSlugs(phone), ['arrival']);
-    assert.ok(!(await memberSlugs(phone)).includes('arrival'));
+    assert.deepEqual(await ticketSlugs(phone), [slug]);
+    assert.ok(!(await memberSlugs(phone)).includes(slug));
   });
 });
 

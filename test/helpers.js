@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { afterEach, beforeEach } from 'node:test';
 import { softAuthenticator } from './softauth.js';
 
 process.env.ADMIN_PASSWORD ??= 'test-password-123';
@@ -67,6 +68,22 @@ export function makeFilm(mediaDir, slug, overrides = {}) {
   return dir;
 }
 
+// A film of its own for a test, on a server that is already running: made in the
+// media folder, found by a scan and published, as the admin would. Version 2 lends
+// one tape per film, so each test that presses Play does it on a film no other test
+// in its file plays. Returns the film as the admin's list has it (id, slug, ...).
+export async function addFilm(admin, mediaDir, slug, { published = true, ...overrides } = {}) {
+  makeFilm(mediaDir, slug, overrides);
+  const scan = await admin.post('/api/admin/scan');
+  if (scan.status !== 200) throw new Error(`addFilm: scan ${scan.status} ${JSON.stringify(scan.data)}`);
+  const film = (await admin.get('/api/admin/films')).data.find((f) => f.slug === slug);
+  if (!film) throw new Error(`addFilm: the scan did not find ${slug}`);
+  if (!published) return film;
+  const r = await admin.patch(`/api/admin/films/${film.id}`, { published: true });
+  if (r.status !== 200) throw new Error(`addFilm: publish ${r.status} ${JSON.stringify(r.data)}`);
+  return r.data;
+}
+
 export function writeFilmJson(dir, patch) {
   const file = path.join(dir, 'film.json');
   const json = { ...JSON.parse(fs.readFileSync(file, 'utf8')), ...patch };
@@ -89,9 +106,60 @@ export function tempDir() {
   return fs.mkdtempSync(path.join(tempRoot, 'dir-'));
 }
 
+// One film, one test to press Play on it. Version 2 lends one tape per film, so a
+// second test pressing Play on a film an earlier test left out would find the shelf
+// empty. After every test, each database a server was started on (or a test handed
+// to watchPlays) is read for screenings begun since the last look, and the test fails
+// if another test in the file already began one on that film. The one exception is a
+// journey told over several tests: the ticket the first test played may be played
+// again by the tests after it (journey.test.js gives a screening back, then plays
+// again). Nothing is taken back or tidied here: a test gets its own film from makeFilm
+// (or addFilm, on a server already running). A test that builds its app with
+// createApp, not startServer, hands its database to watchPlays itself.
+const watched = [];
+export function watchPlays(db) {
+  watched.push({ db, seen: 0, pressedBy: new Map() });
+  return db;
+}
+
+export function sharedPlays(testName) {
+  const shared = [];
+  for (let i = watched.length - 1; i >= 0; i--) {
+    const w = watched[i];
+    let rows;
+    try {
+      rows = w.db
+        .prepare('SELECT s.id, s.ticket_id AS ticket, f.slug FROM screenings s JOIN films f ON f.id = s.film_id WHERE s.id > ? ORDER BY s.id')
+        .all(w.seen);
+    } catch {
+      // Closed, or an older schema a migration test is working on: nothing to read.
+      watched.splice(i, 1);
+      continue;
+    }
+    for (const { id, ticket, slug } of rows) {
+      w.seen = id;
+      const first = w.pressedBy.get(slug);
+      if (first === undefined) w.pressedBy.set(slug, { test: testName, tickets: new Set([ticket]) });
+      else if (first.test === testName) first.tickets.add(ticket);
+      else if (!first.tickets.has(ticket) && !shared.some((s) => s.slug === slug)) shared.push({ slug, first: first.test });
+    }
+  }
+  return shared;
+}
+
+const refuseShared = (shared) => {
+  if (shared.length) {
+    const list = shared.map(({ slug, first }) => `"${slug}" (first played in "${first}")`).join(', ');
+    throw new Error(`Play was pressed on a film another test in this file had already played: ${list}. Give this test a film of its own with makeFilm.`);
+  }
+};
+// Before a test: what the before() hooks played, which counts as a test of its own.
+beforeEach((t) => refuseShared(sharedPlays(`what was set up before "${t.fullName ?? t.name}"`)));
+afterEach((t) => refuseShared(sharedPlays(t.fullName ?? t.name)));
+
 // No web build unless a test gives one (`webDist`, a folder with an index.html).
 export async function startServer({ mediaDir, dataDir = tempDir(), webDist, metadataOptions = { envKey: '' }, backupOptions = {}, mediaOptions, webauthn, limits }) {
-  const db = openDb(':memory:');
+  const db = watchPlays(openDb(':memory:'));
   const app = createApp({
     db,
     mediaDir,

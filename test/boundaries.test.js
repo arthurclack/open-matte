@@ -9,7 +9,7 @@ import { after, before, test } from 'node:test';
 
 // Cookies get Secure from the request, as they do behind Caddy.
 process.env.COOKIE_SECURE = 'auto';
-const { adminBrowser, browser, makeFilm, startServer, tempDir } = await import('./helpers.js');
+const { addFilm, adminBrowser, browser, makeFilm, startServer, tempDir } = await import('./helpers.js');
 const { sha256 } = await import('../server/sessions.js');
 
 let srv;
@@ -39,6 +39,12 @@ async function newTicket(slug, fields = {}) {
   const r = await admin.post('/api/admin/tickets', { filmId: films[slug], ...fields });
   assert.equal(r.status, 201, JSON.stringify(r.data));
   return r.data[0];
+}
+
+// A film of its own, published, for a test that presses Play. Returns its slug.
+async function ownFilm(slug) {
+  films[slug] = (await addFilm(admin, mediaDir, slug)).id;
+  return slug;
 }
 
 async function holder(ticket) {
@@ -125,7 +131,8 @@ test('a ticket and screening for one film unlock nothing of another', async () =
 });
 
 test("another ticket's screening id is refused and left alone", async () => {
-  const mine = await watching('arrival');
+  const slug = await ownFilm('mine');
+  const mine = await watching(slug);
   const theirs = await watching('paris-texas');
   await theirs.b.post(`/api/screenings/${theirs.screeningId}/heartbeat`, { position: 30 });
   assert.equal((await mine.b.post(`/api/screenings/${theirs.screeningId}/heartbeat`, { position: 99 })).status, 404);
@@ -133,7 +140,8 @@ test("another ticket's screening id is refused and left alone", async () => {
 });
 
 test('a viewer session is not an admin session, even in the admin cookie', async () => {
-  const { b, screeningId } = await watching('arrival');
+  const slug = await ownFilm('not-admin');
+  const { b, screeningId } = await watching(slug);
   assert.equal(await status(b, '/api/admin/films'), 401);
   assert.equal((await b.post(`/api/admin/screenings/${screeningId}/void`)).status, 401);
   const res = await fetch(`${srv.base}/api/admin/films`, { headers: { cookie: `om_admin=${b.jar.get('om_session')}` } });
@@ -141,39 +149,42 @@ test('a viewer session is not an admin session, even in the admin cookie', async
 });
 
 test('two presses of Play at once take one screening between them', async () => {
-  const ticket = await newTicket('arrival', { screeningLimit: 1 });
+  const slug = await ownFilm('two-presses');
+  const ticket = await newTicket(slug, { screeningLimit: 1 });
   const [laptop, tv] = await Promise.all([holder(ticket), holder(ticket)]);
-  const presses = await Promise.all([laptop, tv].map((b) => b.post('/api/films/arrival/screenings')));
+  const presses = await Promise.all([laptop, tv].map((b) => b.post(`/api/films/${slug}/screenings`)));
   assert.deepEqual(presses.map((r) => r.status).sort(), [200, 409]);
   assert.equal(presses.find((r) => r.status === 409).data.error, 'playing-elsewhere');
 
   // A double click in one browser resumes rather than starting another.
   const winner = presses[0].status === 200 ? laptop : tv;
-  const twice = await Promise.all([1, 2].map(() => winner.post('/api/films/arrival/screenings')));
+  const twice = await Promise.all([1, 2].map(() => winner.post(`/api/films/${slug}/screenings`)));
   assert.deepEqual(twice.map((r) => r.data.screeningId), [presses.find((r) => r.status === 200).data.screeningId, presses.find((r) => r.status === 200).data.screeningId]);
   assert.equal((await admin.get(`/api/admin/tickets/${ticket.id}`)).data.screeningsUsed, 1);
 });
 
 test('a player that goes quiet without saying so frees the screening after the timeout', async () => {
-  const { b: laptop, ticket, screeningId } = await watching('arrival');
+  const slug = await ownFilm('goes-quiet');
+  const { b: laptop, ticket, screeningId } = await watching(slug);
   const tv = await holder(ticket);
-  assert.equal((await tv.post('/api/films/arrival/screenings')).data.error, 'playing-elsewhere');
+  assert.equal((await tv.post(`/api/films/${slug}/screenings`)).data.error, 'playing-elsewhere');
   // The laptop lost its connection: no pause, no pagehide, just no more heartbeats.
   srv.db.prepare('UPDATE screenings SET active_until = ? WHERE id = ?').run(Date.now() - 1, screeningId);
-  const takeover = await tv.post('/api/films/arrival/screenings');
+  const takeover = await tv.post(`/api/films/${slug}/screenings`);
   assert.equal(takeover.status, 200);
   assert.equal(takeover.data.screeningId, screeningId);
-  assert.equal(await status(laptop, master('arrival')), 403);
+  assert.equal(await status(laptop, master(slug)), 403);
 });
 
 test('unpublishing stops playback that is under way, and publishing again restores it', async () => {
-  const { b, screeningId } = await watching('paris-texas');
-  await admin.patch(`/api/admin/films/${films['paris-texas']}`, { published: false });
-  assert.equal(await status(b, master('paris-texas')), 403);
+  const slug = await ownFilm('unpublished');
+  const { b, screeningId } = await watching(slug);
+  await admin.patch(`/api/admin/films/${films[slug]}`, { published: false });
+  assert.equal(await status(b, master(slug)), 403);
   assert.equal((await b.post(`/api/screenings/${screeningId}/heartbeat`, { position: 10 })).data.error, 'unpublished');
-  assert.equal(await status(b, '/api/films/paris-texas'), 404);
-  await admin.patch(`/api/admin/films/${films['paris-texas']}`, { published: true });
-  assert.equal(await status(b, master('paris-texas')), 200, 'the screening is still theirs');
+  assert.equal(await status(b, `/api/films/${slug}`), 404);
+  await admin.patch(`/api/admin/films/${films[slug]}`, { published: true });
+  assert.equal(await status(b, master(slug)), 200, 'the screening is still theirs');
 });
 
 test('a film whose folder goes missing explains itself instead of breaking the player', async () => {
@@ -207,7 +218,8 @@ test('a film whose rescan finds errors explains itself too, and starts no screen
 });
 
 test('a JSON body built to break String() or Number() gets a refusal, not a server error', async () => {
-  const { b, screeningId } = await watching('arrival');
+  const slug = await ownFilm('hostile-json');
+  const { b, screeningId } = await watching(slug);
   assert.equal((await b.post(`/api/screenings/${screeningId}/heartbeat`, { position: 30 })).status, 200);
   // Objects whose toString and valueOf can't be called, and an array holding one.
   const hostile = [{ toString: 'x' }, { toString: {}, valueOf: {} }, [{ toString: 1 }]];
@@ -223,8 +235,9 @@ test('a JSON body built to break String() or Number() gets a refusal, not a serv
 });
 
 test('range requests get the same check as whole files', async () => {
-  const { b } = await watching('arrival');
-  const seg = '/media/arrival/hls/v_h264_720/seg_2.m4s';
+  const slug = await ownFilm('ranges');
+  const { b } = await watching(slug);
+  const seg = `/media/${slug}/hls/v_h264_720/seg_2.m4s`;
   const part = await raw(b, seg, { headers: { range: 'bytes=0-3' } });
   assert.equal(part.status, 206);
   assert.equal(await part.text(), 'segm');
@@ -232,38 +245,42 @@ test('range requests get the same check as whole files', async () => {
 });
 
 test('media is only cacheable by the viewer’s own browser', async () => {
-  const { b } = await watching('arrival');
-  for (const url of [master('arrival'), '/media/arrival/hls/v_h264_720/seg_0.m4s', '/media/arrival/subtitles/en.vtt', '/media/arrival/poster.jpg']) {
+  const slug = await ownFilm('cacheable');
+  const { b } = await watching(slug);
+  for (const url of [master(slug), `/media/${slug}/hls/v_h264_720/seg_0.m4s`, `/media/${slug}/subtitles/en.vtt`, `/media/${slug}/poster.jpg`]) {
     assert.match((await raw(b, url)).headers.get('cache-control'), /^private/, url);
   }
 });
 
 test('a symlink in a film folder cannot serve a file from outside it', async () => {
-  const { b } = await watching('arrival');
+  const slug = await ownFilm('symlink');
+  const { b } = await watching(slug);
   const secret = path.join(tempDir(), 'secret.m4s');
   fs.writeFileSync(secret, 'not for viewers');
-  const dir = path.join(mediaDir, 'arrival', 'hls', 'v_h264_720');
+  const dir = path.join(mediaDir, slug, 'hls', 'v_h264_720');
   fs.symlinkSync(secret, path.join(dir, 'leak.m4s'));
   fs.symlinkSync(path.join(dir, 'seg_0.m4s'), path.join(dir, 'alias.m4s'));
-  assert.equal(await status(b, '/media/arrival/hls/v_h264_720/leak.m4s'), 404);
-  assert.equal(await status(b, '/media/arrival/hls/v_h264_720/alias.m4s'), 200, 'links within the folder still work');
+  assert.equal(await status(b, `/media/${slug}/hls/v_h264_720/leak.m4s`), 404);
+  assert.equal(await status(b, `/media/${slug}/hls/v_h264_720/alias.m4s`), 200, 'links within the folder still work');
 });
 
 test('a hidden file is a 404, even behind a symlink', async () => {
-  const { b } = await watching('arrival');
-  const dir = path.join(mediaDir, 'arrival', 'hls', 'v_h264_720');
+  const slug = await ownFilm('hidden-file');
+  const { b } = await watching(slug);
+  const dir = path.join(mediaDir, slug, 'hls', 'v_h264_720');
   fs.writeFileSync(path.join(dir, '.hidden.m4s'), 'hidden');
   fs.symlinkSync(path.join(dir, '.hidden.m4s'), path.join(dir, 'to-hidden.m4s'));
-  assert.equal(await status(b, '/media/arrival/hls/v_h264_720/.hidden.m4s'), 404);
-  assert.equal(await status(b, '/media/arrival/hls/v_h264_720/to-hidden.m4s'), 404);
+  assert.equal(await status(b, `/media/${slug}/hls/v_h264_720/.hidden.m4s`), 404);
+  assert.equal(await status(b, `/media/${slug}/hls/v_h264_720/to-hidden.m4s`), 404);
 });
 
 test('storage errors are 500s, which players retry, not 404s, which they give up on', { skip: process.getuid?.() === 0 && 'root ignores permissions' }, async () => {
-  const { b } = await watching('arrival');
-  const dir = path.join(mediaDir, 'arrival', 'hls', 'v_hevc_1080');
+  const slug = await ownFilm('storage-error');
+  const { b } = await watching(slug);
+  const dir = path.join(mediaDir, slug, 'hls', 'v_hevc_1080');
   fs.chmodSync(dir, 0o000);
   try {
-    const res = await raw(b, '/media/arrival/hls/v_hevc_1080/seg_0.m4s');
+    const res = await raw(b, `/media/${slug}/hls/v_hevc_1080/seg_0.m4s`);
     assert.equal(res.status, 500);
     assert.equal(res.headers.get('cache-control'), null, 'an error is never cached');
   } finally {
@@ -272,8 +289,9 @@ test('storage errors are 500s, which players retry, not 404s, which they give up
 });
 
 test('a range past the end of a segment is a 416, not a server error', async () => {
-  const { b } = await watching('arrival');
-  const res = await raw(b, '/media/arrival/hls/v_h264_720/seg_1.m4s', { headers: { range: 'bytes=1000-2000' } });
+  const slug = await ownFilm('past-the-end');
+  const { b } = await watching(slug);
+  const res = await raw(b, `/media/${slug}/hls/v_h264_720/seg_1.m4s`, { headers: { range: 'bytes=1000-2000' } });
   assert.equal(res.status, 416);
   assert.equal(res.headers.get('content-range'), 'bytes */9');
   assert.equal(res.headers.get('cache-control'), null);
@@ -621,12 +639,14 @@ test('a NUL in a media path is no such file, not a storage error', async () => {
 
 // Last: it signs every viewer out.
 test('signed-out and expired sessions lose the stream on the very next request', async () => {
-  const a = await watching('arrival');
-  const p = await watching('paris-texas');
+  const expired = await ownFilm('expired-session');
+  const slug = await ownFilm('signed-out');
+  const a = await watching(slug);
+  const p = await watching(expired);
   srv.db.prepare('UPDATE sessions SET expires_at = ? WHERE id_hash IN (SELECT session_hash FROM screenings WHERE id = ?)').run(Date.now() - 1, p.screeningId);
-  assert.equal(await status(p.b, master('paris-texas')), 403);
-  assert.equal(await status(a.b, master('arrival')), 200);
+  assert.equal(await status(p.b, master(expired)), 403);
+  assert.equal(await status(a.b, master(slug)), 200);
   await admin.post('/api/admin/sessions/expire-all');
-  assert.equal(await status(a.b, master('arrival')), 403);
+  assert.equal(await status(a.b, master(slug)), 403);
   assert.equal((await a.b.post(`/api/screenings/${a.screeningId}/heartbeat`, { position: 5 })).status, 404);
 });

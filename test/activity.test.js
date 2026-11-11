@@ -396,10 +396,11 @@ describe('how often viewing is recorded', () => {
     assert.equal(count('opened', t.id), 2, 'loading the page itself still counts');
   });
 
+  // Each test that presses Play does it on a film of its own: this one on Heat.
   test('heartbeat: progress is logged at most every 5 minutes while playing, and a pause not at all', async () => {
-    const t = await c.issue();
+    const t = await c.issue({}, 'heat');
     const b = await c.opened(c.fresh(), t);
-    const id = await c.play(b);
+    const id = await c.play(b, 'heat');
     for (const position of [10, 20, 30]) await c.heartbeat(b, id, position);
     assert.equal(count('heartbeat', t.id), 1, 'three reports, one event');
     backdate('heartbeat', t.id, 5 * MINUTE);
@@ -416,36 +417,38 @@ describe('how often viewing is recorded', () => {
   });
 
   test('play: every new screening and every move to another browser, but the same browser again at most every 5 minutes', async () => {
-    const t = await c.issue();
+    // On Solaris, which no other test here plays.
+    const t = await c.issue({}, 'solaris');
     const laptop = await c.opened(c.fresh(), t);
     const tv = await c.opened(c.fresh(), t);
+    const play = (b) => c.play(b, 'solaris');
     const resumed = () =>
       c.srv.db
         .prepare("SELECT detail FROM events WHERE type = 'play' AND ticket_id = ? ORDER BY id")
         .all(t.id)
         .map((e) => JSON.parse(e.detail).resumed);
 
-    const id = await c.play(laptop);
-    for (let i = 0; i < 3; i++) assert.equal(await c.play(laptop), id);
+    const id = await play(laptop);
+    for (let i = 0; i < 3; i++) assert.equal(await play(laptop), id);
     assert.equal(count('play', t.id), 1, 'a refresh or a double click is not another event');
 
     await c.heartbeat(laptop, id, 20, false);
-    assert.equal(await c.play(tv), id);
+    assert.equal(await play(tv), id);
     await c.heartbeat(tv, id, 30, false);
-    assert.equal(await c.play(laptop), id);
+    assert.equal(await play(laptop), id);
     assert.equal(count('play', t.id), 3, 'moving to another browser and back always is');
 
     backdate('play', t.id, 4 * MINUTE);
-    await c.play(laptop);
+    await play(laptop);
     assert.equal(count('play', t.id), 3, 'not after 4 minutes');
     backdate('play', t.id, MINUTE);
-    await c.play(laptop);
+    await play(laptop);
     assert.equal(count('play', t.id), 4, 'again after 5');
     assert.deepEqual(resumed(), [false, true, true, true]);
 
     // A new screening, once the last one's window has closed, always is.
     c.sql('UPDATE screenings SET resumable_until = ? WHERE id = ?', Date.now() - 1, id);
-    assert.notEqual(await c.play(laptop), id);
+    assert.notEqual(await play(laptop), id);
     assert.deepEqual(resumed(), [false, true, true, true, false]);
   });
 });

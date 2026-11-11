@@ -8,14 +8,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { softAuthenticator } from './softauth.js';
-import { adminBrowser, browser, enroll, makeFilm, newPerson, playbackFiles, setupLink, signIn, startServer, tempDir } from './helpers.js';
+import { addFilm, adminBrowser, browser, enroll, makeFilm, newPerson, playbackFiles, setupLink, signIn, startServer, tempDir } from './helpers.js';
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 const mediaDir = tempDir();
 const dataDir = tempDir();
-const MASTER = '/media/arrival/hls/master.m3u8';
-const segment = (i) => `/media/arrival/hls/v_h264_720/seg_${i}.m4s`;
+const master = (slug) => `/media/${slug}/hls/master.m3u8`;
+const MASTER = master('arrival');
+const segment = (i, slug = 'arrival') => `/media/${slug}/hls/v_h264_720/seg_${i}.m4s`;
 // Artwork: each folder's poster, and for Arrival a backdrop downloaded from TMDb.
 const BACKDROP = 'backdrop-0123456789ab.jpg';
 const ARTWORK = { arrival: ['/media/arrival/poster.jpg', `/artwork/arrival/${BACKDROP}`], heat: ['/media/heat/poster.jpg'] };
@@ -41,6 +42,17 @@ before(async () => {
   srv.db.prepare('UPDATE films SET artwork = ? WHERE slug = ?').run(JSON.stringify({ backdrop: { file: BACKDROP } }), 'arrival');
 });
 after(() => srv.close());
+
+// A film of its own, published, for a test that presses Play: with a poster and a
+// downloaded backdrop, as Arrival has. Returns its slug.
+async function ownFilm(slug) {
+  films[slug] = (await addFilm(admin, mediaDir, slug)).id;
+  fs.mkdirSync(path.join(dataDir, 'artwork', slug), { recursive: true });
+  fs.writeFileSync(path.join(dataDir, 'artwork', slug, BACKDROP), 'jpeg');
+  srv.db.prepare('UPDATE films SET artwork = ? WHERE slug = ?').run(JSON.stringify({ backdrop: { file: BACKDROP } }), slug);
+  ARTWORK[slug] = [`/media/${slug}/poster.jpg`, `/artwork/${slug}/${BACKDROP}`];
+  return slug;
+}
 
 let counter = 0;
 const uniq = (name) => `${name} ${++counter}`;
@@ -314,10 +326,11 @@ describe('opening a ticket for one person', () => {
   });
 
   test('the first page load through it counts as opened, and the person can play everything', async () => {
+    const slug = await ownFilm('first-opened');
     const sam = await member();
-    const t = await forPerson(sam.p);
+    const t = await forPerson(sam.p, {}, slug);
     const laptop = await sam.device();
-    const page = await laptop.get('/api/films/arrival');
+    const page = await laptop.get(`/api/films/${slug}`);
     assert.equal(page.status, 200, JSON.stringify(page.data));
     assert.equal(page.data.access.via, 'ticket');
     assert.equal(page.data.access.ticket.inAccount, true);
@@ -327,12 +340,12 @@ describe('opening a ticket for one person', () => {
     const openedEvent = (await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.events.find((e) => e.type === 'opened');
     assert.equal(openedEvent.personName, sam.p.name, 'Activity names the person, read from the session');
 
-    const s = await playsEverything(laptop);
+    const s = await playsEverything(laptop, slug);
     assert.equal(s.resumed, false);
     // The phone sees the page and artwork, but holds no screening.
-    assert.equal(await status(sam.phone, '/api/films/arrival'), 200);
-    assert.deepEqual(await statuses(sam.phone, ARTWORK.arrival), every(ARTWORK.arrival, 200));
-    assert.deepEqual(await statuses(sam.phone, playbackFiles('arrival')), every(playbackFiles('arrival'), 403));
+    assert.equal(await status(sam.phone, `/api/films/${slug}`), 200);
+    assert.deepEqual(await statuses(sam.phone, ARTWORK[slug]), every(ARTWORK[slug], 200));
+    assert.deepEqual(await statuses(sam.phone, playbackFiles(slug)), every(playbackFiles(slug), 403));
 
     const a = await adminTicket(t.id);
     assert.equal(a.screeningsUsed, 1);
@@ -346,9 +359,10 @@ describe('opening a ticket for one person', () => {
 // ====================================================================== session_tickets is ignored
 describe("a session_tickets row for a person's ticket", () => {
   test('inserted by hand, it grants nothing to an anonymous browser or to someone else', async () => {
+    const slug = await ownFilm('by-hand');
     const sam = await member();
-    const t = await forPerson(sam.p);
-    const { screeningId } = await play(sam.phone);
+    const t = await forPerson(sam.p, {}, slug);
+    const { screeningId } = await play(sam.phone, slug);
     await heartbeat(sam.phone, screeningId, { position: 15 });
     const anonymous = await opened(fresh(), await issue({}, 'heat'), 'heat');
     const alex = await member(uniq('Alex'));
@@ -362,82 +376,85 @@ describe("a session_tickets row for a person's ticket", () => {
         assert.equal(hb.status, 404, 'heartbeat');
         // The row makes it look like a browser that opened the link before the ticket
         // was given, so the page says it was kept (410), and shows nothing of the film.
-        await refused(b, 'arrival', { page: [410] });
+        await refused(b, slug, { page: [410] });
       }
       assert.equal((await adminTicket(t.id)).screenings[0].position, 15, 'their heartbeats changed nothing');
     } finally {
       srv.db.prepare('DELETE FROM session_tickets WHERE ticket_id = ?').run(t.id);
     }
     // The browser left holding the screening can't play it, so the person takes it back at once.
-    const back = await play(sam.phone);
+    const back = await play(sam.phone, slug);
     assert.equal(back.screeningId, screeningId);
     assert.equal(back.resumed, true);
-    assert.equal(await status(sam.phone, MASTER), 200);
+    assert.equal(await status(sam.phone, master(slug)), 200);
   });
 });
 
 // ====================================================================== disabling
 describe('disabling the person', () => {
   test('mid-film: the next segment is refused; Enable signs nobody in; after signing in the same screening resumes at once', async () => {
+    const slug = await ownFilm('mid-film');
     const sam = await member();
-    const t = await forPerson(sam.p);
-    const { screeningId } = await play(sam.phone);
+    const t = await forPerson(sam.p, {}, slug);
+    const { screeningId } = await play(sam.phone, slug);
     assert.equal((await heartbeat(sam.phone, screeningId, { position: 30 })).status, 200);
-    assert.equal(await status(sam.phone, segment(4)), 200);
+    assert.equal(await status(sam.phone, segment(4, slug)), 200);
 
     await admin.post(`/api/admin/people/${sam.p.id}/disable`);
-    assert.equal(await status(sam.phone, segment(5)), 403, 'the next segment');
+    assert.equal(await status(sam.phone, segment(5, slug)), 403, 'the next segment');
     assert.equal((await heartbeat(sam.phone, screeningId, { position: 36 })).status, 404);
     assert.equal((await me(sam.phone)).person, null);
     assert.equal((await sam.phone.post('/api/tickets/open', { code: t.code })).status, 401);
-    await refused(sam.phone);
+    await refused(sam.phone, slug);
     assert.equal((await adminTicket(t.id)).person.disabled, true);
 
     await admin.post(`/api/admin/people/${sam.p.id}/enable`);
     assert.equal((await me(sam.phone)).person, null, 'enabling signs nobody back in');
-    await refused(sam.phone);
+    await refused(sam.phone, slug);
 
     const s = await signIn(sam.phone, sam.auth);
     assert.equal(s.status, 200, JSON.stringify(s.data));
     // The screening is still "playing" by the old, revoked session: no 75-second wait.
-    const again = await play(sam.phone);
+    const again = await play(sam.phone, slug);
     assert.equal(again.screeningId, screeningId);
     assert.equal(again.resumed, true);
     assert.equal(again.position, 30);
-    assert.deepEqual(await statuses(sam.phone, playbackFiles('arrival')), every(playbackFiles('arrival'), 200));
+    assert.deepEqual(await statuses(sam.phone, playbackFiles(slug)), every(playbackFiles(slug), 200));
     assert.equal((await adminTicket(t.id)).screeningsUsed, 1);
   });
 
   test("a disabled person's browser is anonymous, and can still open and play a link ticket", async () => {
+    const slug = await ownFilm('disabled-anonymous');
     const sam = await member();
     await admin.post(`/api/admin/people/${sam.p.id}/disable`);
-    const link = await issue();
+    const link = await issue({}, slug);
     const r = await sam.phone.post('/api/tickets/open', { code: link.code });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     assert.equal((await me(sam.phone)).person, null);
-    await playsEverything(sam.phone);
+    await playsEverything(sam.phone, slug);
   });
 });
 
 // ====================================================================== several devices
 describe("two of the person's devices", () => {
   test('one at a time: the second waits while the first plays, and takes over after a pause', async () => {
+    const slug = await ownFilm('one-at-a-time');
     const sam = await member();
-    const t = await forPerson(sam.p);
+    const t = await forPerson(sam.p, {}, slug);
     const laptop = await sam.device();
-    const { screeningId } = await play(sam.phone);
-    const blocked = await laptop.post('/api/films/arrival/screenings');
+    const { screeningId } = await play(sam.phone, slug);
+    const blocked = await laptop.post(`/api/films/${slug}/screenings`);
     assert.equal(blocked.status, 409);
     assert.equal(blocked.data.error, 'playing-elsewhere');
-    assert.equal(await status(laptop, MASTER), 403);
+    assert.equal(await status(laptop, master(slug)), 403);
 
     await pause(sam.phone, screeningId, 40);
-    const takeover = await play(laptop);
+    const takeover = await play(laptop, slug);
     assert.equal(takeover.screeningId, screeningId);
     assert.equal(takeover.resumed, true);
     assert.equal(takeover.position, 40);
-    assert.deepEqual(await statuses(laptop, playbackFiles('arrival')), every(playbackFiles('arrival'), 200));
-    assert.equal(await status(sam.phone, MASTER), 403, 'the phone loses the stream');
+    assert.deepEqual(await statuses(laptop, playbackFiles(slug)), every(playbackFiles(slug), 200));
+    assert.equal(await status(sam.phone, master(slug)), 403, 'the phone loses the stream');
     const hb = await heartbeat(sam.phone, screeningId, { position: 41 });
     assert.equal(hb.status, 409);
     assert.equal(hb.data.error, 'playing-elsewhere');
@@ -445,26 +462,28 @@ describe("two of the person's devices", () => {
   });
 
   test('takes over at once when the holding device can no longer play: signed out, or its session expired', async () => {
+    const slug = await ownFilm('takes-over');
     for (const how of ['signed out', 'expired']) {
       const sam = await member();
-      await forPerson(sam.p);
+      await forPerson(sam.p, {}, slug);
       const laptop = await sam.device();
-      const { screeningId } = await play(laptop);
+      const { screeningId } = await play(laptop, slug);
       await heartbeat(laptop, screeningId, { position: 12 });
-      assert.equal((await sam.phone.post('/api/films/arrival/screenings')).status, 409, how);
+      assert.equal((await sam.phone.post(`/api/films/${slug}/screenings`)).status, 409, how);
       if (how === 'signed out') await laptop.post('/api/signout');
       else srv.db.prepare('UPDATE sessions SET expires_at = ? WHERE id_hash = ?').run(Date.now() - 1, hashOf(laptop));
-      const r = await play(sam.phone);
+      const r = await play(sam.phone, slug);
       assert.equal(r.screeningId, screeningId, how);
       assert.equal(r.resumed, true, how);
     }
   });
 
   test('a limit of one with two Plays at once: one 200, one 409, one screening used', async () => {
+    const slug = await ownFilm('limit-of-one');
     const sam = await member();
-    const t = await forPerson(sam.p, { screeningLimit: 1 });
+    const t = await forPerson(sam.p, { screeningLimit: 1 }, slug);
     const laptop = await sam.device();
-    const rs = await Promise.all([sam.phone, laptop].map((b) => b.post('/api/films/arrival/screenings')));
+    const rs = await Promise.all([sam.phone, laptop].map((b) => b.post(`/api/films/${slug}/screenings`)));
     assert.deepEqual(rs.map((r) => r.status).sort(), [200, 409], JSON.stringify(rs.map((r) => r.data)));
     assert.equal(rs.find((r) => r.status === 409).data.error, 'playing-elsewhere');
     const a = await adminTicket(t.id);
@@ -476,17 +495,18 @@ describe("two of the person's devices", () => {
 // ====================================================================== revoke and restore
 describe('revoking and restoring a ticket for one person', () => {
   test('revoke stops it on the next request; restore gives it back to the person at once, without the link', async () => {
+    const slug = await ownFilm('revoke-restore');
     const sam = await member();
-    const t = await forPerson(sam.p);
+    const t = await forPerson(sam.p, {}, slug);
     const laptop = await sam.device();
-    const { screeningId } = await play(sam.phone);
+    const { screeningId } = await play(sam.phone, slug);
     await heartbeat(sam.phone, screeningId, { position: 24 });
-    assert.equal(await status(sam.phone, segment(4)), 200);
+    assert.equal(await status(sam.phone, segment(4, slug)), 200);
 
     await admin.post(`/api/admin/tickets/${t.id}/revoke`);
-    assert.equal(await status(sam.phone, segment(5)), 403, 'the next segment');
+    assert.equal(await status(sam.phone, segment(5, slug)), 403, 'the next segment');
     assert.notEqual((await heartbeat(sam.phone, screeningId, { position: 25 })).status, 200);
-    for (const b of [sam.phone, laptop]) await refused(b);
+    for (const b of [sam.phone, laptop]) await refused(b, slug);
     // Unknown, revoked and unpublished tickets fail first, as for any ticket.
     for (const b of [sam.phone, fresh()]) {
       const r = await b.post('/api/tickets/open', { code: t.code });
@@ -496,13 +516,13 @@ describe('revoking and restoring a ticket for one person', () => {
 
     await admin.post(`/api/admin/tickets/${t.id}/restore`);
     for (const b of [sam.phone, laptop]) {
-      assert.equal((await listed(b))[0]?.ticket.inAccount, true);
-      assert.equal(await status(b, '/api/films/arrival'), 200);
+      assert.equal((await listed(b, slug))[0]?.ticket.inAccount, true);
+      assert.equal(await status(b, `/api/films/${slug}`), 200);
     }
-    const again = await play(sam.phone);
+    const again = await play(sam.phone, slug);
     assert.equal(again.screeningId, screeningId);
     assert.equal(again.resumed, true);
-    assert.deepEqual(await statuses(sam.phone, playbackFiles('arrival')), every(playbackFiles('arrival'), 200));
+    assert.deepEqual(await statuses(sam.phone, playbackFiles(slug)), every(playbackFiles(slug), 200));
     assert.equal(attached(t.id), 0);
   });
 });
@@ -510,8 +530,9 @@ describe('revoking and restoring a ticket for one person', () => {
 // ====================================================================== setup links with a ticket
 describe('a setup link that carries a ticket', () => {
   test('options name the film, finishing returns its slug, and the new browser can play', async () => {
+    const slug = await ownFilm('setup-link');
     const p = await newPerson(admin, uniq('Robin'));
-    const t = await forPerson(p);
+    const t = await forPerson(p, {}, slug);
     const link = await setupLink(admin, p.id, { ticketId: t.id });
     assert.equal(link.purpose, 'setup');
     assert.equal(srv.db.prepare('SELECT ticket_id FROM person_links WHERE person_id = ?').get(p.id).ticket_id, t.id);
@@ -519,13 +540,13 @@ describe('a setup link that carries a ticket', () => {
     const b = fresh();
     const opts = await b.post('/api/enroll/options', { token: link.token });
     assert.equal(opts.status, 200, JSON.stringify(opts.data));
-    assert.deepEqual(opts.data.film, { slug: 'arrival', title: 'Arrival' });
+    assert.deepEqual(opts.data.film, { slug, title: 'Arrival' });
     const fin = await b.post('/api/enroll/finish', { token: link.token, credential: softAuthenticator().create(opts.data.options) });
     assert.equal(fin.status, 200, JSON.stringify(fin.data));
-    assert.equal(fin.data.slug, 'arrival');
+    assert.equal(fin.data.slug, slug);
     assert.deepEqual(fin.data.person, { name: p.name });
-    assert.equal((await listed(b))[0]?.ticket.inAccount, true);
-    await playsEverything(b);
+    assert.equal((await listed(b, slug))[0]?.ticket.inAccount, true);
+    await playsEverything(b, slug);
     assert.equal(attached(t.id), 0);
   });
 
@@ -573,15 +594,16 @@ describe('a setup link that carries a ticket', () => {
 // ====================================================================== a link ticket and the person's own
 describe("a browser with a link ticket and the person's own ticket for one film", () => {
   test('Play resumes the open screening, even when it is on the link ticket', async () => {
+    const slug = await ownFilm('both-open');
     const sam = await member();
-    const link = await issue({ screeningLimit: 3 });
-    await opened(sam.phone, link);
-    const { screeningId } = await play(sam.phone);
+    const link = await issue({ screeningLimit: 3 }, slug);
+    await opened(sam.phone, link, slug);
+    const { screeningId } = await play(sam.phone, slug);
     await pause(sam.phone, screeningId, 25);
-    const own = await forPerson(sam.p);
+    const own = await forPerson(sam.p, {}, slug);
 
-    assert.equal((await listed(sam.phone)).length, 1, 'one entry per film under Your tickets');
-    const again = await play(sam.phone);
+    assert.equal((await listed(sam.phone, slug)).length, 1, 'one entry per film under Your tickets');
+    const again = await play(sam.phone, slug);
     assert.equal(again.screeningId, screeningId);
     assert.equal(again.resumed, true);
     assert.equal(again.position, 25);
@@ -590,28 +612,30 @@ describe("a browser with a link ticket and the person's own ticket for one film"
   });
 
   test("Play resumes the link ticket's screening that another browser paused", async () => {
+    const slug = await ownFilm('both-paused');
     const sam = await member();
-    const link = await issue();
-    const friend = await opened(fresh(), link);
-    const { screeningId } = await play(friend);
+    const link = await issue({}, slug);
+    const friend = await opened(fresh(), link, slug);
+    const { screeningId } = await play(friend, slug);
     await pause(friend, screeningId, 33);
-    await opened(sam.phone, link);
-    const own = await forPerson(sam.p);
-    const r = await play(sam.phone);
+    await opened(sam.phone, link, slug);
+    const own = await forPerson(sam.p, {}, slug);
+    const r = await play(sam.phone, slug);
     assert.equal(r.screeningId, screeningId);
     assert.equal(r.resumed, true);
-    assert.equal(await status(friend, MASTER), 403);
+    assert.equal(await status(friend, master(slug)), 403);
     assert.equal((await adminTicket(own.id)).screeningsUsed, 0);
   });
 
   test("Play resumes the person's own open screening when the link ticket was opened later", async () => {
+    const slug = await ownFilm('both-own');
     const sam = await member();
-    const link = await issue();
-    const own = await forPerson(sam.p);
-    const { screeningId } = await play(sam.phone);
+    const link = await issue({}, slug);
+    const own = await forPerson(sam.p, {}, slug);
+    const { screeningId } = await play(sam.phone, slug);
     await pause(sam.phone, screeningId, 18);
-    await opened(sam.phone, link);
-    const r = await play(sam.phone);
+    await opened(sam.phone, link, slug);
+    const r = await play(sam.phone, slug);
     assert.equal(r.screeningId, screeningId);
     assert.equal(r.resumed, true);
     assert.equal((await adminTicket(own.id)).screeningsUsed, 1);
@@ -619,33 +643,35 @@ describe("a browser with a link ticket and the person's own ticket for one film"
   });
 
   test("when another browser is playing the link ticket, Play uses the person's own ticket", async () => {
+    const slug = await ownFilm('both-busy');
     const sam = await member();
-    const link = await issue();
-    const friend = await opened(fresh(), link);
-    const { screeningId: theirs } = await play(friend);
+    const link = await issue({}, slug);
+    const friend = await opened(fresh(), link, slug);
+    const { screeningId: theirs } = await play(friend, slug);
     await heartbeat(friend, theirs, { position: 5 });
-    await opened(sam.phone, link);
-    const own = await forPerson(sam.p);
+    await opened(sam.phone, link, slug);
+    const own = await forPerson(sam.p, {}, slug);
 
-    const r = await play(sam.phone);
+    const r = await play(sam.phone, slug);
     assert.notEqual(r.screeningId, theirs);
     assert.equal(r.resumed, false);
     assert.equal((await adminTicket(own.id)).screeningsUsed, 1);
     assert.equal((await adminTicket(link.id)).screeningsUsed, 1);
-    assert.deepEqual(await statuses(sam.phone, playbackFiles('arrival')), every(playbackFiles('arrival'), 200));
-    assert.deepEqual(await statuses(friend, playbackFiles('arrival')), every(playbackFiles('arrival'), 200), 'the friend keeps watching');
+    assert.deepEqual(await statuses(sam.phone, playbackFiles(slug)), every(playbackFiles(slug), 200));
+    assert.deepEqual(await statuses(friend, playbackFiles(slug)), every(playbackFiles(slug), 200), 'the friend keeps watching');
   });
 
   test('when the browser playing the link ticket can no longer play it, Play resumes its screening at once', async () => {
+    const slug = await ownFilm('both-gone');
     const sam = await member();
-    const link = await issue();
-    const friend = await opened(fresh(), link);
-    const { screeningId } = await play(friend);
+    const link = await issue({}, slug);
+    const friend = await opened(fresh(), link, slug);
+    const { screeningId } = await play(friend, slug);
     await heartbeat(friend, screeningId, { position: 44 });
-    await opened(sam.phone, link);
-    const own = await forPerson(sam.p);
+    await opened(sam.phone, link, slug);
+    const own = await forPerson(sam.p, {}, slug);
     await friend.post('/api/signout');
-    const r = await play(sam.phone);
+    const r = await play(sam.phone, slug);
     assert.equal(r.screeningId, screeningId);
     assert.equal(r.resumed, true);
     assert.equal(r.position, 44);
@@ -658,61 +684,64 @@ describe("a browser with a link ticket and the person's own ticket for one film"
 // the one in the best state wins, ahead of the oldest and the person's own. The
 // film page, Play and Your tickets all go by it.
 describe('a browser with a usable ticket and one that has ended, for one film', () => {
-  async function goesByTheUsable(b, usable, ended, endedState) {
-    const page = (await b.get('/api/films/arrival')).data.access;
+  async function goesByTheUsable(b, usable, ended, endedState, slug) {
+    const page = (await b.get(`/api/films/${slug}`)).data.access;
     assert.equal(page.ticket.state, 'ok', `the page shows the usable ticket, not the ${endedState} one`);
     assert.equal(page.canPlay, true);
     assert.deepEqual(
-      (await listed(b)).map((t) => t.ticket.state),
+      (await listed(b, slug)).map((t) => t.ticket.state),
       ['ok'],
       'Your tickets lists the film once, by the usable ticket',
     );
     const before = (await adminTicket(ended.id)).screeningsUsed;
-    const r = await play(b);
+    const r = await play(b, slug);
     assert.equal(r.resumed, false);
     assert.equal((await adminTicket(usable.id)).screeningsUsed, 1, 'Play uses the usable ticket');
     assert.equal((await adminTicket(ended.id)).screeningsUsed, before);
     assert.equal((await adminTicket(ended.id)).state, endedState);
-    assert.deepEqual(await statuses(b, playbackFiles('arrival')), every(playbackFiles('arrival'), 200));
+    assert.deepEqual(await statuses(b, playbackFiles(slug)), every(playbackFiles(slug), 200));
   }
 
   test('a link that has expired gives way to a newer one sent to replace it', async () => {
+    const slug = await ownFilm('expired-link');
     const b = fresh();
-    const old = await issue({ label: 'First link', startBy: Date.now() - 1000 });
-    await opened(b, old);
-    assert.equal((await b.get('/api/films/arrival')).data.access.ticket.state, 'expired');
-    const replacement = await issue({ label: 'Second link' });
-    await opened(b, replacement);
-    await goesByTheUsable(b, replacement, old, 'expired');
+    const old = await issue({ label: 'First link', startBy: Date.now() - 1000 }, slug);
+    await opened(b, old, slug);
+    assert.equal((await b.get(`/api/films/${slug}`)).data.access.ticket.state, 'expired');
+    const replacement = await issue({ label: 'Second link' }, slug);
+    await opened(b, replacement, slug);
+    await goesByTheUsable(b, replacement, old, 'expired', slug);
   });
 
   test("the person's own ticket, used up, gives way to a link ticket opened later", async () => {
+    const slug = await ownFilm('used-up-own');
     const sam = await member();
-    const own = await forPerson(sam.p, { screeningLimit: 1 });
-    const { screeningId } = await play(sam.phone);
+    const own = await forPerson(sam.p, { screeningLimit: 1 }, slug);
+    const { screeningId } = await play(sam.phone, slug);
     srv.db.prepare('UPDATE screenings SET resumable_until = ? WHERE id = ?').run(Date.now() - 1, screeningId);
-    assert.equal((await sam.phone.get('/api/films/arrival')).data.access.ticket.state, 'used_up');
-    const link = await issue({ label: 'Another go' });
-    await opened(sam.phone, link);
-    await goesByTheUsable(sam.phone, link, own, 'used_up');
+    assert.equal((await sam.phone.get(`/api/films/${slug}`)).data.access.ticket.state, 'used_up');
+    const link = await issue({ label: 'Another go' }, slug);
+    await opened(sam.phone, link, slug);
+    await goesByTheUsable(sam.phone, link, own, 'used_up', slug);
   });
 });
 
 // ====================================================================== link tickets, unchanged
 describe('a ticket for anyone with the link, with people around', () => {
   test('opens, plays and is taken over exactly as in milestone 1; a signed-in browser holds it alone', async () => {
+    const slug = await ownFilm('for-anyone');
     const sam = await member();
-    const t = await issue({ screeningLimit: 2 });
+    const t = await issue({ screeningLimit: 2 }, slug);
     const anon = fresh();
     const r = await anon.post('/api/tickets/open', { code: t.code });
     assert.equal(r.status, 200, JSON.stringify(r.data));
-    assert.deepEqual(r.data, { slug: 'arrival' });
+    assert.deepEqual(r.data, { slug });
     assert.ok(r.headers.getSetCookie().some((c) => c.startsWith('om_session=')), 'a session for this browser');
     assert.equal(attached(t.id), 1);
     assert.ok(ticketRow(t.id).first_opened_at);
     assert.equal((await me(anon)).person, null);
-    assert.equal((await listed(anon))[0].ticket.inAccount, false);
-    const { screeningId } = await playsEverything(anon);
+    assert.equal((await listed(anon, slug))[0].ticket.inAccount, false);
+    const { screeningId } = await playsEverything(anon, slug);
 
     // A signed-in person opening it keeps their session, and holds it in this browser only.
     const cookie = sam.phone.jar.get('om_session');
@@ -721,44 +750,45 @@ describe('a ticket for anyone with the link, with people around', () => {
     assert.deepEqual(mine.headers.getSetCookie(), []);
     assert.equal(sam.phone.jar.get('om_session'), cookie);
     assert.equal(attached(t.id), 2);
-    assert.equal((await listed(sam.phone))[0].ticket.inAccount, false);
+    assert.equal((await listed(sam.phone, slug))[0].ticket.inAccount, false);
     const laptop = await sam.device();
-    await refused(laptop);
+    await refused(laptop, slug);
 
     // One device at a time, as before.
-    const blocked = await sam.phone.post('/api/films/arrival/screenings');
+    const blocked = await sam.phone.post(`/api/films/${slug}/screenings`);
     assert.equal(blocked.status, 409);
     assert.equal(blocked.data.error, 'playing-elsewhere');
     // 75 seconds without a report, and the screening is free.
     srv.db.prepare('UPDATE screenings SET active_until = ? WHERE id = ?').run(Date.now() - 1, screeningId);
-    const takeover = await play(sam.phone);
+    const takeover = await play(sam.phone, slug);
     assert.equal(takeover.screeningId, screeningId);
     assert.equal(takeover.resumed, true);
-    assert.equal(await status(anon, MASTER), 403);
+    assert.equal(await status(anon, master(slug)), 403);
     assert.equal((await heartbeat(anon, screeningId, { position: 1 })).data.error, 'playing-elsewhere');
-    assert.equal((await anon.post('/api/films/arrival/screenings')).status, 409);
+    assert.equal((await anon.post(`/api/films/${slug}/screenings`)).status, 409);
     await pause(sam.phone, screeningId);
-    assert.equal((await play(anon)).screeningId, screeningId);
+    assert.equal((await play(anon, slug)).screeningId, screeningId);
     assert.equal((await adminTicket(t.id)).screeningsUsed, 1);
     assert.equal((await adminTicket(t.id)).person, null);
   });
 
   test('revoke stops it; after a restore, browsers must open the link again, signed in or not', async () => {
+    const slug = await ownFilm('anyone-revoked');
     const sam = await member();
-    const t = await issue();
-    await opened(sam.phone, t);
-    const anon = await opened(fresh(), t);
-    const { screeningId } = await play(anon);
+    const t = await issue({}, slug);
+    await opened(sam.phone, t, slug);
+    const anon = await opened(fresh(), t, slug);
+    const { screeningId } = await play(anon, slug);
     await admin.post(`/api/admin/tickets/${t.id}/revoke`);
-    for (const b of [anon, sam.phone]) await refused(b);
+    for (const b of [anon, sam.phone]) await refused(b, slug);
     assert.equal((await anon.post('/api/tickets/open', { code: t.code })).status, 410);
 
     await admin.post(`/api/admin/tickets/${t.id}/restore`);
-    for (const b of [anon, sam.phone]) assert.equal(await status(b, '/api/films/arrival'), 404);
-    await opened(anon, t);
-    await opened(sam.phone, t);
-    for (const b of [anon, sam.phone]) assert.equal(await status(b, '/api/films/arrival'), 200);
-    const r = await play(anon);
+    for (const b of [anon, sam.phone]) assert.equal(await status(b, `/api/films/${slug}`), 404);
+    await opened(anon, t, slug);
+    await opened(sam.phone, t, slug);
+    for (const b of [anon, sam.phone]) assert.equal(await status(b, `/api/films/${slug}`), 200);
+    const r = await play(anon, slug);
     assert.equal(r.screeningId, screeningId);
     assert.equal(r.resumed, true);
   });
@@ -767,16 +797,17 @@ describe('a ticket for anyone with the link, with people around', () => {
 // ====================================================================== one film only
 describe('one film only', () => {
   test("a person's ticket for one film unlocks nothing of another", async () => {
+    const slug = await ownFilm('one-film');
     const sam = await member();
-    await forPerson(sam.p);
-    await playsEverything(sam.phone);
+    await forPerson(sam.p, {}, slug);
+    await playsEverything(sam.phone, slug);
     await refused(sam.phone, 'heat');
-    assert.deepEqual((await me(sam.phone)).tickets.map((x) => x.film.slug), ['arrival']);
+    assert.deepEqual((await me(sam.phone)).tickets.map((x) => x.film.slug), [slug]);
     // And the other way round, on another device.
     const alex = await member(uniq('Alex'));
     await forPerson(alex.p, {}, 'heat');
     await playsEverything(alex.phone, 'heat');
-    await refused(alex.phone, 'arrival');
+    await refused(alex.phone, slug);
   });
 });
 

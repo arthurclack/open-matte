@@ -8,15 +8,15 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { after, before, describe, test } from 'node:test';
 
-const { FILM_SECONDS, adminBrowser, browser, makeFilm, startServer, tempDir } = await import('./helpers.js');
+const { FILM_SECONDS, addFilm, adminBrowser, browser, makeFilm, startServer, tempDir } = await import('./helpers.js');
 const { createAccess } = await import('../server/access.js');
 const { createSettings } = await import('../server/settings.js');
 
 const SECOND = 1000;
 const HOUR = 60 * 60 * SECOND;
 const DAY = 24 * HOUR;
-const MASTER = '/media/arrival/hls/master.m3u8';
-const SEGMENT = '/media/arrival/hls/v_h264_720/seg_2.m4s';
+const master = (slug) => `/media/${slug}/hls/master.m3u8`;
+const segment = (slug) => `/media/${slug}/hls/v_h264_720/seg_2.m4s`;
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 const mediaDir = tempDir();
@@ -34,6 +34,9 @@ before(async () => {
 });
 after(() => srv.close());
 
+// A film of its own for each test that presses Play: one test's screening is never
+// in another's way.
+const ownFilm = (slug) => addFilm(admin, mediaDir, slug);
 async function issue(fields = {}) {
   const r = await admin.post('/api/admin/tickets', { filmId, ...fields });
   assert.equal(r.status, 201, JSON.stringify(r.data));
@@ -44,8 +47,8 @@ async function opened(ticket, b = browser(srv.base)) {
   assert.equal(r.status, 200, JSON.stringify(r.data));
   return b;
 }
-async function play(b) {
-  const r = await b.post('/api/films/arrival/screenings');
+async function play(b, slug = 'arrival') {
+  const r = await b.post(`/api/films/${slug}/screenings`);
   assert.equal(r.status, 200, JSON.stringify(r.data));
   return r.data;
 }
@@ -67,15 +70,16 @@ describe('the resume window', () => {
   });
 
   test('a new window applies to screenings started after the change, not to open ones', async () => {
-    const before = await opened(await issue());
-    const open = (await play(before)).screeningId;
+    const film = await ownFilm('new-window');
+    const before = await opened(await issue({ filmId: film.id }));
+    const open = (await play(before, film.slug)).screeningId;
     assert.equal((await admin.patch('/api/admin/settings', { resumeWindowHours: 2 })).status, 200);
     try {
-      const after = await opened(await issue());
-      const started = (await play(after)).screeningId;
+      const after = await opened(await issue({ filmId: film.id }));
+      const started = (await play(after, film.slug)).screeningId;
       assert.equal(windowOf(started), 2 * HOUR, 'a new screening uses the new window');
       assert.equal(windowOf(open), 48 * HOUR, 'an open one keeps the window it started with');
-      assert.equal((await play(before)).resumableUntil, screening(open).started_at + 48 * HOUR, 'even when resumed');
+      assert.equal((await play(before, film.slug)).resumableUntil, screening(open).started_at + 48 * HOUR, 'even when resumed');
     } finally {
       await admin.patch('/api/admin/settings', { resumeWindowHours: 48 });
     }
@@ -92,20 +96,21 @@ describe('the resume window', () => {
   });
 
   test('when the window closes while the film plays, it stops and the player is told the screening ended', async () => {
+    const film = await ownFilm('window-closes');
     for (const fields of [{ screeningLimit: 1 }, {}]) {
-      const b = await opened(await issue(fields));
-      const { screeningId } = await play(b);
+      const b = await opened(await issue({ filmId: film.id, ...fields }));
+      const { screeningId } = await play(b, film.slug);
       assert.equal((await report(b, screeningId, { position: 30 })).status, 200);
-      assert.equal((await b.get(SEGMENT)).status, 200);
+      assert.equal((await b.get(segment(film.slug))).status, 200);
       closeWindow(screeningId);
-      assert.equal((await b.get(SEGMENT)).status, 403, 'the next media request is refused');
+      assert.equal((await b.get(segment(film.slug))).status, 403, 'the next media request is refused');
       // Not "used up", even for a ticket with one screening: the screening ended.
       const r = await report(b, screeningId, { position: FILM_SECONDS });
       assert.deepEqual([r.status, r.data.error], [409, 'screening-ended'], JSON.stringify(fields));
       assert.equal(screening(screeningId).finished_at, null, 'a refused report finishes nothing');
       assert.equal(screening(screeningId).position_seconds, 30, 'and moves nothing');
 
-      const again = await b.post('/api/films/arrival/screenings');
+      const again = await b.post(`/api/films/${film.slug}/screenings`);
       if (fields.screeningLimit) {
         assert.deepEqual([again.status, again.data.error], [409, 'used_up']);
       } else {
@@ -123,11 +128,13 @@ describe('one device at a time', () => {
   // Called directly with a clock, so no test waits 75 seconds.
   const access = () => createAccess(srv.db, createSettings(srv.db));
   const session = (b) => srv.db.prepare('SELECT * FROM sessions WHERE id_hash = ?').get(sha256(b.jar.get('om_session')));
-  const film = () => srv.db.prepare('SELECT * FROM films WHERE id = ?').get(filmId);
+  const row = (film) => srv.db.prepare('SELECT * FROM films WHERE id = ?').get(film.id);
 
   test('another device can take over 75 seconds after Play or the last report, and not a moment before', async () => {
     const a = access();
-    const ticket = await issue();
+    const own = await ownFilm('takeover');
+    const film = () => row(own);
+    const ticket = await issue({ filmId: own.id });
     const laptop = session(await opened(ticket));
     const tv = session(await opened(ticket));
     const t0 = Date.now();
@@ -154,7 +161,9 @@ describe('one device at a time', () => {
 
   test('a pause frees the screening straight away', async () => {
     const a = access();
-    const ticket = await issue();
+    const own = await ownFilm('pause');
+    const film = () => row(own);
+    const ticket = await issue({ filmId: own.id });
     const laptop = session(await opened(ticket));
     const tv = session(await opened(ticket));
     const t0 = Date.now();
@@ -167,8 +176,9 @@ describe('one device at a time', () => {
 // ====================================================================== progress reports
 describe('progress reports', () => {
   test('a position is kept within the film, and anything but a number keeps the last one', async () => {
-    const b = await opened(await issue());
-    const { screeningId: id } = await play(b);
+    const film = await ownFilm('position');
+    const b = await opened(await issue({ filmId: film.id }));
+    const { screeningId: id } = await play(b, film.slug);
     const at = () => [screening(id).position_seconds, screening(id).furthest_seconds];
     const sent = async (position) => assert.equal((await report(b, id, { position })).status, 200, JSON.stringify(position));
 
@@ -189,9 +199,10 @@ describe('progress reports', () => {
   });
 
   test('a screening is finished from 92% of the running time, and only once', async () => {
-    const t = await issue();
+    const film = await ownFilm('finished');
+    const t = await issue({ filmId: film.id });
     const b = await opened(t);
-    const { screeningId: id } = await play(b);
+    const { screeningId: id } = await play(b, film.slug);
     const finished = () => srv.db.prepare("SELECT COUNT(*) AS n FROM events WHERE type = 'finished' AND screening_id = ?").get(id).n;
 
     await report(b, id, { position: 0.92 * FILM_SECONDS - 0.01 });
@@ -208,31 +219,32 @@ describe('progress reports', () => {
 // ====================================================================== given back while it plays
 describe('giving back a screening that is playing', () => {
   test('stops it, says the screening ended, and Play starts a new one from the start; the expiry clock runs on', async () => {
-    const t = await issue({ screeningLimit: 1, daysAfterFirstPlay: 2 });
+    const film = await ownFilm('given-back');
+    const t = await issue({ filmId: film.id, screeningLimit: 1, daysAfterFirstPlay: 2 });
     const b = await opened(t);
-    const { screeningId } = await play(b);
+    const { screeningId } = await play(b, film.slug);
     assert.equal((await report(b, screeningId, { position: 50 })).status, 200);
     const firstPlayed = srv.db.prepare('SELECT first_played_at FROM tickets WHERE id = ?').get(t.id).first_played_at;
 
     assert.equal((await admin.post(`/api/admin/screenings/${screeningId}/void`)).status, 200);
-    assert.equal((await b.get(SEGMENT)).status, 403);
+    assert.equal((await b.get(segment(film.slug))).status, 403);
     // The ticket is fine, so not "no longer valid".
     const r = await report(b, screeningId, { position: 51 });
     assert.deepEqual([r.status, r.data.error], [409, 'screening-ended']);
 
-    const page = (await b.get('/api/films/arrival')).data.access;
+    const page = (await b.get(`/api/films/${film.slug}`)).data.access;
     assert.equal(page.canPlay, true);
     assert.equal(page.ticket.state, 'ok');
     assert.equal(page.ticket.screeningsLeft, 1);
     assert.equal(page.ticket.openScreening, null);
     assert.equal(page.ticket.expiresAt, firstPlayed + 2 * DAY, 'the expiry clock still counts from the first play');
 
-    const again = await play(b);
+    const again = await play(b, film.slug);
     assert.equal(again.resumed, false);
     assert.notEqual(again.screeningId, screeningId);
     assert.equal(again.position, 0);
     assert.equal(srv.db.prepare('SELECT first_played_at FROM tickets WHERE id = ?').get(t.id).first_played_at, firstPlayed);
-    assert.equal((await b.get(MASTER)).status, 200);
+    assert.equal((await b.get(master(film.slug))).status, 200);
   });
 });
 
@@ -260,7 +272,7 @@ describe('pressing Play', () => {
       // Progress reports and media requests go on as before.
       const screeningId = own.db.prepare('SELECT id FROM screenings').get().id;
       assert.equal((await b.post(`/api/screenings/${screeningId}/heartbeat`, { position: 10 })).status, 200);
-      assert.equal((await b.get(MASTER)).status, 200);
+      assert.equal((await b.get(master('arrival'))).status, 200);
     } finally {
       await own.close();
     }

@@ -11,9 +11,11 @@ export { expect };
 
 const env = (key) => process.env[key];
 
-// The films global setup published (film.js), and the cinema's name it set.
+// The films global setup published (film.js), and the cinema's name it set. Each
+// browser project has a copy of each film of its own, so these are read while a
+// journey runs: its project says which copy.
 const published = (key) => {
-  const f = () => JSON.parse(env('E2E_FILMS') || '{}')[key] ?? {};
+  const f = () => JSON.parse(env('E2E_FILMS') || '{}')[base.info().project.name]?.[key] ?? {};
   return {
     get id() {
       return f().id;
@@ -30,6 +32,8 @@ const published = (key) => {
 };
 export const film = published('main');
 export const secondFilm = published('second');
+// How many film folders the media folder holds: every project's copies.
+export const filmFolders = () => Object.values(JSON.parse(env('E2E_FILMS') || '{}')).reduce((n, own) => n + Object.keys(own).length, 0);
 export const cinemaName = () => env('E2E_CINEMA_NAME');
 
 // A label no other journey (or browser) will use.

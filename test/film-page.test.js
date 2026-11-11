@@ -2,15 +2,15 @@
 // can really be resumed, and why the player stopped when the browser was signed out.
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
-import { adminBrowser, browser, enroll, makeFilm, newPerson, setupLink, startServer, tempDir } from './helpers.js';
+import { addFilm, adminBrowser, browser, enroll, makeFilm, newPerson, setupLink, startServer, tempDir } from './helpers.js';
 
 const HOUR = 60 * 60 * 1000;
 let srv;
 let admin;
 let filmId;
+const mediaDir = tempDir();
 
 before(async () => {
-  const mediaDir = tempDir();
   makeFilm(mediaDir, 'arrival');
   srv = await startServer({ mediaDir });
   admin = await adminBrowser(srv.base);
@@ -19,6 +19,9 @@ before(async () => {
   await admin.patch(`/api/admin/films/${filmId}`, { published: true });
 });
 after(() => srv.close());
+
+// A film of its own for each test that presses Play.
+const ownFilm = (slug) => addFilm(admin, mediaDir, slug);
 
 async function ticket(fields = {}) {
   const r = await admin.post('/api/admin/tickets', { filmId, screeningLimit: null, ...fields });
@@ -32,8 +35,8 @@ async function opened(t) {
   return b;
 }
 
-async function play(b) {
-  const r = await b.post('/api/films/arrival/screenings');
+async function play(b, slug = 'arrival') {
+  const r = await b.post(`/api/films/${slug}/screenings`);
   assert.equal(r.status, 200, JSON.stringify(r.data));
   return r.data.screeningId;
 }
@@ -61,10 +64,11 @@ describe('until when an open screening can be resumed', () => {
   });
 
   test('a ticket that lasts longer than the resume window: until the window ends', async () => {
-    const t = await ticket({ daysAfterFirstPlay: 30 });
+    const film = await ownFilm('long-ticket');
+    const t = await ticket({ filmId: film.id, daysAfterFirstPlay: 30 });
     const b = await opened(t);
-    const id = await play(b);
-    const page = (await b.get('/api/films/arrival')).data.access.ticket;
+    const id = await play(b, film.slug);
+    const page = (await b.get(`/api/films/${film.slug}`)).data.access.ticket;
     const { resumable_until: until } = srv.db.prepare('SELECT resumable_until FROM screenings WHERE id = ?').get(id);
     assert.equal(page.openScreening.resumableUntil, until);
     assert.ok(page.expiresAt - until > 20 * 24 * HOUR);
@@ -74,8 +78,9 @@ describe('until when an open screening can be resumed', () => {
 
 describe('the player is told when its browser was signed out', () => {
   test('signing out, then a progress report: signed-out', async () => {
-    const b = await opened(await ticket());
-    const id = await play(b);
+    const film = await ownFilm('signed-out');
+    const b = await opened(await ticket({ filmId: film.id }));
+    const id = await play(b, film.slug);
     assert.equal((await heartbeat(b, id)).status, 200);
     assert.equal((await b.post('/api/signout')).status, 200);
     const r = await heartbeat(b, id);
@@ -84,8 +89,9 @@ describe('the player is told when its browser was signed out', () => {
   });
 
   test('Sign out every viewer, with the old cookie still sent: signed-out', async () => {
-    const b = await opened(await ticket());
-    const id = await play(b);
+    const film = await ownFilm('everyone-out');
+    const b = await opened(await ticket({ filmId: film.id }));
+    const id = await play(b, film.slug);
     await admin.post('/api/admin/sessions/expire-all');
     assert.ok(b.jar.has('om_session'), 'the browser still sends its cookie');
     const r = await heartbeat(b, id);
@@ -97,8 +103,9 @@ describe('the player is told when its browser was signed out', () => {
     const sam = await newPerson(admin, 'Sam');
     const phone = browser(srv.base);
     assert.equal((await enroll(phone, (await setupLink(admin, sam.id)).token)).status, 200);
-    await ticket({ personId: sam.id });
-    const id = await play(phone);
+    const film = await ownFilm('disabled');
+    await ticket({ filmId: film.id, personId: sam.id });
+    const id = await play(phone, film.slug);
     assert.equal((await heartbeat(phone, id)).status, 200);
     await admin.post(`/api/admin/people/${sam.id}/disable`);
     const r = await heartbeat(phone, id);
@@ -107,9 +114,10 @@ describe('the player is told when its browser was signed out', () => {
   });
 
   test("a browser still signed in, sending another browser's screening: not-found, as before", async () => {
-    const theirs = await opened(await ticket());
-    const id = await play(theirs);
-    const mine = await opened(await ticket());
+    const film = await ownFilm('another-browser');
+    const theirs = await opened(await ticket({ filmId: film.id }));
+    const id = await play(theirs, film.slug);
+    const mine = await opened(await ticket({ filmId: film.id }));
     const r = await heartbeat(mine, id);
     assert.equal(r.status, 404);
     assert.equal(r.data.error, 'not-found');

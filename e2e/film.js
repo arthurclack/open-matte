@@ -10,6 +10,9 @@
 //
 // They're cached in e2e/.cache, keyed by the encoder's source and this file's, so
 // a run only encodes again when either changes.
+//
+// Each browser project plays copies of its own (copyFilms), so a journey in one
+// browser never finds a film already playing, or out on loan, in another's.
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -88,6 +91,32 @@ export function ensureFilms() {
   const master = fs.readFileSync(path.join(mediaDir, FILMS.main.slug, 'hls', 'master.m3u8'), 'utf8');
   const codecs = /CODECS="([^"]+)"/.exec(master)?.[1].split(',') ?? [];
   return { mediaDir, codecs };
+}
+
+// A project's copy of a film: a folder and a title of its own. The title has nothing
+// a regular expression would read as more than itself, since journeys match on it.
+export const copyFor = (film, project) => ({ slug: `${film.slug}-${project}`, title: `${film.title}, ${project}` });
+
+// The media folder for one run: for each browser project, a copy of each cached film
+// under the copy's own slug and title. Real copies, not links: the server serves
+// nothing that leads out of a film's folder. Returns { project: { main: { slug, title }, … } }.
+export function copyFilms(cachedMediaDir, mediaDir, projects) {
+  const copies = {};
+  for (const project of projects) {
+    copies[project] = {};
+    for (const [key, film] of Object.entries(FILMS)) {
+      const copy = copyFor(film, project);
+      const dir = path.join(mediaDir, copy.slug);
+      fs.cpSync(path.join(cachedMediaDir, film.slug), dir, { recursive: true });
+      const jsonPath = path.join(dir, 'film.json');
+      const json = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+      if (json.slug != null) json.slug = copy.slug;
+      json.title = copy.title;
+      fs.writeFileSync(jsonPath, `${JSON.stringify(json, null, 2)}\n`);
+      copies[project][key] = copy;
+    }
+  }
+  return copies;
 }
 
 function build(mediaDir) {

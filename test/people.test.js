@@ -9,7 +9,7 @@ import net from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { softAuthenticator } from './softauth.js';
 
-const { adminBrowser, enroll, makeFilm, newPerson, setupLink, signIn, startServer, tempDir } = await import('./helpers.js');
+const { addFilm, adminBrowser, enroll, makeFilm, newPerson, setupLink, signIn, startServer, tempDir } = await import('./helpers.js');
 const { inspectMediaDir } = await import('../server/scan.js');
 const { RESERVED_SLUGS } = await import('../server/names.js');
 const { clientKey } = await import('../server/ratelimit.js');
@@ -21,8 +21,10 @@ const UA = {
   windows: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36',
   mac: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15',
 };
-const MASTER = '/media/arrival/hls/master.m3u8';
-const SEGMENT = '/media/arrival/hls/v_h264_720/seg_0.m4s';
+const master = (slug) => `/media/${slug}/hls/master.m3u8`;
+const segment = (slug) => `/media/${slug}/hls/v_h264_720/seg_0.m4s`;
+const MASTER = master('arrival');
+const SEGMENT = segment('arrival');
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -58,6 +60,7 @@ function client(base, headers = {}) {
 let srv;
 let admin;
 let filmId;
+const filmIds = {};
 const mediaDir = tempDir();
 
 before(async () => {
@@ -106,8 +109,14 @@ async function enrolled({ b = fresh(), name = uniq('Sam'), note, auth = softAuth
 // "Help Sam sign in again" with the tick.
 const recoveryLink = (personId, body = {}) => setupLink(admin, personId, { confirmedContact: true, ...body });
 
-async function newTicket(fields = {}) {
-  const r = await admin.post('/api/admin/tickets', { filmId, ...fields });
+// A film of its own, published, for a test that presses Play. Returns its slug.
+async function ownFilm(slug) {
+  filmIds[slug] = (await addFilm(admin, mediaDir, slug)).id;
+  return slug;
+}
+
+async function newTicket(fields = {}, slug) {
+  const r = await admin.post('/api/admin/tickets', { filmId: slug ? filmIds[slug] : filmId, ...fields });
   assert.equal(r.status, 201, JSON.stringify(r.data));
   return r.data[0];
 }
@@ -116,8 +125,8 @@ async function opened(b, ticket) {
   assert.equal(r.status, 200, JSON.stringify(r.data));
   return b;
 }
-async function play(b) {
-  const r = await b.post('/api/films/arrival/screenings');
+async function play(b, slug = 'arrival') {
+  const r = await b.post(`/api/films/${slug}/screenings`);
   assert.equal(r.status, 200, JSON.stringify(r.data));
   return r.data;
 }
@@ -694,46 +703,49 @@ describe('signing in', () => {
   });
 
   test('finishing a setup link carries over in the same way', async () => {
+    const slug = await ownFilm('setup-carries');
     const p = await newPerson(admin, uniq('Enrolling'));
     const l = await setupLink(admin, p.id);
     const b = fresh();
-    await opened(b, await newTicket());
-    const { screeningId } = await play(b);
+    await opened(b, await newTicket({}, slug));
+    const { screeningId } = await play(b, slug);
     assert.equal((await enroll(b, l.token)).status, 200);
-    assert.deepEqual((await me(b)).tickets.map((t) => t.film.slug), ['arrival']);
-    assert.equal(await status(b, SEGMENT), 200);
-    assert.equal((await play(b)).screeningId, screeningId);
+    assert.deepEqual((await me(b)).tickets.map((t) => t.film.slug), [slug]);
+    assert.equal(await status(b, segment(slug)), 200);
+    assert.equal((await play(b, slug)).screeningId, screeningId);
   });
 
   test("signing in as someone else carries nothing over from the other person's browser, and frees its screening", async () => {
+    const slug = await ownFilm('someone-else');
     const { p, b: shared } = await enrolled();
     const { p: q, auth: qAuth } = await enrolled();
-    const ticket = await newTicket();
+    const ticket = await newTicket({}, slug);
     await opened(shared, ticket);
-    const { screeningId } = await play(shared);
+    const { screeningId } = await play(shared, slug);
     assert.deepEqual(await personIn(shared), { name: p.name });
 
     assert.equal((await signIn(shared, qAuth)).status, 200);
     const now = await me(shared);
     assert.deepEqual(now.person, { name: q.name });
     assert.deepEqual(now.tickets, [], "P's link tickets stay with P's (revoked) session");
-    assert.equal(await status(shared, MASTER), 403);
-    assert.equal((await shared.post('/api/films/arrival/screenings')).status, 404);
+    assert.equal(await status(shared, master(slug)), 403);
+    assert.equal((await shared.post(`/api/films/${slug}/screenings`)).status, 404);
 
     // The screening is free at once for another browser with the link.
     const other = await opened(fresh(), ticket);
-    const taken = await play(other);
+    const taken = await play(other, slug);
     assert.equal(taken.screeningId, screeningId);
   });
 
   test('signing in again as the same person carries everything over', async () => {
+    const slug = await ownFilm('same-person');
     const { b, auth } = await enrolled();
-    await opened(b, await newTicket());
-    const { screeningId } = await play(b);
+    await opened(b, await newTicket({}, slug));
+    const { screeningId } = await play(b, slug);
     assert.equal((await signIn(b, auth)).status, 200);
-    assert.deepEqual((await me(b)).tickets.map((t) => t.film.slug), ['arrival']);
-    assert.equal(await status(b, MASTER), 200);
-    assert.equal((await play(b)).screeningId, screeningId);
+    assert.deepEqual((await me(b)).tickets.map((t) => t.film.slug), [slug]);
+    assert.equal(await status(b, master(slug)), 200);
+    assert.equal((await play(b, slug)).screeningId, screeningId);
   });
 
   test('a session that was already revoked carries nothing over', async () => {
@@ -887,11 +899,12 @@ describe('signing in', () => {
   });
 
   test('signing out revokes the session and forgets the link tickets this browser opened', async () => {
+    const slug = await ownFilm('signing-out');
     const { p, auth } = await enrolled();
     const b = fresh();
-    const ticket = await newTicket();
+    const ticket = await newTicket({}, slug);
     await opened(b, ticket);
-    await play(b);
+    await play(b, slug);
     assert.equal((await signIn(b, auth)).status, 200);
     const token = b.jar.get('om_session');
     const out = await b.post('/api/signout');
@@ -902,12 +915,12 @@ describe('signing in', () => {
     const now = await me(withCookie(token));
     assert.equal(now.person, null);
     assert.deepEqual(now.tickets, []);
-    assert.equal(await status(withCookie(token), MASTER), 403);
+    assert.equal(await status(withCookie(token), master(slug)), 403);
     const ev = (await activity(`person=${p.id}`)).find((e) => e.type === 'signed-out');
     assert.ok(ev, 'signed-out is logged');
     // The link still works.
     await opened(b, ticket);
-    assert.deepEqual((await me(b)).tickets.map((t) => t.film.slug), ['arrival']);
+    assert.deepEqual((await me(b)).tickets.map((t) => t.film.slug), [slug]);
   });
 
   test('an anonymous browser can sign out too, and signing out with no session is harmless', async () => {
@@ -1007,16 +1020,17 @@ describe("the admin's actions", () => {
   });
 
   test('a disabled person is anonymous on the next request even if their sessions were missed', async () => {
+    const slug = await ownFilm('sessions-missed');
     const { p, b } = await enrolled();
-    await opened(b, await newTicket());
-    await play(b);
+    await opened(b, await newTicket({}, slug));
+    await play(b, slug);
     // Disabled without revoking anything: sessions.load is the backstop.
     srv.db.prepare('UPDATE people SET disabled_at = ? WHERE id = ?').run(Date.now(), p.id);
     try {
       const m = await me(b);
       assert.equal(m.person, null);
       assert.deepEqual(m.tickets, []);
-      assert.equal(await status(b, MASTER), 403);
+      assert.equal(await status(b, master(slug)), 403);
     } finally {
       srv.db.prepare('UPDATE people SET disabled_at = NULL WHERE id = ?').run(p.id);
     }
@@ -1049,13 +1063,14 @@ describe("the admin's actions", () => {
   });
 
   test('Activity names the person for account events, and for viewing only once the browser is signed in', async () => {
+    const slug = await ownFilm('activity-names');
     const b = fresh({ 'user-agent': UA.iphone });
-    const ticket = await newTicket();
+    const ticket = await newTicket({}, slug);
     await opened(b, ticket);
-    await play(b);
+    await play(b, slug);
     const { p, auth } = await enrolled();
     assert.equal((await signIn(b, auth)).status, 200);
-    await play(b);
+    await play(b, slug);
 
     const mine = await activity(`person=${p.id}`);
     for (const e of mine) {
@@ -1081,6 +1096,7 @@ describe("the admin's actions", () => {
   });
 
   test('no IP address, full user agent or challenge is stored', async () => {
+    const slug = await ownFilm('nothing-stored');
     const ip = '203.0.113.99';
     const b = fresh({ 'user-agent': UA.windows, 'x-forwarded-for': ip });
     const p = await newPerson(admin, uniq('Private'));
@@ -1089,8 +1105,8 @@ describe("the admin's actions", () => {
     assert.equal(r.status, 200);
     const s = await signIn(b, r.auth);
     assert.equal(s.status, 200);
-    await opened(b, await newTicket());
-    await play(b);
+    await opened(b, await newTicket({}, slug));
+    await play(b, slug);
     await b.post('/api/signout');
     const leftover = await b.post('/api/signin/options');
     const secrets = [ip, UA.windows, 'AppleWebKit/537.36', 'Chrome/141.0', r.options.challenge, s.options.challenge, leftover.data.options.challenge];
@@ -1104,55 +1120,59 @@ describe("the admin's actions", () => {
 
 // ====================================================================== takeover (amendment 1)
 describe('taking over a screening from a browser that can no longer play it', () => {
-  async function held() {
-    const ticket = await newTicket();
+  async function held(slug) {
+    const ticket = await newTicket({}, slug);
     const holder = await opened(fresh(), ticket);
-    const { screeningId } = await play(holder);
+    const { screeningId } = await play(holder, slug);
     const other = await opened(fresh(), ticket);
-    const blocked = await other.post('/api/films/arrival/screenings');
+    const blocked = await other.post(`/api/films/${slug}/screenings`);
     assert.equal(blocked.status, 409);
     assert.equal(blocked.data.error, 'playing-elsewhere');
     return { ticket, holder, other, screeningId };
   }
-  const takesOver = async (b, screeningId) => {
-    const r = await b.post('/api/films/arrival/screenings');
+  const takesOver = async (b, screeningId, slug) => {
+    const r = await b.post(`/api/films/${slug}/screenings`);
     assert.equal(r.status, 200, JSON.stringify(r.data));
     assert.equal(r.data.screeningId, screeningId);
     assert.equal(r.data.resumed, true);
-    assert.equal(await status(b, MASTER), 200);
+    assert.equal(await status(b, master(slug)), 200);
   };
 
   test('once the holding browser signs out, another takes over at once', async () => {
-    const { holder, other, screeningId } = await held();
+    const slug = await ownFilm('holder-signed-out');
+    const { holder, other, screeningId } = await held(slug);
     await holder.post('/api/signout');
-    await takesOver(other, screeningId);
+    await takesOver(other, screeningId, slug);
   });
 
   test("once the holder's session has expired", async () => {
-    const { holder, other, screeningId } = await held();
+    const slug = await ownFilm('holder-expired');
+    const { holder, other, screeningId } = await held(slug);
     srv.db.prepare('UPDATE sessions SET expires_at = ? WHERE id_hash = ?').run(Date.now() - 1, sha256(holder.jar.get('om_session')));
-    await takesOver(other, screeningId);
+    await takesOver(other, screeningId, slug);
   });
 
   test("once the holder's person is disabled or signed out everywhere", async () => {
+    const slug = await ownFilm('holder-disabled');
     for (const action of ['disable', 'sign-out']) {
       const { p, b: holder } = await enrolled();
-      const ticket = await newTicket();
+      const ticket = await newTicket({}, slug);
       await opened(holder, ticket);
-      const { screeningId } = await play(holder);
+      const { screeningId } = await play(holder, slug);
       const other = await opened(fresh(), ticket);
-      assert.equal((await other.post('/api/films/arrival/screenings')).status, 409, action);
+      assert.equal((await other.post(`/api/films/${slug}/screenings`)).status, 409, action);
       await admin.post(`/api/admin/people/${p.id}/${action}`);
-      await takesOver(other, screeningId);
-      assert.equal(await status(holder, MASTER), 403, action);
+      await takesOver(other, screeningId, slug);
+      assert.equal(await status(holder, master(slug)), 403, action);
     }
   });
 
   test('once the holder has forgotten the ticket (Sign out browsers)', async () => {
-    const { ticket, other, screeningId } = await held();
+    const slug = await ownFilm('holder-forgot');
+    const { ticket, other, screeningId } = await held(slug);
     await admin.post(`/api/admin/tickets/${ticket.id}/sign-out-browsers`);
     await opened(other, ticket);
-    await takesOver(other, screeningId);
+    await takesOver(other, screeningId, slug);
   });
 });
 
@@ -1202,19 +1222,20 @@ describe('boundaries', () => {
   // the whole domain (Domain=), and its path decides whether the browser sends it
   // before or after the cinema's own. Neither way round may it choose the session.
   test('a second, different session or admin cookie is used neither way round, /media included', async () => {
+    const slug = await ownFilm('two-cookies');
     const { p, b } = await enrolled();
     const { b: m } = await enrolled({ name: uniq('Mallory') });
-    await opened(b, await newTicket());
-    await play(b);
+    await opened(b, await newTicket({}, slug));
+    await play(b, slug);
     const sam = `om_session=${b.jar.get('om_session')}`;
     const mallory = `om_session=${m.jar.get('om_session')}`;
     const send = (url, cookie) => fetch(srv.base + url, { headers: { cookie } });
     const personWith = async (cookie) => (await (await send('/api/me', cookie)).json()).person;
     assert.deepEqual(await personWith(sam), { name: p.name });
-    assert.equal((await send(SEGMENT, sam)).status, 200);
+    assert.equal((await send(segment(slug), sam)).status, 200);
     for (const cookie of [`${sam}; ${mallory}`, `${mallory}; ${sam}`, `${sam}; om_session=`, `om_session=; ${sam}`]) {
       assert.equal(await personWith(cookie), null, cookie);
-      assert.equal((await send(SEGMENT, cookie)).status, 403, cookie);
+      assert.equal((await send(segment(slug), cookie)).status, 403, cookie);
     }
     // In two Cookie header lines, which the server joins into one. Written by hand:
     // Node's own client would join them before sending.
@@ -1275,14 +1296,15 @@ describe('boundaries', () => {
 
   // Last in this server: it signs every viewer out.
   test('after Sign out every viewer, a browser that opens the link again takes over at once', async () => {
-    const ticket = await newTicket();
+    const slug = await ownFilm('everyone-out');
+    const ticket = await newTicket({}, slug);
     const holder = await opened(fresh(), ticket);
-    const { screeningId } = await play(holder);
+    const { screeningId } = await play(holder, slug);
     const { b: member } = await enrolled();
     await admin.post('/api/admin/sessions/expire-all');
     assert.equal(await personIn(member), null, 'people are signed out too');
     const other = await opened(fresh(), ticket);
-    const r = await other.post('/api/films/arrival/screenings');
+    const r = await other.post(`/api/films/${slug}/screenings`);
     assert.equal(r.status, 200, JSON.stringify(r.data));
     assert.equal(r.data.screeningId, screeningId);
   });
@@ -1522,11 +1544,12 @@ describe('after review', () => {
   });
 
   test('a session revoked while the passkey was being checked carries nothing over', async () => {
+    const slug = await ownFilm('revoked-meanwhile');
     const { tx } = await import('../server/db.js');
     const { createSessionStore } = await import('../server/sessions.js');
     const { p } = await enrolled();
-    const b = await opened(fresh(), await newTicket());
-    await play(b);
+    const b = await opened(fresh(), await newTicket({}, slug));
+    await play(b, slug);
     const currentHash = sha256(b.jar.get('om_session'));
     // As "Sign out every viewer" would, after the route read the session and before the transaction.
     srv.db.prepare('UPDATE sessions SET revoked_at = ? WHERE id_hash = ?').run(Date.now(), currentHash);

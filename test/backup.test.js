@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { adminBrowser, browser, makeFilm, pngImage, startServer, tempDir } from './helpers.js';
+import { adminBrowser, browser, makeFilm, pngImage, startServer, tempDir, watchPlays } from './helpers.js';
 
 const { openDb } = await import('../server/db.js');
 const { backupsToDelete, createBackups } = await import('../server/backup.js');
@@ -115,7 +115,7 @@ test('a backup is a checked, complete copy that restores into a working server; 
   fs.copyFileSync(first, path.join(restoredDir, 'open-matte.db'));
   fs.cpSync(path.join(backupDir, 'branding'), path.join(restoredDir, 'branding'), { recursive: true });
   const db = openDb(path.join(restoredDir, 'open-matte.db'));
-  const app = createApp({ db, mediaDir, dataDir: restoredDir, backupOptions: { backupDir: null }, webDist: tempDir() });
+  const app = createApp({ db: watchPlays(db), mediaDir, dataDir: restoredDir, backupOptions: { backupDir: null }, webDist: tempDir() });
   const server = await new Promise((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
   });

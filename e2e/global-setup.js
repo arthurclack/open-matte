@@ -1,5 +1,6 @@
-// Once per `npm run e2e`: the films, a fresh data folder, the web build, the
-// server, and through the admin API published films and a cinema name. The
+// Once per `npm run e2e`: the films (a copy of each for every browser project), a
+// fresh data folder, the web build, the server, and through the admin API published
+// films and a cinema name. The
 // journeys find all of it in process.env (E2E_*), which Playwright passes on to
 // its workers. The admin password is made here for this run only: it is never
 // written to a file or printed.
@@ -8,7 +9,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CACHE, FILMS, ensureFilms, hasFfmpeg } from './film.js';
+import { CACHE, copyFilms, ensureFilms, hasFfmpeg } from './film.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CINEMA_NAME = 'Harbour Lights Picturehouse';
@@ -93,7 +94,7 @@ async function adminCall(base, cookie, method, url, body) {
   return data;
 }
 
-export default async function globalSetup() {
+export default async function globalSetup(config) {
   if (!hasFfmpeg()) {
     // Every journey skips with this reason (fixtures.js).
     process.env.E2E_SKIP = 'ffmpeg and ffprobe are needed to make the test films: install ffmpeg (brew install ffmpeg) and run again.';
@@ -104,9 +105,12 @@ export default async function globalSetup() {
   const media = ensureFilms();
   ensureBuild();
   const run = runFolder();
+  // Each project's own copies of the films, in this run's folder.
+  const mediaDir = path.join(run, 'media');
+  const copies = copyFilms(media.mediaDir, mediaDir, config.projects.map((p) => p.name));
   const password = crypto.randomBytes(24).toString('base64url');
   const log = path.join(run, 'server.log');
-  const { child, port } = await startServer({ dataDir: path.join(run, 'data'), mediaDir: media.mediaDir, password, log });
+  const { child, port } = await startServer({ dataDir: path.join(run, 'data'), mediaDir, password, log });
   const base = `http://localhost:${port}`;
 
   const teardown = () =>
@@ -130,13 +134,17 @@ export default async function globalSetup() {
 
     const scan = await adminCall(base, cookie, 'POST', '/api/admin/scan', {});
     const listed = await adminCall(base, cookie, 'GET', '/api/admin/films');
+    // By project, then by the film's key in film.js: { chromium: { main: { id, slug, title }, … }, … }.
     const films = {};
-    for (const [key, { slug }] of Object.entries(FILMS)) {
-      const scanned = scan.films.find((f) => f.slug === slug);
-      if (!scanned || scanned.status === 'error') throw new Error(`the test film ${slug} didn't scan cleanly: ${JSON.stringify(scanned ?? scan)}`);
-      const { id, title } = listed.find((f) => f.slug === slug);
-      await adminCall(base, cookie, 'PATCH', `/api/admin/films/${id}`, { published: true });
-      films[key] = { id, slug, title };
+    for (const [project, own] of Object.entries(copies)) {
+      films[project] = {};
+      for (const [key, { slug }] of Object.entries(own)) {
+        const scanned = scan.films.find((f) => f.slug === slug);
+        if (!scanned || scanned.status === 'error') throw new Error(`the test film ${slug} didn't scan cleanly: ${JSON.stringify(scanned ?? scan)}`);
+        const { id, title } = listed.find((f) => f.slug === slug);
+        await adminCall(base, cookie, 'PATCH', `/api/admin/films/${id}`, { published: true });
+        films[project][key] = { id, slug, title };
+      }
     }
     await adminCall(base, cookie, 'PATCH', '/api/admin/settings', { cinemaName: CINEMA_NAME });
 

@@ -3,7 +3,7 @@
 // media request it saw refused), and the Ledger filtered by the film and to
 // viewing. Nothing may throw, and nothing may log an error in
 // the console. Every browser.
-import { CSP_MESSAGE, NO_SNAPSHOTS, admin, expect, film, secondFilm, signInAsAdmin, test, unique } from './fixtures.js';
+import { CSP_MESSAGE, NO_SNAPSHOTS, admin, expect, film, filmFolders, secondFilm, signInAsAdmin, test, unique } from './fixtures.js';
 
 test.use(NO_SNAPSHOTS);
 
@@ -70,8 +70,8 @@ test('the admin signs in, lends a tape from the film page, and reads Tapes, Stat
     await expect(page.getByText(/^\d+ media requests? refused since the server started/)).toBeVisible();
     const refused = page.getByRole('row').filter({ has: page.getByRole('cell', { name: `/${film.slug}`, exact: true }) });
     await expect(refused.first()).toContainText('403');
-    // The media folder holds the journeys' two films.
-    await expect(page.locator('dt:text-is("Media folder") + dd')).toContainText('Readable. 2 folders in it now.');
+    // The media folder holds the journeys' two films, once for each browser project.
+    await expect(page.locator('dt:text-is("Media folder") + dd')).toContainText(`Readable. ${filmFolders()} folders in it now.`);
   });
 
   await test.step('the Ledger, filtered by the film and to viewing', async () => {

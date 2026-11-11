@@ -1,7 +1,8 @@
 // Browser journeys (npm run e2e): a development tool only, never shipped.
-// e2e/global-setup.js makes the test films, builds the web app if it's stale and
-// starts the server on a free port; each journey in e2e/*.spec.js says which
-// browsers it runs in and skips, with a reason, where one can't.
+// e2e/global-setup.js makes the test films (a copy of each for every project below),
+// builds the web app if it's stale and starts the server on a free port; each journey
+// in e2e/*.spec.js says which browsers it runs in and skips, with a reason, where one
+// can't.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -54,6 +55,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     viewport: { width: 1280, height: 800 },
   },
+  // A project's name goes into its films' folder names (e2e/film.js): lowercase
+  // letters, digits and hyphens only.
   projects: [
     // Playwright's own builds of the three engines.
     { name: 'chromium', use: { browserName: 'chromium' } },

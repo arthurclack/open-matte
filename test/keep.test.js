@@ -6,11 +6,11 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { after, before, describe, test } from 'node:test';
 import { softAuthenticator } from './softauth.js';
-import { adminBrowser, browser, enroll, makeFilm, newPerson, playbackFiles, setupLink, signIn, startServer, tempDir } from './helpers.js';
+import { addFilm, adminBrowser, browser, enroll, makeFilm, newPerson, playbackFiles, setupLink, signIn, startServer, tempDir } from './helpers.js';
 
 const mediaDir = tempDir();
-const MASTER = '/media/arrival/hls/master.m3u8';
-const segment = (i) => `/media/arrival/hls/v_h264_720/seg_${i}.m4s`;
+const master = (slug) => `/media/${slug}/hls/master.m3u8`;
+const segment = (i, slug) => `/media/${slug}/hls/v_h264_720/seg_${i}.m4s`;
 
 let srv;
 let admin;
@@ -29,6 +29,12 @@ before(async () => {
   await admin.patch(`/api/admin/films/${films.solaris}`, { memberVisible: true });
 });
 after(() => srv.close());
+
+// A film of its own, published, for a test that presses Play. Returns its slug.
+async function ownFilm(slug) {
+  films[slug] = (await addFilm(admin, mediaDir, slug)).id;
+  return slug;
+}
 
 let counter = 0;
 const uniq = (name) => `${name} ${++counter}`;
@@ -223,26 +229,27 @@ describe('keeping', () => {
   });
 
   test('the row afterwards, and every other browser that opened the link loses it at once', async () => {
-    const t = await keepable({ screeningLimit: 3, daysAfterFirstPlay: 7 });
-    const friend = await opened(fresh(), t);
+    const slug = await ownFilm('kept-row');
+    const t = await keepable({ screeningLimit: 3, daysAfterFirstPlay: 7 }, slug);
+    const friend = await opened(fresh(), t, slug);
     const { p, device } = await member();
-    const b = await device(await opened(fresh(), t));
+    const b = await device(await opened(fresh(), t, slug));
     const before = Date.now();
-    const k = await kept(b);
+    const k = await kept(b, slug);
     assert.equal(k.state, 'ok');
     const row = ticketRow(t.id);
     assert.equal(row.person_id, p.id);
     assert.equal(row.claimable, 0);
     assert.ok(row.claimed_at >= before);
-    await lostIt(friend, t);
+    await lostIt(friend, t, slug);
     // The keeper's own browser and their other devices have it, in the account.
-    const pg = await page(b);
+    const pg = await page(b, slug);
     assert.equal(pg.data.access.ticket.inAccount, true);
     assert.equal(pg.data.access.canKeep, false);
     const third = await device();
-    assert.equal((await listed(third)).length, 1, "Sam's third device lists it without opening the link");
-    await play(third);
-    assert.equal(await status(third, MASTER), 200);
+    assert.equal((await listed(third, slug)).length, 1, "Sam's third device lists it without opening the link");
+    await play(third, slug);
+    assert.equal(await status(third, master(slug)), 200);
     // A stranger who gets the link now finds a ticket for one person.
     assert.equal((await fresh().post('/api/tickets/open', { code: t.code })).status, 401);
     const a = await adminTicket(t.id);
@@ -291,14 +298,15 @@ describe('keeping', () => {
   });
 
   test('not while another browser is playing it; once that browser pauses, the keeper resumes the same screening', async () => {
-    const t = await keepable({ screeningLimit: 2, daysAfterFirstPlay: 3 });
-    const tv = await opened(fresh(), t);
-    const { screeningId } = await play(tv);
+    const slug = await ownFilm('playing-elsewhere');
+    const t = await keepable({ screeningLimit: 2, daysAfterFirstPlay: 3 }, slug);
+    const tv = await opened(fresh(), t, slug);
+    const { screeningId } = await play(tv, slug);
     assert.equal((await heartbeat(tv, screeningId, { position: 30 })).status, 200);
     const { device } = await member();
-    const laptop = await device(await opened(fresh(), t));
+    const laptop = await device(await opened(fresh(), t, slug));
 
-    const busy = await keep(laptop);
+    const busy = await keep(laptop, slug);
     assert.equal(busy.status, 409);
     assert.equal(busy.data.error, 'playing-elsewhere');
     assert.equal(ticketRow(t.id).person_id, null);
@@ -311,44 +319,46 @@ describe('keeping', () => {
     const beforeKeep = clocks();
     const expiresBefore = (await adminTicket(t.id)).expiresAt;
     assert.equal((await pause(tv, screeningId, 40)).status, 200);
-    await kept(laptop);
+    await kept(laptop, slug);
     assert.deepEqual(clocks(), beforeKeep, 'limits and clocks unchanged');
     assert.equal((await adminTicket(t.id)).expiresAt, expiresBefore);
     assert.equal((await adminTicket(t.id)).screeningsUsed, 1);
 
     // The TV lost it: its next request is refused, and it can't hold on to the screening.
-    assert.equal(await status(tv, segment(3)), 403);
+    assert.equal(await status(tv, segment(3, slug)), 403);
     assert.equal((await heartbeat(tv, screeningId, { position: 46 })).status, 404);
-    await lostIt(tv, t);
+    await lostIt(tv, t, slug);
 
     // The keeper takes the same screening over at once, at the same place.
-    const s = await play(laptop);
+    const s = await play(laptop, slug);
     assert.equal(s.screeningId, screeningId);
     assert.equal(s.resumed, true);
     assert.equal(s.position, 40);
-    assert.equal(await status(laptop, MASTER), 200);
+    assert.equal(await status(laptop, master(slug)), 200);
     assert.equal((await adminTicket(t.id)).screeningsUsed, 1, 'still one screening used');
   });
 
   test('a browser that has gone quiet, or can no longer play, doesn’t block keeping', async () => {
-    const t = await keepable();
-    const tv = await opened(fresh(), t);
-    const { screeningId } = await play(tv);
+    const slug = await ownFilm('gone-quiet');
+    const t = await keepable({}, slug);
+    const tv = await opened(fresh(), t, slug);
+    const { screeningId } = await play(tv, slug);
     const { device } = await member();
-    const laptop = await device(await opened(fresh(), t));
+    const laptop = await device(await opened(fresh(), t, slug));
     // Quiet for longer than a heartbeat allows.
     srv.db.prepare('UPDATE screenings SET active_until = ? WHERE id = ?').run(Date.now() - 1, screeningId);
-    await kept(laptop);
+    await kept(laptop, slug);
 
-    const t2 = await keepable({}, 'heat');
-    const tv2 = await opened(fresh(), t2, 'heat');
-    const s2 = await play(tv2, 'heat');
-    const laptop2 = await device(await opened(fresh(), t2, 'heat'));
+    const other = await ownFilm('signed-out-of-it');
+    const t2 = await keepable({}, other);
+    const tv2 = await opened(fresh(), t2, other);
+    const s2 = await play(tv2, other);
+    const laptop2 = await device(await opened(fresh(), t2, other));
     // The playing browser was signed out of the ticket.
     await admin.post(`/api/admin/tickets/${t2.id}/sign-out-browsers`);
-    await opened(laptop2, t2, 'heat');
-    await kept(laptop2, 'heat');
-    assert.equal((await play(laptop2, 'heat')).screeningId, s2.screeningId);
+    await opened(laptop2, t2, other);
+    await kept(laptop2, other);
+    assert.equal((await play(laptop2, other)).screeningId, s2.screeningId);
   });
 
   test('two keeps at once: exactly one wins, and the other browser is told it was kept', async () => {
@@ -409,13 +419,14 @@ describe('keeping', () => {
 // ====================================================================== the admin
 describe('giving and releasing', () => {
   test('releasing a kept ticket gives it back to the browsers that had opened the link, and takes it from the keeper', async () => {
-    const t = await keepable();
-    const friend = await opened(fresh(), t);
+    const slug = await ownFilm('released');
+    const t = await keepable({}, slug);
+    const friend = await opened(fresh(), t, slug);
     const { device } = await member();
-    const b = await device(await opened(fresh(), t));
+    const b = await device(await opened(fresh(), t, slug));
     const keeperOnly = await device();
-    await kept(b);
-    await lostIt(friend, t);
+    await kept(b, slug);
+    await lostIt(friend, t, slug);
 
     const r = await holder(t.id, { personId: null });
     assert.equal(r.status, 200, JSON.stringify(r.data));
@@ -427,13 +438,13 @@ describe('giving and releasing', () => {
     assert.equal(row.person_id, null);
     assert.equal(row.claimed_at, null);
 
-    for (const x of [friend, b]) assert.equal((await page(x)).status, 200);
-    const { screeningId } = await play(friend);
-    assert.equal(await status(friend, MASTER), 200);
+    for (const x of [friend, b]) assert.equal((await page(x, slug)).status, 200);
+    const { screeningId } = await play(friend, slug);
+    assert.equal(await status(friend, master(slug)), 200);
     await pause(friend, screeningId, 12);
-    assert.equal((await play(b)).screeningId, screeningId);
-    assert.equal(await status(friend, MASTER), 403, 'one device at a time: the keeper took it over last');
-    assert.deepEqual(await listed(keeperOnly), [], 'a device of the keeper that never opened the link loses it');
+    assert.equal((await play(b, slug)).screeningId, screeningId);
+    assert.equal(await status(friend, master(slug)), 403, 'one device at a time: the keeper took it over last');
+    assert.deepEqual(await listed(keeperOnly, slug), [], 'a device of the keeper that never opened the link loses it');
   });
 
   test('releasing with the box ticked makes it keepable again', async () => {
@@ -449,8 +460,9 @@ describe('giving and releasing', () => {
   });
 
   test('giving a ticket for anyone to a person: browsers that opened the link lose it', async () => {
-    const t = await keepable();
-    const friend = await opened(fresh(), t);
+    const slug = await ownFilm('given');
+    const t = await keepable({}, slug);
+    const friend = await opened(fresh(), t, slug);
     const { p, phone } = await member();
     const r = await holder(t.id, { personId: p.id });
     assert.equal(r.status, 200);
@@ -458,24 +470,25 @@ describe('giving and releasing', () => {
     assert.equal(r.data.claimable, false);
     assert.equal(r.data.claimedAt, null, 'given, not kept');
     assert.equal(r.data.waitingBrowsers, 1);
-    await lostIt(friend, t);
-    assert.equal((await listed(phone)).length, 1);
-    await play(phone);
+    await lostIt(friend, t, slug);
+    assert.equal((await listed(phone, slug)).length, 1);
+    await play(phone, slug);
   });
 
   test('giving a kept ticket to someone else, and its open screening moves with it', async () => {
-    const t = await keepable();
+    const slug = await ownFilm('given-on');
+    const t = await keepable({}, slug);
     const sam = await member();
     const alex = await member(uniq('Alex'));
-    const b = await sam.device(await opened(fresh(), t));
-    await kept(b);
-    const { screeningId } = await play(b);
+    const b = await sam.device(await opened(fresh(), t, slug));
+    await kept(b, slug);
+    const { screeningId } = await play(b, slug);
     assert.equal((await heartbeat(b, screeningId, { position: 20 })).status, 200);
     await holder(t.id, { personId: alex.p.id });
     assert.equal(ticketRow(t.id).person_id, alex.p.id);
-    assert.equal(await status(b, segment(2)), 403, "Sam's browser stops on its next request");
+    assert.equal(await status(b, segment(2, slug)), 403, "Sam's browser stops on its next request");
     // Sam's browser was still "playing", but can't any more: Alex takes over at once.
-    const s = await play(alex.phone);
+    const s = await play(alex.phone, slug);
     assert.equal(s.screeningId, screeningId);
     const types = (await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.events.map((e) => [e.type, e.personId]);
     assert.ok(types.some(([type, pid]) => type === 'ticket-released' && pid === sam.p.id));
@@ -501,17 +514,18 @@ describe('giving and releasing', () => {
   });
 
   test('Sign out browsers forgets the waiting browsers, so a release then gives it to nobody', async () => {
-    const t = await keepable();
-    const friend = await opened(fresh(), t);
-    await kept(await (await member()).device(await opened(fresh(), t)));
+    const slug = await ownFilm('forgotten');
+    const t = await keepable({}, slug);
+    const friend = await opened(fresh(), t, slug);
+    await kept(await (await member()).device(await opened(fresh(), t, slug)), slug);
     await admin.post(`/api/admin/tickets/${t.id}/sign-out-browsers`);
     assert.equal((await adminTicket(t.id)).waitingBrowsers, 0);
     // No longer told it was kept: the browser simply has no ticket now.
-    assert.equal((await page(friend)).status, 404);
+    assert.equal((await page(friend, slug)).status, 404);
     await holder(t.id, { personId: null });
-    assert.equal((await page(friend)).status, 404, 'it has to open the link again');
-    await opened(friend, t);
-    await play(friend);
+    assert.equal((await page(friend, slug)).status, 404, 'it has to open the link again');
+    await opened(friend, t, slug);
+    await play(friend, slug);
   });
 
   test('revoke and restore a kept ticket: the keeper has it back at once; the waiting browsers were forgotten', async () => {

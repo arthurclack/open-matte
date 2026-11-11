@@ -2,7 +2,7 @@
 // in another browser, play, then check limits, expiry and revocation.
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
-import { FILM_SECONDS, adminBrowser, browser, makeFilm, startServer, tempDir } from './helpers.js';
+import { FILM_SECONDS, addFilm, adminBrowser, browser, makeFilm, startServer, tempDir } from './helpers.js';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -12,7 +12,8 @@ let admin;
 let filmId;
 const mediaDir = tempDir();
 
-const MASTER = '/media/arrival/hls/master.m3u8';
+const master = (slug) => `/media/${slug}/hls/master.m3u8`;
+const MASTER = master('arrival');
 const PLAYBACK_FILES = [
   MASTER,
   '/media/arrival/hls/v_h264_720/index.m3u8',
@@ -28,11 +29,14 @@ async function newTicket(fields = {}) {
   return r.data[0];
 }
 
-async function openTicket(b, ticket) {
+async function openTicket(b, ticket, slug = 'arrival') {
   const r = await b.post('/api/tickets/open', { code: ticket.code });
   assert.equal(r.status, 200, JSON.stringify(r.data));
-  assert.equal(r.data.slug, 'arrival');
+  assert.equal(r.data.slug, slug);
 }
+
+// A film of its own for a test that presses Play outside the one ticket's journey.
+const ownFilm = (slug) => addFilm(admin, mediaDir, slug);
 
 async function statuses(b, urls) {
   return Promise.all(urls.map(async (u) => (await b.get(u)).status));
@@ -214,23 +218,25 @@ describe('ticket rules', () => {
   });
 
   test('a start-by deadline stops mattering once the first screening has started', async () => {
-    const ticket = await newTicket({ startBy: Date.now() + HOUR });
+    const film = await ownFilm('start-by');
+    const ticket = await newTicket({ filmId: film.id, startBy: Date.now() + HOUR });
     const b = browser(srv.base);
-    await openTicket(b, ticket);
-    assert.equal((await b.post('/api/films/arrival/screenings')).status, 200);
+    await openTicket(b, ticket, film.slug);
+    assert.equal((await b.post(`/api/films/${film.slug}/screenings`)).status, 200);
     srv.db.prepare('UPDATE tickets SET start_by = ? WHERE id = ?').run(Date.now() - 1000, ticket.id);
-    assert.equal((await b.get(MASTER)).status, 200);
+    assert.equal((await b.get(master(film.slug))).status, 200);
   });
 
   test('a limit of two screenings allows exactly two', async () => {
-    const ticket = await newTicket({ screeningLimit: 2 });
+    const film = await ownFilm('limit-of-two');
+    const ticket = await newTicket({ filmId: film.id, screeningLimit: 2 });
     const b = browser(srv.base);
-    await openTicket(b, ticket);
+    await openTicket(b, ticket, film.slug);
     for (let i = 0; i < 2; i++) {
-      assert.equal((await b.post('/api/films/arrival/screenings')).data.resumed, false);
+      assert.equal((await b.post(`/api/films/${film.slug}/screenings`)).data.resumed, false);
       srv.db.prepare('UPDATE screenings SET resumable_until = ? WHERE ticket_id = ?').run(Date.now() - 1, ticket.id);
     }
-    assert.equal((await b.post('/api/films/arrival/screenings')).data.error, 'used_up');
+    assert.equal((await b.post(`/api/films/${film.slug}/screenings`)).data.error, 'used_up');
   });
 
   test('unpublishing hides the page from ticket holders', async () => {
@@ -270,10 +276,11 @@ describe('admin protection', () => {
 
 test('a revoked ticket shows no open or playing screening in the admin', async () => {
   // A ticket of its own, played and then revoked, so there is always one to check.
-  const ticket = await newTicket();
+  const film = await ownFilm('revoked');
+  const ticket = await newTicket({ filmId: film.id });
   const b = browser(srv.base);
-  await openTicket(b, ticket);
-  assert.equal((await b.post('/api/films/arrival/screenings')).status, 200);
+  await openTicket(b, ticket, film.slug);
+  assert.equal((await b.post(`/api/films/${film.slug}/screenings`)).status, 200);
   await admin.post(`/api/admin/tickets/${ticket.id}/revoke`);
   const revoked = (await admin.get('/api/admin/tickets')).data.filter((t) => t.state === 'revoked');
   assert.ok(revoked.some((t) => t.id === ticket.id), 'the ticket revoked here is listed');
