@@ -13,7 +13,7 @@ import { after, before, describe, test } from 'node:test';
 import { softAuthenticator } from './softauth.js';
 
 delete process.env.BACKUP_COPY_DIR;
-const { adminBrowser, browser, enroll, makeFilm, newPerson, playbackFiles, setupLink, startServer, tempDir } = await import('./helpers.js');
+const { addFilm, adminBrowser, browser, enroll, makeFilm, newPerson, playbackFiles, setupLink, startServer, tempDir } = await import('./helpers.js');
 const { MIGRATIONS } = await import('../server/db.js');
 const { createRefusals } = await import('../server/routes/media.js');
 
@@ -138,10 +138,12 @@ describe('the projection booth', () => {
     await issue({ label: 'No date' });
     const revoked = await issue({ label: 'Revoked', startBy: now + DAY });
     assert.equal((await admin.post(`/api/admin/tickets/${revoked.id}/revoke`)).status, 200);
-    const played = await issue({ label: 'Played', startBy: now + DAY });
+    // Played: on a film of its own, so Arrival's tape stays in for the tests below.
+    const other = await addFilm(admin, mediaDir, 'played');
+    const played = await issue({ label: 'Played', startBy: now + DAY, filmId: other.id });
     const b = fresh();
     await b.post('/api/tickets/open', { code: played.code });
-    assert.equal((await b.post('/api/films/arrival/screenings')).status, 200);
+    assert.equal((await b.post('/api/films/played/screenings')).status, 200);
 
     const listed = [...objects((await booth()).attention.tickets)].filter((o) => 'startBy' in o && 'label' in o);
     const expected = Object.values(near).map((t) => ({
@@ -226,6 +228,36 @@ describe('the projection booth', () => {
     for (const secret of [IP, '127.0.0.1', token, sha256(token), stale.jar.get('om_session'), ticket.code, 'Refusals', '/media/', 'hls/', 'seg_', '.m3u8', '.vtt', 'poster.jpg', 'bytes=', UA.safari, UA.player, 'Mozilla']) {
       assert.ok(!json.includes(secret), `the refusals mention ${secret}`);
     }
+  });
+
+  // Never who has it: the browser gets the same empty 403 whichever link has the
+  // tape, and the reason is only ever written here and in the server's log.
+  test('a tape that is out: the refusal says so here, the same for a link that is waiting and for the borrower’s own link in another browser, and the browser is told nothing', async () => {
+    const film = await addFilm(admin, mediaDir, 'tape-out');
+    const lent = await issue({ label: 'Lent', filmId: film.id });
+    const borrower = fresh();
+    await borrower.post('/api/tickets/open', { code: lent.code });
+    assert.equal((await borrower.post('/api/films/tape-out/screenings')).status, 200);
+    const sameLink = fresh();
+    await sameLink.post('/api/tickets/open', { code: lent.code });
+    const waiting = fresh();
+    await waiting.post('/api/tickets/open', { code: (await issue({ label: 'Waiting', filmId: film.id })).code });
+    const segment = '/media/tape-out/hls/v_h264_720/seg_2.m4s';
+    const start = await booth();
+    const answers = [];
+    for (const b of [sameLink, waiting]) {
+      const r = await b.send('GET', segment, undefined, { headers: { 'user-agent': UA.safari } });
+      answers.push([r.status, r.data, r.headers.get('content-type'), r.headers.get('content-length')]);
+    }
+    assert.deepEqual(answers[0], [403, '', null, '0'], 'an empty 403');
+    assert.deepEqual(answers[1], answers[0], 'the same for both kinds of out');
+    const { refusals } = (await booth()).attention;
+    const reason = 'the tape is out with someone else';
+    assert.equal((refusals.byReason[reason] ?? 0) - (start.attention.refusals.byReason[reason] ?? 0), 2);
+    const row = refusals.recent.find((r) => r.reason === reason);
+    assert.deepEqual(pick(row, ['status', 'kind', 'film', 'client', 'count']), { status: 403, kind: 'segment', film: 'tape-out', client: 'Safari on iPhone', count: 2 }, 'one row: nothing tells the two apart');
+    assert.ok(!JSON.stringify(refusals).includes('Lent'), 'never the link, or who has it');
+    assert.equal((await borrower.get(segment)).status, 200);
   });
 
   test("requests with no session, however many and however varied, can't push a viewer's refusal out of the latest ten", async () => {

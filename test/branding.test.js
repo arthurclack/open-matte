@@ -1567,22 +1567,45 @@ describe('ticket link previews', () => {
     assert.equal(a.firstOpenedAt, null);
     assert.equal(a.browsers, 0);
     assert.equal(a.lastActivity, null);
-    assert.deepEqual((await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.events, []);
+    assert.deepEqual((await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.events.map((e) => e.type), ['ticket-sent'], 'only your sending it');
     assert.equal(srv.db.prepare('SELECT last_seen_at FROM sessions WHERE id_hash = ?').get(hash).last_seen_at, anHourAgo);
   });
 
-  test('an expired or used-up link ticket still previews its film, as opening it still shows the film', async () => {
+  // 1.x: a used-up link still previewed its film, as opening it still showed the film.
+  // Version 2 (version-2.md, "Our proposals" and slice 3): a link that has lent, its
+  // tape back, has done its job. Opened in a browser that doesn't hold it, it answers
+  // 410 ticket-spent, and its preview shows the shop, not the film. While its tape is
+  // out it previews as it did before. An expired link still opens, so it still previews.
+  test('an expired link still previews its film, as opening it still shows the film; a spent link previews as the shop', async () => {
     const expired = await issue({ startBy: Date.now() - 1000 });
-    const usedUp = await issue({ screeningLimit: 1 });
-    const b = await opened(fresh(), usedUp);
+    const lent = await issue();
+    const b = await opened(fresh(), lent);
     assert.equal((await b.post('/api/films/arrival/screenings')).status, 200);
-    srv.db.prepare('UPDATE screenings SET resumable_until = ? WHERE ticket_id = ?').run(Date.now() - 1, usedUp.id);
+    // With the tape out: the film, as before Play.
+    const whileOut = asFilm(await page(`/t/${lent.code}`), lent);
+    assert.equal((await posterOf(whileOut)).status, 200);
+    // The tape came due a moment ago.
+    srv.db.prepare('UPDATE loans SET taken_at = ?, due_at = ? WHERE ticket_id = ?').run(Date.now() - 1 - 3 * 24 * 3600e3, Date.now() - 1, lent.id);
     assert.equal((await adminTicket(expired.id)).state, 'expired');
-    assert.equal((await adminTicket(usedUp.id)).state, 'used_up');
-    for (const t of [expired, usedUp]) {
-      const address = asFilm(await page(`/t/${t.code}`), t);
-      assert.equal((await posterOf(address)).status, 200);
+    assert.equal((await adminTicket(lent.id)).state, 'used_up');
+    assert.equal((await b.get('/api/films/arrival')).data.access.ticket.state, 'spent');
+
+    const address = asFilm(await page(`/t/${expired.code}`), expired);
+    assert.equal((await posterOf(address)).status, 200);
+    assert.equal((await fresh().post('/api/tickets/open', { code: expired.code })).status, 200);
+
+    // Spent: the shop, to a stranger and to the browser that borrowed alike (a preview
+    // is fetched with no cookie), and the poster's address it once gave out is a 404.
+    asCinema(await page(`/t/${lent.code}`));
+    asCinema(await page(`/t/${lent.code}`, b));
+    for (const who of [undefined, b]) {
+      const poster = await posterOf(whileOut, who);
+      assert.equal(poster.status, 404);
     }
+    const stranger = fresh();
+    const opening = await stranger.post('/api/tickets/open', { code: lent.code });
+    assert.deepEqual([opening.status, opening.data], [410, { error: 'ticket-spent' }]);
+    assert.equal(stranger.jar.size, 0, 'and no session is made');
   });
 
   test("a ticket for one person previews as the cinema, even to them: neither the film nor the person's name, and no poster", async () => {

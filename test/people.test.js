@@ -680,13 +680,15 @@ describe('signing in', () => {
     assert.deepEqual(old.tickets, [], 'the planted session is revoked');
   });
 
-  test('signing in carries link tickets and an open screening over from an anonymous browser', async () => {
+  test('signing in carries link tickets, and the tape this browser has out, over from an anonymous browser', async () => {
     const { p, auth } = await enrolled();
     const b = fresh();
     const ticket = await newTicket();
     await opened(b, ticket);
-    const { screeningId } = await play(b);
+    const { screeningId, dueBack } = await play(b);
     assert.equal(await status(b, MASTER), 200);
+    const loan = () => srv.db.prepare('SELECT * FROM loans WHERE ticket_id = ?').get(ticket.id);
+    assert.equal(loan().session_hash, sha256(b.jar.get('om_session')));
 
     const r = await signIn(b, auth);
     assert.equal(r.status, 200, JSON.stringify(r.data));
@@ -694,6 +696,13 @@ describe('signing in', () => {
     assert.deepEqual(after1.person, { name: p.name });
     assert.deepEqual(after1.tickets.map((t) => t.film.slug), ['arrival']);
     assert.ok(after1.tickets[0].ticket.openScreening, 'the open screening came along');
+    // The loan is the browser's, and went with it to its new session. Signing in doesn't
+    // make it the person's: it isn't on their card (docs/version-2.md, question 2).
+    assert.deepEqual([loan().session_hash, loan().person_id, loan().ended_at], [sha256(b.jar.get('om_session')), null, null]);
+    assert.deepEqual(
+      (({ tape, dueBack: due, inAccount, loan: l }) => [tape, due, inAccount, l.toBrowser])(after1.tickets[0].ticket),
+      ['yours', dueBack, false, true],
+    );
     assert.equal(await status(b, MASTER), 200, 'media stays at 200');
     assert.equal(await status(b, SEGMENT), 200);
     assert.equal((await b.post(`/api/screenings/${screeningId}/heartbeat`, { position: 12 })).status, 200);
@@ -715,7 +724,9 @@ describe('signing in', () => {
     assert.equal((await play(b, slug)).screeningId, screeningId);
   });
 
-  test("signing in as someone else carries nothing over from the other person's browser, and frees its screening", async () => {
+  // 1.x: "and frees its screening", which another browser with the link then took over.
+  // The tape that browser had out comes back at once, and its link is spent.
+  test("signing in as someone else carries nothing over from the other person's browser, and its tape comes back", async () => {
     const slug = await ownFilm('someone-else');
     const { p, b: shared } = await enrolled();
     const { p: q, auth: qAuth } = await enrolled();
@@ -723,6 +734,10 @@ describe('signing in', () => {
     await opened(shared, ticket);
     const { screeningId } = await play(shared, slug);
     assert.deepEqual(await personIn(shared), { name: p.name });
+    // Another browser with the same link, and one with another link for the film.
+    const other = await opened(fresh(), ticket);
+    const next = await opened(fresh(), await newTicket({}, slug));
+    for (const b of [other, next]) assert.deepEqual((await b.post(`/api/films/${slug}/screenings`)).data, { error: 'out' });
 
     assert.equal((await signIn(shared, qAuth)).status, 200);
     const now = await me(shared);
@@ -731,10 +746,14 @@ describe('signing in', () => {
     assert.equal(await status(shared, master(slug)), 403);
     assert.equal((await shared.post(`/api/films/${slug}/screenings`)).status, 404);
 
-    // The screening is free at once for another browser with the link.
-    const other = await opened(fresh(), ticket);
-    const taken = await play(other, slug);
-    assert.equal(taken.screeningId, screeningId);
+    // Nobody inherits the place: the link lent once, and the film is free for another link.
+    assert.deepEqual((await other.post(`/api/films/${slug}/screenings`)).data, { error: 'spent' });
+    const taken = await play(next, slug);
+    assert.notEqual(taken.screeningId, screeningId);
+    assert.deepEqual([taken.took, taken.position], [true, 0]);
+    const loan = srv.db.prepare('SELECT * FROM loans WHERE ticket_id = ?').get(ticket.id);
+    assert.equal(loan.ended_how, 'signed-out');
+    assert.ok(loan.ended_at >= loan.taken_at && loan.ended_at < loan.due_at);
   });
 
   test('signing in again as the same person carries everything over', async () => {
@@ -898,13 +917,19 @@ describe('signing in', () => {
     assert.deepEqual(r.data.newPasskeys.map((k) => k.device), ['Safari on Mac']);
   });
 
+  // 1.x: the played link still worked after signing out, and was opened again. Version
+  // 2 (question 5, answer a): a tape this browser took on a link anyone can use comes
+  // back when the browser signs out, and that link is spent. A link it only opened
+  // still works.
   test('signing out revokes the session and forgets the link tickets this browser opened', async () => {
     const slug = await ownFilm('signing-out');
     const { p, auth } = await enrolled();
     const b = fresh();
     const ticket = await newTicket({}, slug);
+    const played = await newTicket({}, await ownFilm('signing-out-played'));
     await opened(b, ticket);
-    await play(b, slug);
+    await opened(b, played);
+    await play(b, 'signing-out-played');
     assert.equal((await signIn(b, auth)).status, 200);
     const token = b.jar.get('om_session');
     const out = await b.post('/api/signout');
@@ -916,9 +941,14 @@ describe('signing in', () => {
     assert.equal(now.person, null);
     assert.deepEqual(now.tickets, []);
     assert.equal(await status(withCookie(token), master(slug)), 403);
+    assert.equal(await status(withCookie(token), master('signing-out-played')), 403);
     const ev = (await activity(`person=${p.id}`)).find((e) => e.type === 'signed-out');
     assert.ok(ev, 'signed-out is logged');
-    // The link still works.
+    // The link it only opened still works. The one whose tape it had is spent: the
+    // tape came back when it signed out, and a link lends once.
+    const again = await b.post('/api/tickets/open', { code: played.code });
+    assert.deepEqual([again.status, again.data], [410, { error: 'ticket-spent' }]);
+    assert.equal(b.jar.get('om_session'), undefined, 'and a spent link makes no session');
     await opened(b, ticket);
     assert.deepEqual((await me(b)).tickets.map((t) => t.film.slug), [slug]);
   });
@@ -1118,61 +1148,151 @@ describe("the admin's actions", () => {
   });
 });
 
-// ====================================================================== takeover (amendment 1)
-describe('taking over a screening from a browser that can no longer play it', () => {
-  async function held(slug) {
+// ====================================================================== a borrower who can no longer play
+// 1.x (amendment 1): another browser with the link took the play over at once. In
+// version 2 the borrower on a link for anyone is the browser that pressed Play, and
+// when it can no longer play, the tape comes back at once and the link is spent:
+// nobody inherits a stranger's place (docs/version-2.md, question 5, answer a). One
+// test for each way.
+describe('a borrower who can no longer play: the tape comes back at once, and another link takes it', () => {
+  const loanOf = (ticket) => srv.db.prepare('SELECT * FROM loans WHERE ticket_id = ?').get(ticket.id);
+  const press = (b, slug) => b.post(`/api/films/${slug}/screenings`);
+  // A tape out on a link for anyone, in `holder`. `other` holds the same link, and
+  // `next` another link for the film: both see it out.
+  async function lent(slug, holder = fresh()) {
     const ticket = await newTicket({}, slug);
-    const holder = await opened(fresh(), ticket);
+    await opened(holder, ticket);
     const { screeningId } = await play(holder, slug);
     const other = await opened(fresh(), ticket);
-    const blocked = await other.post(`/api/films/${slug}/screenings`);
-    assert.equal(blocked.status, 409);
-    assert.equal(blocked.data.error, 'playing-elsewhere');
-    return { ticket, holder, other, screeningId };
+    const next = await opened(fresh(), await newTicket({}, slug));
+    for (const b of [other, next]) {
+      const blocked = await press(b, slug);
+      assert.deepEqual([blocked.status, blocked.data], [409, { error: 'out' }]);
+    }
+    return { ticket, holder, other, next, screeningId };
   }
-  const takesOver = async (b, screeningId, slug) => {
-    const r = await b.post(`/api/films/${slug}/screenings`);
+  async function cameBack({ ticket, holder, other, next, screeningId }, slug, how = 'signed-out') {
+    // Nothing has written the end: every read decides by the clock and the borrower.
+    assert.equal(loanOf(ticket).ended_at, null, how);
+    assert.equal((await next.get(`/api/films/${slug}`)).data.access.ticket.tape, 'in');
+    assert.equal((await other.get(`/api/films/${slug}`)).data.access.ticket.state, 'spent', 'the link lent once');
+    assert.deepEqual((await press(other, slug)).data, { error: 'spent' });
+    const r = await press(next, slug);
     assert.equal(r.status, 200, JSON.stringify(r.data));
-    assert.equal(r.data.screeningId, screeningId);
-    assert.equal(r.data.resumed, true);
-    assert.equal(await status(b, master(slug)), 200);
-  };
+    assert.notEqual(r.data.screeningId, screeningId);
+    assert.deepEqual([r.data.took, r.data.position], [true, 0], 'from the beginning: not the place the other had reached');
+    const l = loanOf(ticket);
+    assert.equal(l.ended_how, how);
+    assert.ok(l.ended_at >= l.taken_at && l.ended_at < l.due_at, 'dated when the borrower stopped being able to play');
+    assert.equal(await status(next, master(slug)), 200);
+    assert.equal(await status(holder, master(slug)), 403);
+  }
 
-  test('once the holding browser signs out, another takes over at once', async () => {
+  test('the borrowing browser signs out', async () => {
     const slug = await ownFilm('holder-signed-out');
-    const { holder, other, screeningId } = await held(slug);
-    await holder.post('/api/signout');
-    await takesOver(other, screeningId, slug);
+    const loan = await lent(slug);
+    await loan.holder.post('/api/signout');
+    await cameBack(loan, slug);
   });
 
-  test("once the holder's session has expired", async () => {
+  test("the borrowing browser's session has expired", async () => {
     const slug = await ownFilm('holder-expired');
-    const { holder, other, screeningId } = await held(slug);
-    srv.db.prepare('UPDATE sessions SET expires_at = ? WHERE id_hash = ?').run(Date.now() - 1, sha256(holder.jar.get('om_session')));
-    await takesOver(other, screeningId, slug);
+    const loan = await lent(slug);
+    srv.db.prepare('UPDATE sessions SET expires_at = ? WHERE id_hash = ?').run(Date.now() - 1, sha256(loan.holder.jar.get('om_session')));
+    await cameBack(loan, slug);
   });
 
-  test("once the holder's person is disabled or signed out everywhere", async () => {
-    const slug = await ownFilm('holder-disabled');
-    for (const action of ['disable', 'sign-out']) {
+  test("the browser is signed in as a member whose card is turned off, who is signed out everywhere, whose passkey is removed, or whose keys are taken back", async () => {
+    const ways = {
+      'card-off': (p) => admin.post(`/api/admin/people/${p.id}/disable`),
+      'signed-out-everywhere': (p) => admin.post(`/api/admin/people/${p.id}/sign-out`),
+      'signs-out-everywhere': (p, b) => b.post('/api/account/sign-out-everywhere'),
+      'passkey-removed': async (p) => admin.post(`/api/admin/passkeys/${(await admin.get(`/api/admin/people/${p.id}`)).data.passkeys[0].id}/remove`),
+      'keys-taken-back': (p) => recoveryLink(p.id, { reset: true }),
+    };
+    for (const [way, act] of Object.entries(ways)) {
+      const slug = await ownFilm(`holder-${way}`);
       const { p, b: holder } = await enrolled();
-      const ticket = await newTicket({}, slug);
-      await opened(holder, ticket);
-      const { screeningId } = await play(holder, slug);
-      const other = await opened(fresh(), ticket);
-      assert.equal((await other.post(`/api/films/${slug}/screenings`)).status, 409, action);
-      await admin.post(`/api/admin/people/${p.id}/${action}`);
-      await takesOver(other, screeningId, slug);
-      assert.equal(await status(holder, master(slug)), 403, action);
+      const loan = await lent(slug, holder);
+      assert.equal(loanOf(loan.ticket).person_id, null, 'a link for anyone lends to the browser, signed in or not');
+      const r = await act(p, holder);
+      assert.ok(r.status === undefined || r.status < 300, `${way}: ${JSON.stringify(r.data)}`);
+      await cameBack(loan, slug);
     }
   });
 
-  test('once the holder has forgotten the ticket (Sign out browsers)', async () => {
-    const slug = await ownFilm('holder-forgot');
-    const { ticket, other, screeningId } = await held(slug);
-    await admin.post(`/api/admin/tickets/${ticket.id}/sign-out-browsers`);
-    await opened(other, ticket);
-    await takesOver(other, screeningId, slug);
+  // A tape on a member's own link is the member's, not one browser's: it stays theirs
+  // when a device signs out, or all of them. Only their card being turned off ends it.
+  test("a member's own link: signing out, even everywhere, leaves the tape theirs; their card turned off brings it back", async () => {
+    const slug = await ownFilm('own-link-borrower');
+    const { p, b: phone, auth } = await enrolled();
+    const ticket = await newTicket({ personId: p.id }, slug);
+    const { screeningId } = await play(phone, slug);
+    assert.equal((await phone.post(`/api/screenings/${screeningId}/heartbeat`, { position: 21, playing: false })).status, 200);
+    const next = await opened(fresh(), await newTicket({}, slug));
+    const out = async () => assert.deepEqual((await press(next, slug)).data, { error: 'out' });
+    await out();
+
+    await phone.post('/api/signout');
+    await out();
+    assert.equal((await signIn(phone, auth)).status, 200);
+    assert.equal((await admin.post(`/api/admin/people/${p.id}/sign-out`)).status, 200);
+    await out();
+    assert.equal(await status(phone, master(slug)), 403, 'signed out, it plays nowhere');
+    assert.equal((await signIn(phone, auth)).status, 200);
+    const again = await play(phone, slug);
+    assert.deepEqual([again.screeningId, again.resumed, again.position], [screeningId, true, 21], 'signed in again, they carry on');
+    assert.equal(loanOf(ticket).ended_at, null);
+
+    assert.equal((await admin.post(`/api/admin/people/${p.id}/disable`)).status, 200);
+    const l = loanOf(ticket);
+    assert.equal(l.ended_how, 'disabled', 'written in the same step as the card going off');
+    const took = await press(next, slug);
+    assert.equal(took.status, 200, JSON.stringify(took.data));
+    assert.equal(took.data.took, true);
+    // Turned on again, the loan stays ended and the link stays spent.
+    assert.equal((await admin.post(`/api/admin/people/${p.id}/enable`)).status, 200);
+    assert.equal((await signIn(phone, auth)).status, 200);
+    assert.deepEqual((await press(phone, slug)).data, { error: 'spent' });
+    assert.deepEqual([loanOf(ticket).ended_at, loanOf(ticket).ended_how], [l.ended_at, 'disabled']);
+    assert.equal(await status(next, master(slug)), 200);
+  });
+
+  // Signing in from another person's session carries nothing along (sessions.js), so a
+  // tape that browser had out on a link for anyone comes back.
+  test('the browser, signed in as one member, signs in as another', async () => {
+    const slug = await ownFilm('holder-someone-else');
+    const { b: holder } = await enrolled();
+    const { auth: other } = await enrolled();
+    const loan = await lent(slug, holder);
+    assert.equal((await signIn(holder, other)).status, 200);
+    await cameBack(loan, slug);
+  });
+
+  // 1.x: "Sign out browsers" made the holder forget the ticket, and another browser
+  // with the link took the play over. Version 2 refuses it while the link has the
+  // tape: it would leave a tape out that the browser which took it can't play
+  // (docs/version-2.md, "What can happen to a tape"). Once the tape is back, it goes.
+  test('"Sign out browsers" on the link that has the tape is refused, and nothing is forgotten', async () => {
+    const slug = await ownFilm('holder-forget-refused');
+    const { ticket, holder, other, next, screeningId } = await lent(slug);
+    const held = () => srv.db.prepare('SELECT COUNT(*) AS n FROM session_tickets WHERE ticket_id = ?').get(ticket.id).n;
+    const r = await admin.post(`/api/admin/tickets/${ticket.id}/sign-out-browsers`);
+    assert.deepEqual([r.status, r.data], [409, { error: 'tape-out' }]);
+    assert.equal(held(), 2);
+    assert.equal(await status(holder, master(slug)), 200, 'the borrower plays on');
+    assert.equal((await holder.post(`/api/screenings/${screeningId}/heartbeat`, { position: 9 })).status, 200);
+    assert.deepEqual((await press(other, slug)).data, { error: 'out' });
+    // A link that doesn't have the tape is forgotten as before, tape out or not.
+    const waiting = srv.db.prepare('SELECT ticket_id AS id FROM session_tickets WHERE session_hash = ?').get(sha256(next.jar.get('om_session')));
+    assert.equal((await admin.post(`/api/admin/tickets/${waiting.id}/sign-out-browsers`)).status, 200);
+    assert.equal((await next.get(`/api/films/${slug}`)).status, 404);
+    // And once the tape is back, so is this one.
+    const taken = loanOf(ticket);
+    const back = await holder.post(`/api/films/${slug}/return`, { takenAt: taken.taken_at });
+    assert.equal(back.status, 200, JSON.stringify(back.data));
+    assert.equal((await admin.post(`/api/admin/tickets/${ticket.id}/sign-out-browsers`)).status, 200);
+    assert.equal(held(), 0);
   });
 });
 
@@ -1294,19 +1414,37 @@ describe('boundaries', () => {
     assert.deepEqual(srv.db.prepare('PRAGMA foreign_key_check').all(), []);
   });
 
-  // Last in this server: it signs every viewer out.
-  test('after Sign out every viewer, a browser that opens the link again takes over at once', async () => {
+  // Last in this server: it signs every viewer out. 1.x: a browser that opened the link
+  // again took the play over. The tapes browsers had out come back, their links spent;
+  // a member's own tape stays theirs.
+  test("after Sign out every viewer, the tapes browsers had out are back at once, and a member's own stays theirs", async () => {
     const slug = await ownFilm('everyone-out');
+    const own = await ownFilm('everyone-out-own');
+    const loanOf = (t) => srv.db.prepare('SELECT * FROM loans WHERE ticket_id = ?').get(t.id);
     const ticket = await newTicket({}, slug);
     const holder = await opened(fresh(), ticket);
     const { screeningId } = await play(holder, slug);
-    const { b: member } = await enrolled();
+    const waiting = await newTicket({}, slug);
+    const { p, b: member, auth } = await enrolled();
+    const mine = await newTicket({ personId: p.id }, own);
+    const theirs = await play(member, own);
+
     await admin.post('/api/admin/sessions/expire-all');
     assert.equal(await personIn(member), null, 'people are signed out too');
-    const other = await opened(fresh(), ticket);
-    const r = await other.post(`/api/films/${slug}/screenings`);
+    assert.equal(await status(holder, master(slug)), 403);
+    const next = await opened(fresh(), waiting);
+    const r = await next.post(`/api/films/${slug}/screenings`);
     assert.equal(r.status, 200, JSON.stringify(r.data));
-    assert.equal(r.data.screeningId, screeningId);
+    assert.notEqual(r.data.screeningId, screeningId);
+    assert.equal(r.data.took, true);
+    assert.equal(loanOf(ticket).ended_how, 'signed-out');
+
+    // The member's tape is on their own link: still out, and theirs once they sign in again.
+    const other = await opened(fresh(), await newTicket({}, own));
+    assert.deepEqual((await other.post(`/api/films/${own}/screenings`)).data, { error: 'out' });
+    assert.equal(loanOf(mine).ended_at, null);
+    assert.equal((await signIn(member, auth)).status, 200);
+    assert.equal((await play(member, own)).screeningId, theirs.screeningId);
   });
 });
 

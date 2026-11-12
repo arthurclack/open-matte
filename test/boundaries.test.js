@@ -9,7 +9,8 @@ import { after, before, test } from 'node:test';
 
 // Cookies get Secure from the request, as they do behind Caddy.
 process.env.COOKIE_SECURE = 'auto';
-const { addFilm, adminBrowser, browser, makeFilm, startServer, tempDir } = await import('./helpers.js');
+const { addFilm, adminBrowser, browser, enroll, makeFilm, setupLink, signIn, startServer, tempDir } = await import('./helpers.js');
+const { softAuthenticator } = await import('./softauth.js');
 const { sha256 } = await import('../server/sessions.js');
 
 let srv;
@@ -148,32 +149,72 @@ test('a viewer session is not an admin session, even in the admin cookie', async
   assert.equal(res.status, 401);
 });
 
-test('two presses of Play at once take one screening between them', async () => {
+// The main race of version 2: one tape per film, and the check and the take are one
+// step. (test/loans-race.test.js overlaps two writers for real, from two threads.)
+test('two links pressed at once: one takes the tape, the other is told it is out', async () => {
   const slug = await ownFilm('two-presses');
-  const ticket = await newTicket(slug, { screeningLimit: 1 });
+  const loans = () => srv.db.prepare('SELECT * FROM loans WHERE film_id = ?').all(films[slug]);
+  const [first, second] = [await newTicket(slug), await newTicket(slug)];
+  const [laptop, tv] = await Promise.all([holder(first), holder(second)]);
+  const presses = await Promise.all([laptop, tv].map((b) => b.post(`/api/films/${slug}/screenings`)));
+  assert.deepEqual(presses.map((r) => r.status).sort(), [200, 409]);
+  assert.deepEqual(presses.find((r) => r.status === 409).data, { error: 'out' });
+  assert.equal(loans().length, 1);
+  const won = presses.find((r) => r.status === 200).data;
+  assert.deepEqual([loans()[0].screening_id, loans()[0].ended_at], [won.screeningId, null]);
+
+  // A double click in one browser resumes rather than taking anything more.
+  const winner = presses[0].status === 200 ? laptop : tv;
+  const twice = await Promise.all([1, 2].map(() => winner.post(`/api/films/${slug}/screenings`)));
+  assert.deepEqual(twice.map((r) => [r.data.screeningId, r.data.took]), [[won.screeningId, false], [won.screeningId, false]]);
+  assert.equal(loans().length, 1);
+  assert.equal(srv.db.prepare('SELECT COUNT(*) AS n FROM screenings WHERE film_id = ?').get(films[slug]).n, 1);
+});
+
+// 1.x: of two browsers on one link, the loser was told "playing elsewhere" and could
+// take over later. The borrower is the browser that pressed Play first; the other
+// sees the tape out, like anyone (docs/version-2.md, question 12).
+test('two browsers pressing Play at once on one link: one has the tape, the other sees it out', async () => {
+  const slug = await ownFilm('one-link-two-presses');
+  const ticket = await newTicket(slug);
   const [laptop, tv] = await Promise.all([holder(ticket), holder(ticket)]);
   const presses = await Promise.all([laptop, tv].map((b) => b.post(`/api/films/${slug}/screenings`)));
   assert.deepEqual(presses.map((r) => r.status).sort(), [200, 409]);
-  assert.equal(presses.find((r) => r.status === 409).data.error, 'playing-elsewhere');
-
-  // A double click in one browser resumes rather than starting another.
-  const winner = presses[0].status === 200 ? laptop : tv;
-  const twice = await Promise.all([1, 2].map(() => winner.post(`/api/films/${slug}/screenings`)));
-  assert.deepEqual(twice.map((r) => r.data.screeningId), [presses.find((r) => r.status === 200).data.screeningId, presses.find((r) => r.status === 200).data.screeningId]);
+  assert.deepEqual(presses.find((r) => r.status === 409).data, { error: 'out' });
+  const [winner, loser] = presses[0].status === 200 ? [laptop, tv] : [tv, laptop];
+  const loan = srv.db.prepare('SELECT * FROM loans WHERE ticket_id = ?').get(ticket.id);
+  assert.equal(loan.session_hash, sha256(winner.jar.get('om_session')));
+  assert.equal(await status(winner, master(slug)), 200);
+  assert.equal(await status(loser, master(slug)), 403);
   assert.equal((await admin.get(`/api/admin/tickets/${ticket.id}`)).data.screeningsUsed, 1);
 });
 
-test('a player that goes quiet without saying so frees the screening after the timeout', async () => {
+// 1.x: any browser holding the link took over once the player went quiet. Taking over
+// is now among one borrower's own devices: a member signed in on two.
+test('a player that goes quiet without saying so frees the screening after the timeout, for the borrower’s other device', async () => {
   const slug = await ownFilm('goes-quiet');
-  const { b: laptop, ticket, screeningId } = await watching(slug);
-  const tv = await holder(ticket);
+  const person = (await admin.post('/api/admin/people', { name: 'Quiet Quinn' })).data;
+  const auth = softAuthenticator();
+  const laptop = browser(srv.base);
+  assert.equal((await enroll(laptop, (await setupLink(admin, person.id)).token, { auth })).status, 200);
+  const tv = browser(srv.base);
+  assert.equal((await signIn(tv, auth)).status, 200);
+  await newTicket(slug, { personId: person.id });
+
+  const play = await laptop.post(`/api/films/${slug}/screenings`);
+  assert.equal(play.status, 200, JSON.stringify(play.data));
+  assert.equal(play.data.toBrowser, false, 'a member’s own link lends to the member');
+  const { screeningId } = play.data;
   assert.equal((await tv.post(`/api/films/${slug}/screenings`)).data.error, 'playing-elsewhere');
   // The laptop lost its connection: no pause, no pagehide, just no more heartbeats.
   srv.db.prepare('UPDATE screenings SET active_until = ? WHERE id = ?').run(Date.now() - 1, screeningId);
   const takeover = await tv.post(`/api/films/${slug}/screenings`);
   assert.equal(takeover.status, 200);
-  assert.equal(takeover.data.screeningId, screeningId);
+  assert.deepEqual([takeover.data.screeningId, takeover.data.resumed, takeover.data.took], [screeningId, true, false]);
   assert.equal(await status(laptop, master(slug)), 403);
+  assert.equal(await status(tv, master(slug)), 200);
+  assert.equal((await laptop.post(`/api/screenings/${screeningId}/heartbeat`, { position: 5 })).data.error, 'playing-elsewhere');
+  assert.equal(srv.db.prepare('SELECT COUNT(*) AS n FROM loans WHERE film_id = ?').get(films[slug]).n, 1);
 });
 
 test('unpublishing stops playback that is under way, and publishing again restores it', async () => {

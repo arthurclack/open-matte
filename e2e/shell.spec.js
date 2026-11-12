@@ -4,10 +4,9 @@
 // signed out under it; a start-by deadline shows with its time, in the friend's own
 // time zone, and its year once it has passed; a part of the app that's gone since a
 // deploy, or a mangled link, shows a page rather than a blank one; the tab's title
-// follows the page. In the admin, a setup link that opens a film is worded as one, an
-// open screening is resumable until the ticket expires if that comes first (as the
-// film page said before Play), and Sign out only looks done once the server has done
-// it. Back after signing out is in back.spec.js. Every browser.
+// follows the page. In the admin, a setup link that opens a film is worded as one, a
+// tape that is out can be come back to until it's due (as the film page said before
+// Play), and Sign out only looks done once the server has done it. Back after signing out is in back.spec.js. Every browser.
 import { NO_SNAPSHOTS, admin, cinemaName, expect, film, heartbeats, playButton, signInAsAdmin, signedInPerson, test, unique } from './fixtures.js';
 
 // The admin's sign-in puts the run's password in a form field, and trace snapshots
@@ -53,11 +52,14 @@ test('the name menu opens over the player, and Sign out there works', async ({ p
   await expect(menu(page)).toBeHidden();
 });
 
+// (1.x: "3 plays left" before Play. Play limits are gone: a link lends its tape once,
+// for its days, and the counter says how long before Play is pressed.)
 test('after Play, the counter tells of the open play', async ({ page }, testInfo) => {
-  const ticket = await admin.issueTicket({ label: unique('Panel', testInfo), screeningLimit: 3 });
+  const ticket = await admin.issueTicket({ label: unique('Panel', testInfo), loanDays: 2 });
   await page.goto(`/t/${ticket.code}`);
   const panel = page.locator('.fl-counter');
-  await expect(panel).toContainText('3 plays left');
+  await expect(panel).toContainText('Once you press Play, you can pause and come back to it for 48 hours.');
+  await expect(panel).not.toContainText('plays left');
   expect((await pressPlay(page)).status()).toBe(200);
   await expect(panel).toContainText('You can pick up where you left off until');
   await expect(panel).not.toContainText('Once you press Play');
@@ -152,6 +154,32 @@ test('a part of the app gone since a deploy: Play says to reload, and reloading 
   await expect(playButton(page)).toHaveAccessibleName(/^Resume/);
 });
 
+// Version 2: a link lends once. The Return it now button comes with the friend's new
+// film page (slice 7), so the tape is returned here as that button will: by the page
+// itself, asking the server. (docs/version-2.md, "Browser journeys", 6.)
+test('a spent link in a fresh browser shows the notice, and nothing of the film', async ({ page, newContext }, testInfo) => {
+  const ticket = await admin.issueTicket({ label: unique('Spent', testInfo) });
+  await page.goto(`/t/${ticket.code}`);
+  const { takenAt } = await (await pressPlay(page)).json();
+  const returned = await page.evaluate(
+    async ([slug, at]) => (await fetch(`/api/films/${slug}/return`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ takenAt: at }) })).status,
+    [film.slug, takenAt],
+  );
+  expect(returned).toBe(200);
+
+  const fresh = await (await newContext()).newPage();
+  await fresh.goto(`/t/${ticket.code}`);
+  await expect(fresh).toHaveURL((url) => url.pathname === '/' && url.searchParams.get('notice') === 'ticket-spent');
+  await expect(fresh.locator('.fl-notice')).toContainText('That link has been used.');
+  await expect(fresh.locator('.fl-notice')).toContainText('The tape it lent is back in the shop.');
+  await expect(fresh.getByRole('heading', { level: 1, name: cinemaName() })).toBeVisible();
+  await expect(fresh.getByText(film.title)).toHaveCount(0);
+  // The browser that borrowed it still has the film's page, and no Play.
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1, name: film.title })).toBeVisible();
+  await expect(playButton(page)).toHaveCount(0);
+});
+
 test('mangled links show the front page, or nothing showing, never a blank page', async ({ page }) => {
   await page.goto('/?notice=__proto__');
   await expect(page.getByRole('heading', { level: 1, name: cinemaName() })).toBeVisible();
@@ -188,13 +216,14 @@ test("the admin: a setup link's message, an open screening's last chance to resu
     expect(message).not.toContain("you'll sign in with your passkey");
   });
 
-  await test.step('a ticket that expires before its resume window ends: resumable until it expires', async () => {
-    // A day from first play, and the resume window's default is 48 hours.
-    const ticket = await admin.issueTicket({ label: unique('Short', testInfo), daysAfterFirstPlay: 1 });
+  // (1.x: a ticket valid one day after its first play, against a 48-hour resume
+  // window. Version 2 has one clock: the link lends for its own days, here one.)
+  await test.step('a link that lends for a day: the tape can be come back to until it is due', async () => {
+    const ticket = await admin.issueTicket({ label: unique('Short', testInfo), loanDays: 1 });
     const guest = await (await newContext()).newPage();
     await guest.goto(`/t/${ticket.code}`);
-    // Before Play, the friend isn't promised the 48 hours either.
-    await expect(guest.locator('.fl-counter')).toContainText("you can pause and come back to it until it's due back.");
+    // Before Play, the friend is promised the link's own day, not the shop's three.
+    await expect(guest.locator('.fl-counter')).toContainText('you can pause and come back to it for 24 hours.');
     expect((await pressPlay(guest)).status()).toBe(200);
     await page.goto(`/admin/tickets/${ticket.id}`);
     const expires = page.locator('dt:text-is("Expires") + dd');

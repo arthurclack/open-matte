@@ -1,4 +1,5 @@
 import express from 'express';
+import { LOAN_EVENTS } from '../access.js';
 import { VERSION } from '../booth.js';
 import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '../branding.js';
 import { publicOrigin } from '../config.js';
@@ -329,24 +330,29 @@ export function adminRoutes(deps) {
       people,
       browsers: byTicket(db.prepare(`SELECT st.ticket_id, COUNT(*) AS n FROM ${LIVE_HOLDERS} ${only} GROUP BY st.ticket_id`).all(now, ...args)),
       // The latest in Activity's order, (at, id), so of two events at the same
-      // moment it's the one Activity lists first.
+      // moment it's the one Activity lists first. Sending the link isn't activity on
+      // it: one nobody has touched shows none, as it does once its events have gone.
       lastEvent: byTicket(db.prepare(`
         SELECT ticket_id, at, type FROM (
           SELECT ticket_id, at, type, ROW_NUMBER() OVER (PARTITION BY ticket_id ORDER BY at DESC, id DESC) AS n
-          FROM events WHERE ticket_id IS NOT NULL ${only})
+          FROM events WHERE ticket_id IS NOT NULL AND type <> 'ticket-sent' ${only})
         WHERE n = 1`).all(...args)),
       // The latest screening's last report, which outlives the events the clean-up deletes.
       lastScreening: byTicket(db.prepare(`SELECT ticket_id, MAX(COALESCE(last_heartbeat_at, started_at)) AS at FROM screenings WHERE 1 ${only} GROUP BY ticket_id`).all(...args)),
       progress: byTicket(
-        db.prepare(`SELECT ticket_id, MAX(furthest_seconds) AS furthest, MAX(finished_at IS NOT NULL) AS finished
+        db.prepare(`SELECT ticket_id, COUNT(*) AS plays, MAX(furthest_seconds) AS furthest, MAX(finished_at IS NOT NULL) AS finished
                     FROM screenings WHERE voided_at IS NULL ${only} GROUP BY ticket_id`).all(...args),
       ),
     };
   }
 
-  // The ticket's expiry wins over a screening's resume window: it can be resumed
-  // until whichever comes first, as the viewer is told (films.js).
-  const resumableUntil = (until, status) => Math.min(until, status.expiresAt ?? Infinity);
+  // Until the back office is rebuilt for loans, a link is still described to it in
+  // 1.x's fields and states. A link that can lend, is waiting for the tape or has it
+  // is 'ok'; one that has lent is 'used_up'. expiresAt and openScreening are its
+  // loan's due time and playback while it has the tape. screeningLimit and
+  // daysAfterFirstPlay are what a 1.x link was sent with: history, read by nothing.
+  const OLD_STATE = { in: 'ok', waiting: 'ok', lent: 'ok', spent: 'used_up' };
+  const screeningRow = db.prepare('SELECT * FROM screenings WHERE id = ?');
 
   function adminTicket(req, t, now = Date.now(), ctx = ticketContext([t.id])) {
     const status = access.ticketStatus(t, now);
@@ -362,8 +368,10 @@ export function adminRoutes(deps) {
     // Browsers that opened the link. Once the ticket has a person they can't use
     // it: they're waiting, and get it back if it's released.
     const opened = ctx.browsers.get(t.id)?.n ?? 0;
-    // A screening only counts as open while the ticket can still play it.
-    const open = status.state === 'ok' ? status.open : null;
+    // The loan's playback, while the link has the tape.
+    const open = status.state === 'lent' ? screeningRow.get(status.loan.screening_id) : null;
+    const limit = t.screening_limit;
+    const plays = progress.plays ?? 0;
     return {
       id: t.id,
       code: t.code,
@@ -376,23 +384,24 @@ export function adminRoutes(deps) {
       // When its person kept it from a link. Null for one issued or given to them.
       claimedAt: t.claimed_at,
       label: t.label,
-      screeningLimit: t.screening_limit,
+      screeningLimit: limit,
       startBy: t.start_by,
       daysAfterFirstPlay: t.days_after_first_play,
       firstOpenedAt: t.first_opened_at,
       firstPlayedAt: t.first_played_at,
       revokedAt: t.revoked_at,
       createdAt: t.created_at,
-      state: status.state,
-      screeningsUsed: status.screeningsUsed,
-      screeningsLeft: status.screeningsLeft,
-      expiresAt: status.expiresAt,
+      state: OLD_STATE[status.state] ?? status.state,
+      screeningsUsed: plays,
+      screeningsLeft: limit == null ? null : Math.max(0, limit - plays),
+      expiresAt: open ? status.loan.due_at : null,
       openScreening: open
         ? {
             id: open.id,
-            resumableUntil: resumableUntil(open.resumable_until, status),
+            resumableUntil: status.loan.due_at,
             playingNow: open.active_until > now,
-            device: open.session_hash ? deviceOf.get(open.session_hash)?.device ?? null : null,
+            // The browser holding the play now; failing that, the one that took the tape.
+            device: (open.session_hash && deviceOf.get(open.session_hash)?.device) ?? status.loan.device ?? null,
           }
         : null,
       browsers: t.person_id == null ? opened : 0,
@@ -404,11 +413,11 @@ export function adminRoutes(deps) {
     };
   }
 
+  // screeningLimit and daysAfterFirstPlay, which 1.x's forms still send, are accepted
+  // and ignored: a link lends once, for its loan's days, and nothing reads the two.
   function ticketFields(b, sets, args) {
     if ('label' in b) sets.push('label = ?'), args.push(optText(b.label, 200, 'The label'));
-    if ('screeningLimit' in b) sets.push('screening_limit = ?'), args.push(optInt(b.screeningLimit, 'Number of plays', { min: 1, max: 1000 }));
     if ('startBy' in b) sets.push('start_by = ?'), args.push(optTime(b.startBy, 'Start-by date'));
-    if ('daysAfterFirstPlay' in b) sets.push('days_after_first_play = ?'), args.push(optInt(b.daysAfterFirstPlay, 'Days after first play', { min: 1, max: 3650 }));
   }
 
   // Only a ticket for anyone with the link can be keepable.
@@ -448,7 +457,11 @@ export function adminRoutes(deps) {
     const count = optInt(b.count, 'Number of tapes', { min: 1, max: 50 }) ?? 1;
     const sets = [];
     const args = [];
-    ticketFields({ label: b.label, screeningLimit: b.screeningLimit, startBy: b.startBy, daysAfterFirstPlay: b.daysAfterFirstPlay }, sets, args);
+    ticketFields({ label: b.label, startBy: b.startBy }, sets, args);
+    // How long this link lends the tape for, from the moment Play is pressed. Left
+    // out: the shop's default, as it is when Play is pressed.
+    const loanDays = optInt(b.loanDays, 'Due back after', { min: 1, max: 30 });
+    sets.push('loan_days = ?'), args.push(loanDays);
     // A ticket only one person can use, signed in with their passkey.
     if (b.personId != null) {
       const person = enabledPerson(b.personId);
@@ -464,6 +477,7 @@ export function adminRoutes(deps) {
           .prepare(`INSERT INTO tickets (code, film_id, ${cols.join(', ')}, created_at) VALUES (?, ?, ${cols.map(() => '?').join(', ')}, ?)`)
           .run(ticketCode(), film.id, ...args, Date.now());
         out.push(Number(r.lastInsertRowid));
+        access.logEvent('ticket-sent', { filmId: film.id, ticketId: out.at(-1), personId: b.personId != null ? Number(b.personId) : null, detail: { loanDays, note: false } });
       }
       return out;
     });
@@ -473,16 +487,16 @@ export function adminRoutes(deps) {
 
   router.get('/api/admin/tickets/:id', (req, res) => {
     const t = getTicket(req.params.id);
-    const status = access.ticketStatus(t);
+    // resumableUntil: a loan's playback until the tape is due (the due time as it is
+    // now, not as it was when Play was pressed); a 1.x play as it was written.
     const screenings = db
       .prepare(`
-        SELECT s.id, s.started_at AS startedAt, s.resumable_until AS resumableUntil, s.last_heartbeat_at AS lastHeartbeatAt,
+        SELECT s.id, s.started_at AS startedAt, COALESCE(l.due_at, s.resumable_until) AS resumableUntil, s.last_heartbeat_at AS lastHeartbeatAt,
                s.active_until AS activeUntil, s.position_seconds AS position, s.furthest_seconds AS furthest,
-               s.duration_seconds AS duration, s.finished_at AS finishedAt, s.voided_at AS voidedAt, ss.device
-        FROM screenings s LEFT JOIN sessions ss ON ss.id_hash = s.session_hash
+               s.duration_seconds AS duration, s.finished_at AS finishedAt, s.voided_at AS voidedAt, COALESCE(ss.device, l.device) AS device
+        FROM screenings s LEFT JOIN sessions ss ON ss.id_hash = s.session_hash LEFT JOIN loans l ON l.screening_id = s.id
         WHERE s.ticket_id = ? ORDER BY s.started_at DESC`)
-      .all(t.id)
-      .map((s) => ({ ...s, resumableUntil: resumableUntil(s.resumableUntil, status) }));
+      .all(t.id);
     const now = Date.now();
     const browserList = db
       .prepare(`
@@ -492,66 +506,109 @@ export function adminRoutes(deps) {
     res.json({ ...adminTicket(req, t, now, ticketContext([t.id], now)), screenings, browserList });
   });
 
+  // What access.js refuses is answered 409 with its code: tape-out (the link has the
+  // tape, so it can't be given, released or forgotten in its browsers, and its
+  // playback can't be given back), lent-once (a link that has lent can't be
+  // restored), would-end-loan (a due date moved into the past) and not-out.
+  const allowed = (r) => {
+    if (r.error) throw bad(r.error, 409);
+    return r;
+  };
+
+  // loanDays, on a link that has the tape, moves the date it's due back (access.js,
+  // setLoanDays). Everything is checked before anything is saved, and saved in one
+  // step: a refused due date leaves the link's other fields as they were too.
   router.patch('/api/admin/tickets/:id', (req, res) => {
     const t = getTicket(req.params.id);
+    const b = req.body || {};
     const sets = [];
     const args = [];
-    ticketFields(req.body || {}, sets, args);
-    claimableField(req.body || {}, t.person_id, sets, args);
-    if (sets.length) db.prepare(`UPDATE tickets SET ${sets.join(', ')} WHERE id = ?`).run(...args, t.id);
+    ticketFields(b, sets, args);
+    claimableField(b, t.person_id, sets, args);
+    const loanDays = 'loanDays' in b ? optInt(b.loanDays, 'Due back after', { min: 1, max: 30 }) : undefined;
+    allowed(
+      tx(
+        db,
+        () => {
+          const r = loanDays === undefined ? {} : access.setLoanDays(t.id, loanDays);
+          if (!r.error && sets.length) db.prepare(`UPDATE tickets SET ${sets.join(', ')} WHERE id = ?`).run(...args, t.id);
+          return r;
+        },
+        { immediate: true },
+      ),
+    );
     res.json(adminTicket(req, getTicket(t.id)));
   });
 
   // Gives the ticket to one person ({ personId }), or lets anyone with the link use
   // it again ({ personId: null, claimable }). Browsers that opened the link lose it
-  // to a person, and get it back on a release.
+  // to a person, and get it back on a release. Refused while the link has the tape.
   router.post('/api/admin/tickets/:id/holder', (req, res) => {
     const t = getTicket(req.params.id);
     const b = req.body || {};
     if (!('personId' in b)) throw bad('Say who gets it: personId, or null for anyone with the link');
     const personId = b.personId == null ? null : enabledPerson(b.personId).id;
     const claimable = 'claimable' in b ? bool(b.claimable, 'claimable') : false;
-    const r = access.setTicketPerson(t.id, personId, { claimable });
+    const r = allowed(access.setTicketPerson(t.id, personId, { claimable }));
     res.json(adminTicket(req, r.ticket));
   });
 
-  // Revoking also drops the ticket from every browser that opened it.
+  // Cancelling a link also drops it from every browser that opened it. If the link
+  // has the tape, this is taking the tape back: alsoCancelled then lists the
+  // member's other links for the film that went with it.
   router.post('/api/admin/tickets/:id/revoke', (req, res) => {
     const t = getTicket(req.params.id);
-    tx(db, () => {
-      db.prepare('UPDATE tickets SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL').run(Date.now(), t.id);
-      db.prepare('DELETE FROM session_tickets WHERE ticket_id = ?').run(t.id);
-    });
-    res.json(adminTicket(req, getTicket(t.id)));
+    const r = access.cancelTicket(t.id);
+    res.json({ ...adminTicket(req, r.ticket), tookBack: r.tookBack, alsoCancelled: r.alsoCancelled });
   });
 
-  // Undoes a revoke. Browsers have to open the link again.
+  // Undoes a cancel, for a link that never lent. Browsers have to open the link again.
   router.post('/api/admin/tickets/:id/restore', (req, res) => {
     const t = getTicket(req.params.id);
-    db.prepare('UPDATE tickets SET revoked_at = NULL WHERE id = ?').run(t.id);
-    res.json(adminTicket(req, getTicket(t.id)));
+    res.json(adminTicket(req, allowed(access.restoreTicket(t.id)).ticket));
   });
 
   // Forgets the ticket in every browser that opened it. The link still works.
+  // Refused while the link has the tape.
   router.post('/api/admin/tickets/:id/sign-out-browsers', (req, res) => {
     const t = getTicket(req.params.id);
-    db.prepare('DELETE FROM session_tickets WHERE ticket_id = ?').run(t.id);
+    allowed(access.forgetBrowsers(t.id));
     res.json(adminTicket(req, getTicket(t.id)));
   });
 
-  // Gives a screening back (say playback failed). It stays in the history.
+  // Taking a tape back, by its loan: the borrower's player stops with "taken back",
+  // the link is cancelled, and the film's tape is in for the next Play. ticketId is
+  // the link the page showed the loan on, and must be the loan's.
+  router.post('/api/admin/loans/:id/take-back', (req, res) => {
+    const loanId = Number(req.params.id);
+    const ticketId = req.body?.ticketId;
+    if (!Number.isSafeInteger(ticketId)) throw bad('Say which link the tape is out on: ticketId');
+    const r = access.takeBack(Number.isSafeInteger(loanId) ? loanId : 0, ticketId);
+    if (r.error === 'not-found') throw bad('Loan not found', 404);
+    allowed(r);
+    res.json({
+      loan: { id: r.loan.id, takenAt: r.loan.taken_at, dueAt: r.loan.due_at, endedAt: r.loan.ended_at, endedHow: r.loan.ended_how },
+      ticket: adminTicket(req, r.ticket),
+      alsoCancelled: r.alsoCancelled,
+    });
+  });
+
+  // Gives a 1.x play back. It stays in the history. A loan's playback is refused.
   router.post('/api/admin/screenings/:id/void', (req, res) => {
-    const s = db.prepare('SELECT * FROM screenings WHERE id = ?').get(Number(req.params.id));
-    if (!s) throw bad('Play not found', 404);
-    db.prepare('UPDATE screenings SET voided_at = ? WHERE id = ? AND voided_at IS NULL').run(Date.now(), s.id);
-    res.json(adminTicket(req, getTicket(s.ticket_id)));
+    const r = access.voidScreening(Number(req.params.id));
+    if (r.error === 'not-found') throw bad('Play not found', 404);
+    allowed(r);
+    res.json(adminTicket(req, getTicket(r.screening.ticket_id)));
   });
 
   // ------------------------------------------------------------ activity
   // Newest first, a page at a time: `next` is passed back as `before` for the
   // page after, which holds the events strictly older in (at, id) order, so
   // events at the same moment are neither repeated nor skipped.
+  // Three kinds: viewing, loans (what happens to a link and its tape), and accounts,
+  // which is every other kind: cards, passkeys, and links kept, given or released.
   const VIEWING = "('opened', 'play', 'heartbeat', 'finished')";
+  const LOANS = `(${LOAN_EVENTS.map((type) => `'${type}'`).join(', ')})`;
   router.get('/api/admin/activity', (req, res) => {
     const where = [];
     const args = [];
@@ -560,10 +617,10 @@ export function adminRoutes(deps) {
     // Account events name their person; viewing events find theirs through the session.
     if (req.query.person) where.push('COALESCE(e.person_id, s.person_id) = ?'), args.push(Number(req.query.person));
     if (req.query.heartbeats !== '1') where.push("e.type <> 'heartbeat'");
-    // Viewing, or accounts and links (everything else).
     if (req.query.kind === 'viewing') where.push(`e.type IN ${VIEWING}`);
-    else if (req.query.kind === 'accounts') where.push(`e.type NOT IN ${VIEWING}`);
-    else if (req.query.kind) throw bad('kind must be viewing or accounts');
+    else if (req.query.kind === 'loans') where.push(`e.type IN ${LOANS}`);
+    else if (req.query.kind === 'accounts') where.push(`e.type NOT IN ${VIEWING} AND e.type NOT IN ${LOANS}`);
+    else if (req.query.kind) throw bad('kind must be viewing, loans or accounts');
     if (req.query.before) {
       const m = /^(\d+)\.(\d+)$/.exec(String(req.query.before));
       if (!m) throw bad('before must be the next value of a previous page');

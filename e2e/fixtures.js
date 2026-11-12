@@ -39,10 +39,10 @@ export const cinemaName = () => env('E2E_CINEMA_NAME');
 // A label no other journey (or browser) will use.
 export const unique = (what, testInfo) => `${what} ${testInfo.project.name} ${Math.random().toString(36).slice(2, 7)}`;
 
-// Runs `fn` while no other journey holds `name`, in any browser: for journeys that
-// change something every browser shares, such as the cinema's colours. The lock is a
-// folder in the run's own folder, which global setup clears for each run.
-export async function exclusively(name, fn) {
+// Waits until no other journey holds `name`, in any browser, then holds it: the lock
+// is a folder in the run's own folder, which global setup clears for each run. Returns
+// what lets it go.
+async function hold(name) {
   const lock = path.join(path.dirname(env('E2E_SERVER_LOG')), `${name}.lock`);
   for (;;) {
     try {
@@ -53,10 +53,66 @@ export async function exclusively(name, fn) {
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
+  return () => fs.rmSync(lock, { recursive: true, force: true });
+}
+
+// Runs `fn` while no other journey holds `name`, in any browser: for journeys that
+// change something every browser shares, such as the cinema's colours.
+export async function exclusively(name, fn) {
+  const release = await hold(name);
   try {
     return await fn();
   } finally {
-    fs.rmSync(lock, { recursive: true, force: true });
+    release();
+  }
+}
+
+// ------------------------------------------------------------ one tape per film
+
+// Version 2 lends one tape per film, and the journeys of a browser project share that
+// project's copy of each film. So a journey that sends itself a link holds the
+// project's tapes to itself (`tapes-<project>`) from then until it ends: no other
+// journey can leave a tape out under it, or find one out. When it ends, every link
+// that has lent, for each film it sent a link for, is cancelled, which takes the tape
+// back if it is still out, so the next journey finds it in. A journey that makes its
+// link in the back office's own pages, not through admin.issueTicket, calls holdTape
+// itself before it presses Play. The time spent waiting for another journey's tapes
+// doesn't count against this one's.
+//
+// One lock for both of a project's films, not one for each: with a lock per film, a
+// journey holding the second film's tape and asking for the main one's, and another
+// holding them the other way round, wait for each other until both time out, and
+// every journey behind them with them (the admin's journey and the two-film journey of
+// tracks.spec.js did, when they happened to overlap).
+const journeys = new Map();
+const TAPE_WAIT = 5 * 60_000;
+
+export async function holdTape(forFilm = film) {
+  const info = base.info();
+  const mine = journeys.get(info.testId);
+  if (!mine) throw new Error('holdTape is for use inside a journey');
+  if (mine.films.has(forFilm.slug)) return;
+  // Once for the journey, however many links it sends, and if it sends two at once.
+  mine.held ??= (async () => {
+    const allowed = info.timeout;
+    const asked = Date.now();
+    info.setTimeout(allowed + TAPE_WAIT);
+    mine.release = await hold(`tapes-${info.project.name}`);
+    info.setTimeout(allowed + (Date.now() - asked));
+  })();
+  await mine.held;
+  mine.films.set(forFilm.slug, forFilm.id);
+}
+
+// As a journey ends: the tapes it held go back, and the next journey may take them.
+async function returnTapes(mine) {
+  try {
+    for (const id of mine.films.values()) {
+      const { data: links } = await call('GET', `/api/admin/tickets?film=${id}`);
+      for (const link of links) if (link.firstPlayedAt && !link.revokedAt) await admin.revoke(link.id);
+    }
+  } finally {
+    mine.release?.();
   }
 }
 
@@ -77,11 +133,12 @@ async function call(method, url, body, cookie = env('E2E_ADMIN_COOKIE')) {
 export const admin = {
   post: async (url, body = {}) => (await call('POST', url, body)).data,
   patch: async (url, body = {}) => (await call('PATCH', url, body)).data,
-  // A ticket for anyone with the link, with no screening limit, unless `fields` say
-  // otherwise: any of the admin's own fields, such as personId, screeningLimit,
-  // startBy or daysAfterFirstPlay.
+  // A link for anyone, lending for the shop's own days, unless `fields` say otherwise:
+  // any of the admin's own fields, such as personId, loanDays, startBy or claimable.
+  // The journey holds the film's tape from here on (holdTape, above).
   async issueTicket({ label, for: forFilm = film, ...fields } = {}) {
-    const [ticket] = await admin.post('/api/admin/tickets', { filmId: forFilm.id, label, screeningLimit: null, ...fields });
+    await holdTape(forFilm);
+    const [ticket] = await admin.post('/api/admin/tickets', { filmId: forFilm.id, label, ...fields });
     return ticket;
   },
   revoke: (ticketId) => admin.post(`/api/admin/tickets/${ticketId}/revoke`),
@@ -176,6 +233,19 @@ export async function signedInPerson(name) {
   if (!session) throw new Error('enrolling set no session cookie');
   const cookie = { name: 'om_session', value: session.slice('om_session='.length), url: env('E2E_BASE_URL'), httpOnly: true, sameSite: 'Lax' };
   return { person, cookie, auth };
+}
+
+// Another of that person's devices: a second sign-in with the same passkey, which is
+// a session of its own. The cookie to put in another browser context.
+export async function anotherDevice(auth) {
+  const { data: opts } = await call('POST', '/api/signin/options', {}, null);
+  const { res } = await call('POST', '/api/signin/finish', { credential: auth.get(opts.options) }, null);
+  const session = res.headers
+    .getSetCookie()
+    .map((c) => c.split(';')[0])
+    .find((c) => c.startsWith('om_session='));
+  if (!session) throw new Error('signing in set no session cookie');
+  return { name: 'om_session', value: session.slice('om_session='.length), url: env('E2E_BASE_URL'), httpOnly: true, sameSite: 'Lax' };
 }
 
 // ------------------------------------------------------------ every page
@@ -372,11 +442,26 @@ export const test = base.extend({
     }
   },
 
+  // The films whose tape this journey holds (holdTape), and what lets them go. They go
+  // back once the guard below has read the journey's pages, so a player stopped by
+  // that is never held against the journey.
+  tapes: async ({}, use, testInfo) => {
+    const mine = { films: new Map(), held: null, release: null };
+    journeys.set(testInfo.testId, mine);
+    try {
+      await use(mine);
+    } finally {
+      journeys.delete(testInfo.testId);
+      await returnTapes(mine);
+    }
+  },
+
   // Skips everything when global setup couldn't make the films, or a project's
   // browser isn't installed (playwright.config.js), and fails any test whose pages
   // threw, or had anything blocked by their Content-Security-Policy.
   guard: [
-    async ({ pageErrors, bypassCSP }, use, testInfo) => {
+    // (tapes: set up before this guard, so it is taken down after it.)
+    async ({ pageErrors, bypassCSP, tapes }, use, testInfo) => {
       testInfo.skip(Boolean(env('E2E_SKIP')), env('E2E_SKIP'));
       testInfo.skip(Boolean(testInfo.project.metadata.missing), testInfo.project.metadata.missing);
       // As the test resolves it: from playwright.config.js, test.use or contextOptions.

@@ -62,7 +62,7 @@ test('a backup is a checked, complete copy that restores into a working server; 
     const admin = await adminBrowser(srv.base);
     await admin.post('/api/admin/scan');
     const filmId = (await admin.get('/api/admin/films')).data[0].id;
-    await admin.post('/api/admin/tickets', { filmId, label: 'Sam', screeningLimit: 2 });
+    await admin.post('/api/admin/tickets', { filmId, label: 'Sam', loanDays: 2 });
 
     // Some downloaded artwork to carry along, and a logo and tab icon uploaded in Settings.
     const { dataDir } = srv;
@@ -124,7 +124,9 @@ test('a backup is a checked, complete copy that restores into a working server; 
     const films = (await restored.get('/api/admin/films')).data;
     assert.deepEqual(films.map((f) => f.slug), ['arrival']);
     const tickets = (await restored.get('/api/admin/tickets')).data;
-    assert.deepEqual(tickets.map((t) => [t.label, t.screeningLimit]), [['Sam', 2]]);
+    // The link with what it was sent with: its label, and how long it lends for.
+    assert.deepEqual(tickets.map((t) => t.label), ['Sam']);
+    assert.deepEqual(db.prepare('SELECT label, loan_days, pick_note FROM tickets').all().map((t) => ({ ...t })), [{ label: 'Sam', loan_days: 2, pick_note: null }]);
     const restoredLogo = (await restored.get('/api/admin/settings')).data.logo;
     assert.deepEqual(restoredLogo, logo.data.logo);
     const res = await fetch(`http://127.0.0.1:${server.address().port}${restoredLogo.url}`);

@@ -10,6 +10,8 @@ import { Host, shelfLines } from './tapeWords.js';
 const NOTICES = {
   'unknown-ticket': (site) => ({ kind: 'bad', lead: "That link doesn't work.", text: `Check that you copied all of it, or ask ${hostName(site)}.` }),
   'ticket-revoked': (site) => ({ kind: 'info', lead: `${Host(site)} has taken that tape back.` }),
+  // A link that has lent, opened in a browser that doesn't hold it.
+  'ticket-spent': (site) => ({ kind: 'info', lead: 'That link has been used.', text: `The tape it lent is back in the shop. If you'd like to watch it again, ask ${hostName(site)}.` }),
   'ticket-kept': (site) => ({ kind: 'info', lead: "That tape has been kept on someone's membership card.", text: `It only works for them now. Ask ${hostName(site)}.` }),
   'film-unavailable': () => ({ kind: 'info', lead: "That film isn't available at the moment." }),
   'too-many-requests': () => ({ kind: 'warn', lead: 'Too many attempts from this connection.', text: 'Wait a few minutes, then open the link again.' }),

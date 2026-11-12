@@ -63,6 +63,14 @@ Yours. These are not reopened here.
 | 11 Nov 2026 | Question 3. At the upgrade, when two friends are part-way through the same film, one keeps it: the one playing now, else the one heard from last. The others stop, and borrow it once it's back (answer a). The notes say "update when nobody is watching", and the preview names who would be cut off. |
 | 11 Nov 2026 | Question 4. At the upgrade, a link that has been played before, still has plays left and has nobody part-way through a film on it lends once more (answer a). It gets a full loan from the new Play, which can be longer than 1.x would have given. Used-up and expired links are spent. |
 | 11 Nov 2026 | Question 15. At the upgrade, a friend part-way through a film on a link that 1.x would have let play again afterwards (plays left, no limit, or days left) keeps the tape for that play only. The open play is the link's one loan: due at the end of its time to come back, then the link is spent, and the preview names these links (answer a). You send a new link to anyone the preview names. |
+| 11 Nov 2026 | Question 2. A link can't change hands while it has the tape (answer a). A friend can keep a link ("Sign in and keep it") only before Play, and only while the tape is in; you can give a link to someone, or let anyone use it, only while that link doesn't have the tape. A tape never moves quietly. What it costs: a friend who presses Play on a link anyone can use and signs in afterwards has the tape in that browser only (not on their card, not on another device, no response for that loan); a waiting link can't go on a card until the tape is back; and when Sam has the tape and Jo should watch instead, you take the tape back, which cancels Sam's link, and send Jo a new one. 1.x let a link be kept with a play open (`server/access.js:263-289`), and the mock-up drew the tape going with the link; both stop. |
+| 11 Nov 2026 | Question 5. A tape taken on a link anyone can use whose browser is signed out (by itself, or by "Sign out every friend and member"), or a member's tape when their card is turned off: the tape comes back at once and the link is spent (answer a). A tape on a member's own link stays theirs when they sign out of one device. The sign-out confirmation will say which tape goes back. |
+| 11 Nov 2026 | Question 9. One member may have two links for the same film (answer a). The second waits, and lends after the first is back. Play takes their oldest unused link, and only that one is spent. The form warns. |
+| 11 Nov 2026 | Question 12. A second browser on a link anyone can use, while the first has the tape, sees the same "Out on loan" as anyone, and the link is spent once the tape is back (answer a). It can't take over, even from a paused tape. |
+| 11 Nov 2026 | Question 14. Taking a tape back from a member cancels their other waiting links for that film in the same step (answer a). Links anyone can use that the borrower's browser also holds are named in the confirmation and left alone, because other people hold them too. |
+| 11 Nov 2026 | Question 6. After a take-back the borrower's page shows "Nothing on the shelf here", as a cancelled link does today, and the player says you took it back (answer a). A page of its own can come later, because the loan remembers its borrower. |
+| 11 Nov 2026 | Question 8. You can move the due-back date of a tape that is out, earlier or later, not into the past (answer a). |
+| 12 Nov 2026 | Questions 16, 17, 13 and 7, answered as recommended. **16 (b):** taking a tape back from a browser where a member is signed in also cancels that member's never-lent links for the film (built with slices 2 and 3, `takeBackLoan`; listed in `alsoCancelled`). **17 (a):** a cancelled member link says so to anyone who opens it, as 1.x. **13 (b):** a signed-in friend can hand a tape back with a response at any time while they have it. **7: yes**, members see that a film on the members' shelf is out and when it is due back, never who has it. The rows under To decide and the notes that call 16 and 17 open are older than this row. |
 
 "The mock-up" rows are things the mock-up added to the roadmap
 (`.claude/design/vhs/app/notes.md`, "What's new beyond the roadmap"). They were not
@@ -94,7 +102,7 @@ or a friend would notice.
 | A loan is 1 to 30 days, counted from the moment Play is pressed. You'd notice: the send form and Settings take 1 to 30, and a 1.x link that said more lends for 30. | A browser's session lasts 90 days (`server/config.js:50`), and 1.x allowed "3650 days after first play" (`server/routes/admin.js:411`), which would lock a film for years. |
 | *Build.* The borrowing browser's session is extended to a day past the due-back time, and its cookie with it: Play's answer sends the cookie again with the new life. | A session ends 90 days after it was made, never later, and the cookie is set once with that same life (`server/sessions.js:150-153`); nothing sends it again (`:157-168`). A browser that opened its first link 88 days ago would otherwise lose the tape mid-loan, and the server would go on counting the tape as out to a browser that had forgotten it. |
 | The clock keeps running if the film is taken off the shelf or its files break while it is out. You'd notice: with broken files the borrower's page says the film isn't available, and still shows the due date and Return it now. Off the shelf, the borrower sees no such film and can't return it. | As the time to come back does today (`docs/access.md:286-287`). You can take the tape back or move the date (question 8). |
-| While a link has the tape out: giving it to a member, letting anyone use it, and **Sign out browsers** are refused. **Restore the tape** only works for a link that never lent. **Give back** (a play) goes. You'd notice: on the page of a link that has the tape, those buttons are disabled, with a line saying why. | Each would leave a tape nobody can play, or let a link lend twice. For giving and letting anyone use it, the mock-up drew the opposite ("The tape goes with the link", tagged Open question, `.claude/design/vhs/app/office/office.js:461-462`), and 1.x allows both with a play open (`server/access.js:296-313`). So that part is yours: question 2. |
+| While a link has the tape out: giving it to a member, letting anyone use it, and **Sign out browsers** are refused. **Restore the tape** only works for a link that never lent. **Give back** (a play) goes. You'd notice: on the page of a link that has the tape, those buttons are disabled, with a line saying why. | Each would leave a tape nobody can play, or let a link lend twice. For giving and letting anyone use it, the mock-up drew the opposite ("The tape goes with the link", tagged Open question, `.claude/design/vhs/app/office/office.js:461-462`), and 1.x allows both with a play open (`server/access.js:296-313`). That part was yours: question 2, answered (a) on 11 Nov 2026. |
 | A spent link opened in a browser that doesn't hold it shows a notice on the front page, makes no session and doesn't name the film. Its preview in a chat app shows the shop, not the film. | The link has done its job. It should tell a newcomer nothing. |
 | Responses: one of the four is required on the form ("Return it now" is the way to say nothing); only for a tape borrowed on a member's own link; kept until you delete one; the text never goes in the Ledger. Beyond the mock-up's plain list: the Responses tab counts the unread ones, and each can be marked as read. | A link anyone can use may have been forwarded. Events are deleted after a year; a friend's words shouldn't vanish with them. The unread count is one column (`read_at`); say so and it goes. |
 | A loan on a link anyone can use remembers the browser, not a name. If that browser was signed in, the back office shows the name while the session's row exists, and the device alone after the clean-up removes it (about a year). | Settled: the borrower there is the browser. The clean-up promises that ended sessions go (`server/retention.js:25-29`). A column for the name can be added later if you want it kept for good. |
@@ -105,44 +113,20 @@ or a friend would notice.
 
 Yours. The plan below is written with our recommendation for each. "Waits" names the
 first slice that can't be finished without your answer. Questions 1, 3, 4 and 15, which
-slice 1 waited on, were answered on 11 Nov 2026 and are under [Settled](#settled); the
-others keep their numbers. Questions 2, 5, 9 and 12 come first now, for slice 2.
-Questions 12 to 15 came out of the plan's review. Mock-up files are cited from
-`.claude/design/vhs/app/`.
+slice 1 waited on, and questions 2, 5, 9, 12, 14, 6 and 8, which slices 2 and 3 waited
+on, were answered on 11 Nov 2026 and are under [Settled](#settled); the others keep
+their numbers. Question 13 comes first now, for slice 4. Questions 12 to 15 came out of
+the plan's review, and 16 and 17 out of the review of slices 2 and 3. Mock-up files are
+cited from `.claude/design/vhs/app/`.
 
 | # | Question | Options | We recommend | Waits |
 |---|---|---|---|---|
-| 2 | **A link has the tape out. Can the link still change hands?** Two ways: the friend keeps it ("Sign in and keep it"), or you give it to someone or let anyone use it. Both are the mock-up's question 5, which drew "yes" and was not among your answers of 10 Nov. In full below the table. | (a) no: keeping only before Play, giving and letting anyone use it only while the link doesn't have the tape; (b) yes: the tape goes with the link, as the mock-up drew; (c) no, and keeping goes altogether | **(a).** A tape never moves quietly. But (a) takes away things 1.x allows and the mock-up drew, so read what it costs below. | 2 |
-| 5 | **A tape was taken on a link anyone can use, and that browser is signed out (by itself, or by "Sign out every friend and member"). Or a member with a tape out has their card turned off. What happens to the tape?** A tape on a member's own link stays theirs when they sign out of one device: this is not about that. | (a) it comes back at once and the link is spent; (b) it stays out until it's due, unless you take it back; (c) another browser with the same link can carry on with it | **(a).** The film is free at once and nobody inherits a stranger's place. With (b) one press in Settings can lock several films for days. (c) tells the other holders that the borrower has gone. The sign-out confirmation would say which tape goes back. | 2 |
-| 6 | **You take a tape back. What does the borrower's page show?** | (a) "Nothing on the shelf here", as a cancelled link does today, and the player says you took it back; (b) a page of its own that names the film | **(a)** for 2.0.0. It keeps the settled rule, and (b) can be added later because the loan remembers its borrower. | 3 |
 | 7 | **Do members see "Out on loan, back Friday" on the members' shelf for films they have no link to?** | yes / no | **Yes.** It never says who. But it tells every member when a film is out, which goes beyond "anyone else with a link". | 5 |
-| 8 | **Can you change the due-back date of a tape that is already out?** | (a) yes, earlier or later, not into the past; (b) no, only take it back | **(a).** "Can I keep it another day?" is the most likely thing a friend will ask. | 3 |
-| 9 | **Can one member have two links for the same film?** | (a) yes: the second waits, and lends after the first is back; the form warns; (b) no: refuse a second while one is live | **(a).** Links are sent freely. Play takes their oldest unused link, and only that one is spent. Question 14 is what a take-back does to the second. | 2 |
 | 10 | **The line saying what you can see is protected. May it change to fit loans?** Both endings are written out below the table. | (a) "this link is opened", "the tape is taken out and played"; (b) leave it word for word; (c) as (a), plus the mock-up's clause on links anyone can use: "and, while it's out, which link took it" | **(a).** Nothing new is disclosed, but "this tape" no longer means the link. | 7 |
 | 11 | **Which words change now that "tape" is the film's copy and not the link?** One rule to pick for the friend's pages, then two tables, below. | the rule: (a) or (b); the tables: as proposed, or your own | **(a)**, and as proposed. | 7 |
-| 12 | **A friend opens the same link anyone can use in a second browser while the first has the tape. What does the second see?** The likeliest case is one friend: Play in a chat app's own browser, then the link again in Safari or on the TV. 1.x lets the second take over after a pause (`test/journey.test.js:129-150`). | (a) the same "Out on loan" as anyone, and the link is spent once the tape is back; (b) "This link's tape is out in another browser until Fri. Carry on there, or return it there." | **(a).** It follows from two settled rules: the borrower is the browser that pressed Play, and anyone else sees "Out on loan". (b) tells every holder of a forwarded link that one of them has the tape, and ends the promise that every non-borrower gets the same answer. It reveals during the loan what (a) reveals after it. | 2 |
 | 13 | **Can a signed-in friend hand a tape back with a response before reaching the end?** | (a) only once it's watched to the end, as the mock-up drew (`friend/friend.js:201-205`); (b) at any time while they have it | **(b).** "Not for me" is what someone who stops halfway would want to say. The paused page then offers "Hand it back" beside "Return it now". | 4 |
-| 14 | **You take a tape back from a member who has another link for that film waiting (question 9, answer a). What happens to the other link?** | (a) it is cancelled in the same step; links anyone can use that the borrower's browser holds are named in the confirmation and left alone, because other people hold them too; (b) only the link that lent is cancelled, and the confirmation names the others and offers to cancel them | **(a).** It is what "cancels that person's link" means with two links. Otherwise the borrower's page offers Play again the moment you take the tape back. | 3 |
-
-**Question 2, in full.** What each answer means for a friend and for you:
-
-- **(a) Not while it's out.** A friend who presses Play on a link anyone can use and
-  signs in afterwards has the tape in that browser only: it isn't on their card, it
-  doesn't follow them to another device, and they can't leave a response for that
-  loan. 1.x lets a link be kept with a play open (`server/access.js:263-289`); that
-  stops. Keeping is also not offered while the tape is out on another link, where the
-  mock-up's out page offers it (`friend/friend.js:198-200`), so a waiting link can't
-  go on a card until the tape is back. The front page's "Sign in to keep them on your
-  membership card" (`friend/friend.js:338`) goes. For you: when Sam has the tape and
-  asks whether Jo can watch instead, you take the tape back, which cancels Sam's link,
-  and send Jo a new one.
-- **(b) The tape goes with the link.** Keeping moves the tape onto the friend's card:
-  they can watch on any device and hand it back with a response. Giving moves it to
-  whoever the link is now for, until it's due. The costs: other browsers that opened
-  the link see "kept" where they saw "Out on loan", which tells them the keeper has it
-  (about the size of what is accepted already, see "Never who has it"); after a give,
-  the first borrower's player just stops; and one link has lent to two people.
-- **(c) No keeping at all.** A link goes on a card only when you give it to a member.
+| 16 | **You take a tape back from a member who pressed Play on a link anyone can use, signed in. Do their own links for that film go too?** Question 14 only speaks of a tape taken on the member's own link. Here the loan is the browser's (question 2), so today their own link is left: their page shows it with the tape in, and Play takes the tape again. Written out below the table. | (a) leave their own links, and name them in the confirmation with a way to cancel each, as for links anyone can use; (b) cancel that member's never-lent links for the film in the same step, as question 14 does | **(b).** It is the outcome question 14 was answered to prevent, and the back office shows that borrower by name. Built today: (a) without the confirmation, which is slice 9's. | 5 |
+| 17 | **A member's link that you cancelled, opened by someone who isn't signed in as them: "that tape was taken back", or "sign in"?** 1.x says the first to anyone with the link's address, and 2.0 still does, so a take-back from a member can be seen by whoever has a copy of their link. A member's link that is only spent asks a stranger to sign in. | (a) leave it, as 1.x; (b) ask for the sign-in first, and tell only that member, or a browser that held the link, that it was cancelled | **(a).** It says the link was cancelled, not who has any tape, and (b) makes the member sign in just to be told their link is gone. | 10 |
 
 **Question 10, in full.** Today (`web/src/pages/tapeWords.js:21-27`): "{Host} can see
 when this tape is opened and played, the kind of device (such as “Safari on iPhone”),
@@ -153,6 +137,17 @@ the kind of device (such as “Safari on iPhone”), …". The mock-up's line fo
 anyone can use ends "…roughly how far playback gets and, while it's out, which link
 took it" (`friend/friend.js:162-163`). We leave that clause out of (a) because "this
 link" already says it, and 1.x ties each play to its link today. Answer (c) keeps it.
+
+**Question 16, in full.** Sam is signed in and opens a link anyone can use; Play takes
+the tape for that browser. You also send Sam a link of their own for the film. You take
+the tape back: the link anyone can use is cancelled, Sam's player says you took it back,
+and Sam's page then shows their own link, with Play. With (b), Sam's own link is
+cancelled in the same step and listed in `alsoCancelled`, and the page is "Nothing on
+the shelf here" (question 6). The browser's sign-in is read at the moment of the
+take-back: a browser that signed out has no tape to take back (question 5). Other links
+anyone can use that the browser holds are left alone either way (question 14).
+`test/loans.test.js` pins (a) by name, so (b) is about six lines in `takeBackLoan` and
+that test turned round.
 
 **Question 11.** First the rule for a friend's pages. What you sent them is:
 
@@ -387,9 +382,12 @@ that takes, returns, takes back, keeps or moves a due date, and every minute by 
 sweeper for all films. It writes `ended_at` as the due time, or the moment the
 borrower's session ended or their card was turned off if sooner (`due`, `signed-out` or
 `disabled`), and logs `returned`. The time it writes is
-`MAX(taken_at, MIN(due_at, COALESCE(<that moment>, :now)))`, so a clock that stepped
-back, or a session row that is gone, can never break the `CHECK` on `ended_at`. One bad
-row would otherwise stop every Play on its film and every sweep. The sweeper follows
+`MAX(taken_at, MIN(due_at, :now, COALESCE(<that moment>, :now)))`, so a clock that
+stepped back, or a session row that is gone, can never break the `CHECK` on `ended_at`:
+one bad row would otherwise stop every Play on its film and every sweep. Nor is an end
+ever dated later than the moment it is written: a session whose row says it was signed
+out at a time the clock hasn't reached is signed out by the test above, and its tape is
+written back as `signed-out`, now, not as `due` at a date still ahead. The sweeper follows
 `retention.start()` (`server/retention.js:88-101`, `server/index.js:19`), so tests call
 it with their own clock.
 
@@ -475,7 +473,7 @@ one choice, as today.
 |---|---|---|---|
 | Send a link | you | a `tickets` row with `loan_days` (the form's value, else NULL) and `pick_note`. Takes nothing. | `ticket-sent` |
 | Open `/t/<code>` | as today (`server/routes/viewer.js:42-70`) | attaches the link to the browser, even while the tape is out. A spent link in a browser that doesn't hold it: 410 `ticket-spent`. | `opened`, from the film page |
-| Play, view `in` | holder; `closeStale`, then the view is still `in` | a screening and a loan, due `now + loanDays` days; `first_played_at`. A browser's loan: its session extended to due + 1 day, and its cookie sent again (below). | `lent`, `play` |
+| Play, view `in` | holder; `closeStale`, then the browser's session is still live (read again inside the step) and the view is still `in` | a screening and a loan, due `now + loanDays` days; `first_played_at`. A browser's loan: its session extended to due + 1 day, and its cookie sent again (below). | `lent`, `play` |
 | Play, view `yours` | the borrower. Another of their own devices active in the last 75 s and still able to play: `playing-elsewhere` | claims the screening (`server/access.js:203-208`, unchanged, among one member's devices). A browser's loan: the cookie sent again. | `play` (resumed) |
 | Play, view `out`, `spent`, `expired`, `unavailable` | | 409 with the view's name | |
 | Reaching 92% | the borrower's player | `finished_at`, as today (`server/access.js:250-253`). The tape stays out. | `finished` |
@@ -483,9 +481,9 @@ one choice, as today.
 | It comes due | nobody: the test above | written later as `due` at `due_at` | `returned`, dated `due_at` |
 | A browser with a tape out is signed out, or its session ends (question 5) | nobody: the test above | written later as `signed-out`, at that moment | `returned` |
 | A member's card is turned off (question 5) | you; inside `people.disable` | their open loans end as `disabled`, in the same transaction | `returned` |
-| You take the tape back | by loan id, with its link's id as a check; loan live | `taken-back`; the link's `revoked_at`; its `session_tickets` rows deleted; the screening stops. A member's loan: their other never-lent links for the film are cancelled too (question 14). | `returned`, and `ticket-cancelled` for each other link |
+| You take the tape back | by loan id, with its link's id as a check; loan live | `taken-back`; the link's `revoked_at`; its `session_tickets` rows deleted; the screening stops. A member's loan: their other never-lent links for the film are cancelled too (question 14). A browser's loan, signed in or not: no other link is touched (question 16). | `returned`, and `ticket-cancelled` for each other link |
 | You cancel a link | if it has the tape, this is taking it back; otherwise today's revoke (`server/routes/admin.js:519-526`) | | `ticket-cancelled` |
-| You move the due date (question 8) | loan live; refused if the new time has passed | `due_at`; a browser's session extended, and its cookie at the borrower's next Play or film page | `due-changed` |
+| You move the due date (question 8) | loan live, and the days sent differ from the link's own (the same value again moves nothing); refused if the new time has passed | `due_at`; a browser's session extended, and its cookie at the borrower's next Play or film page | `due-changed` |
 | Restore | refused (409 `lent-once`) if the link has a loan | today's restore | `ticket-restored` |
 | Give, release, Sign out browsers | refused (409 `tape-out`) while the link has the tape (question 2) | today's otherwise (`server/access.js:296-313`) | as today |
 | Keep (question 2) | view `in` only | today's keep (`server/access.js:271-289`) | `ticket-kept` |
@@ -496,7 +494,10 @@ Pressing Play keeps its shape (`server/access.js:193-224`): one IMMEDIATE transa
 that runs `closeStale` for the film, then `filmAccess`, then resumes (`yours`), takes
 (`in`: the screening, the loan, `first_played_at`, the two events) or answers with the
 view's name. `loans_out` is the backstop for a second process on the same file. Line
-`:210`, the only reader of `resumeWindowHours`, goes.
+`:210`, the only reader of `resumeWindowHours`, goes. The route reads the browser's
+session before the transaction begins, so the step reads it again (the live-session
+test takeovers already use): a browser that a second process signed out in between
+takes nothing, where its loan would have been over before it began and its link spent.
 
 Extending the session's row (a new `prolong` in `server/sessions.js`, which only ever
 lengthens) is half of it: the browser's cookie was set once, with the life the session
@@ -530,17 +531,26 @@ runs (`server/routes/admin.js:523`).
 const s = q.screening.get(screeningId);
 const loan = s ? q.loanByScreening.get(s.id) : null;
 const mine = isBorrower(viewer, loan);
-if (!s || (!mine && s.session_hash !== viewer.id_hash)) return { error: 'not-found' };
-if (!mine) return { error: 'screening-ended' };              // a 1.x play the upgrade gave no loan
-if (!live(loan, now)) return { error: endedCode(loan, now) }; // returned | due | taken-back
-// then unpublished or unavailable, then playing-elsewhere for the borrower's other device, then progress as today
+const loanless = Boolean(s) && !loan && s.session_hash === viewer.id_hash; // a 1.x play the upgrade gave no loan
+if (!mine && !loanless) return { error: 'not-found' };
+if (!mine) return { error: 'screening-ended' };
+if (!live(loan, now)) return { error: endedCode(loan) };      // returned | due | taken-back
+// then revoked, unpublished or unavailable, then playing-elsewhere for the borrower's other device, then progress as today
 ```
+
+(As built in slice 2, a play that has a loan answers only its borrower: a browser whose
+session a play names, but whose loan is someone else's, gets `not-found` too, where the
+first draft of these lines said `screening-ended`.)
 
 `mayStream`: your back office browser, or a browser whose view is `yours` and which
 holds the loan's screening. Signing in carries a browser's loan along: a `moveLoans`
 statement beside `moveScreenings` (`server/sessions.js:135-136`, `:188-191`), under the
-same condition. Signing in from another person's session carries nothing, as today, so
-that browser's loan ends.
+same condition. The loan stays the browser's (question 2), so it lives and dies with the
+new session: sign-in makes that session last a day past the due time of the tape it
+carries, as Play did for the old one, and the cookie it sets has that life. Otherwise a
+shop whose `VIEWER_SESSION_DAYS` is shorter than a loan (the setting has no minimum)
+would take the tape back days early, as `signed-out`. Signing in from another person's
+session carries nothing, as today, so that browser's loan ends.
 
 ### Links for one member, and keeping
 
@@ -609,6 +619,10 @@ What can still be worked out, and is accepted: **when**, not who.
   another link. A length per film (answer b) gives nothing away.
 - A "that tape has been kept" answer (`server/routes/viewer.js:108-109`) still says a
   link you opened was kept, as in 1.x.
+- A cancelled link answers 410 `ticket-revoked` to anyone who opens its address, signed
+  in or not, as in 1.x (`server/routes/viewer.js:50`, before the check on whose link it
+  is). So someone with a copy of a member's link can tell that it was cancelled, which
+  a take-back does to it. It says nothing of who had a tape. Question 17.
 
 ## The API
 
@@ -653,10 +667,10 @@ Bare line numbers in this table are in `server/routes/admin.js`.
 |---|---|
 | `GET /api/admin/films`, `/films/:id` | + `tape: { state: 'in' \| 'out' \| 'off', loan }` and `links: { live, waiting, total }`. The detail adds `lending`, counted from links, loans and responses, never from events, as `viewingOf` is (`server/routes/admin.js:105-121`). `tickets.active` (`:173-179`) stays until slice 9. |
 | `GET /api/admin/loans` (new) | `?live=1&film=&person=&ticket=`. Each: `{ id, film, ticket: { id, label }, borrower: { kind: 'person', person } \| { kind: 'browser', device, signedInAs }, takenAt, dueAt, endedAt, endedHow, live, playingNow, position, finished, response, otherLinks }`. `signedInAs` is there only while that browser's session row exists; after the clean-up the device stands alone. `otherLinks`, on a live loan: the borrower's other links for the film that could still lend, for the take-back confirmation (question 14). |
-| `POST /api/admin/loans/:id/take-back` (new) | Body `{ ticketId }`, which must match. 200 adds `alsoCancelled`, the ids of a member's other links it cancelled. 409 `not-out`. |
-| `adminTicket` (`:351-405`) | + `loan`, `loanDays`, `pickNote`, and `linkState`, the state table's back office column: `unopened`, `opened` (both `in`), `waiting`, `has` (`lent`), `done` (`spent`), `missed` (`expired`), `cancelled` (`revoked`), `off` (`unpublished`), `unavailable`. The 1.x fields stay until slice 9. |
-| `POST /api/admin/tickets` (`:445-472`) | + `loanDays` (1 to 30, or null for the default) and `pickNote` (up to 2,000). `screeningLimit` and `daysAfterFirstPlay` are accepted and ignored until slice 9, then refused. Logs `ticket-sent`. |
-| `PATCH /api/admin/tickets/:id` | + `pickNote`, `loanDays`. On a link that has the tape, `loanDays` moves the due date (question 8); 409 `would-end-loan` if that has passed. |
+| `POST /api/admin/loans/:id/take-back` (new) | Body `{ ticketId }`, which must match. 200 adds `alsoCancelled`, the ids of a member's other links it cancelled (always empty for a browser's loan: question 16). 409 `not-out`. |
+| `adminTicket` (`:351-405`) | + `loan`, `loanDays`, `pickNote`, and `linkState`, the state table's back office column: `unopened`, `opened` (both `in`), `waiting`, `has` (`lent`), `done` (`spent`), `missed` (`expired`), `cancelled` (`revoked`), `off` (`unpublished`), `unavailable`. The 1.x fields stay until slice 9, in 1.x's words (from slice 2): `state` is `ok` for a link that is `in`, `waiting` or `lent` and `used_up` for one that is `spent`; `expiresAt` and `openScreening` are the loan's due time and playback while the link has the tape; `screeningsUsed` counts its plays. |
+| `POST /api/admin/tickets` (`:445-472`) | + `loanDays` (1 to 30, or null for the default) and `pickNote` (up to 2,000). `screeningLimit` and `daysAfterFirstPlay` are accepted and ignored until slice 9, then refused; the same on `PATCH`, which 1.1.0's link page still sends them to. Logs `ticket-sent`, which is not "last activity" on a link: one nobody has touched still shows none. |
+| `PATCH /api/admin/tickets/:id` | + `pickNote`, `loanDays`. On a link that has the tape, a `loanDays` that differs from the link's own moves the due date (question 8); 409 `would-end-loan` if that has passed. The link's own value sent again, null included, changes nothing, so a form may send every field with each save. |
 | `…/revoke`, `/restore`, `/holder`, `/sign-out-browsers` | As in "What can happen to a tape". |
 | `POST /api/admin/screenings/:id/void` (`:543-548`) | Refuses a loan's screening from slice 3 (409 `tape-out`). Removed with its button, in slice 9. |
 | `GET /api/admin/responses` (new) | `{ responses: [{ id, kind, message, createdAt, readAt, person, film, loan: { takenAt, dueAt, endedAt } }], unread }`. `POST …/:id/read`, `DELETE …/:id`. |
@@ -806,7 +820,8 @@ exception, so "done when" holds with it: a journey told over several tests may p
 Play again on the link its first test played (`test/journey.test.js:182`, a play given
 back and then played again). The guard reads `screenings`, so slice 2 points it at loans
 if Play stops writing there, and that journey is rewritten there (under
-[Tests](#tests)). It watches every database `startServer` opens, and the three that
+[Tests](#tests)). (Slice 2: Play still writes a screening for each loan, the journey is
+rewritten, and the exception went with it.) It watches every database `startServer` opens, and the three that
 tests open themselves for `createApp` (`test/migration.test.js`, `test/backup.test.js`).
 Of the journeys only chromium has been run.
 
@@ -849,15 +864,15 @@ required column and every reference of the two new tables.
 
 ### 2. Loans: taking the tape
 
-- [ ] `server/access.js`: the live test, `isBorrower`, `closeStale`, `ticketStatus`,
+- [x] `server/access.js`: the live test, `isBorrower`, `closeStale`, `ticketStatus`,
   `filmAccess` and its ranking, `mayStream`, `startScreening`, `heartbeat`, `canKeep`.
-- [ ] Around it: `loanDays` as a setting, with the retired one, and on
+- [x] Around it: `loanDays` as a setting, with the retired one, and on
   `POST /api/admin/tickets`, which logs `ticket-sent`; `moveLoans` and `prolong` in
   `server/sessions.js`, with the cookie sent again from the Play route and the film
   page; `endLoansOf` called from `people.disable`; the retention guard; the sweeper;
   the refusal reason; `ticketForViewer` with the two kept fields; Play's answer;
   `/api/me`'s `tickets`.
-- [ ] The start-by rule in the state table: `waiting`, not `expired`, while the tape is
+- [x] The start-by rule in the state table: `waiting`, not `expired`, while the tape is
   out.
 
 **Done when** two links pressed at once give one 200 and one 409 `out`, in one process
@@ -866,29 +881,189 @@ after a start-by passes and with the film's files broken; a tape past due is tak
 the next link with nothing written in between; a browser whose session was made 89
 days ago plays, and two days later still has its cookie and its tape; a card turned
 off and on again leaves the loan ended; your preview takes nothing; and 1.1.0's page
-still plays and resumes. Waits on questions 2, 5, 9 and 12.
+still plays and resumes. Questions 2, 5, 9 and 12, which it waited on, were answered on
+11 Nov 2026.
 
 Slice 2 is not tried on its own. Until slice 3, 1.1.0's Cancel, Restore, Give, Sign
 out browsers and Give back still act on a link that has the tape, with none of the
 guards above: a cancel there would leave a tape out that nobody can play. So 2 and 3
 merge into `v2` together.
 
+Built on 11 Nov 2026, not yet committed. 852 unit tests became 896, all passing on Node
+26 (22 and 24 still wait for the draft pull request). What differs from the lines above,
+or was left open by them:
+
+- **The 1.x tests.** About 60 failed under the new rules and were rewritten, each with
+  a comment saying what 1.x did and which rule replaced it. Four things have no test
+  any more, because nothing does them: a second play on one link once the first could
+  no longer be resumed (a link lends once), a second browser taking a link's play over
+  (question 12), keeping a link with a play open (question 2), and giving a play back
+  (Give back goes). A play given back in 1.x still doesn't count as finished in a
+  film's numbers, and that is still tested, on a row marked as 1.x left it. Several
+  tests had two friends playing one film inside one test (`test/stall.test.js`, the
+  summaries in `test/activity.test.js`, `test/retention.test.js`): they now have a film
+  each, or each tape comes due before the next goes out.
+- **The guard in `test/helpers.js`** still reads `screenings`: Play writes one for each
+  loan, when it takes the tape, and none when it resumes. So its exception for "the
+  same link played again" went (no link has two plays now), and it starts watching a
+  database after the plays already in it, so a shop upgraded from 1.x can be played in.
+- **The upgraded shop over HTTP** is a suite of its own in `test/migration.test.js`
+  ("a schema 7 shop, upgraded, over HTTP"), on a second copy of the fixture.
+- **From two processes** is two `worker_threads` in `test/loans-race.test.js`, held at a
+  gate each round and released in the same instant, 200 rounds. With the transaction
+  around Play made not IMMEDIATE, the test fails, as it should.
+- **Keys that wait for their slice.** `access.ticket` has every key of the table under
+  [The friend's side](#the-friends-side) except `pickNote` and `loan.canRespond`, which
+  arrive with slice 4. `access.tape` for your preview, `/api/me` with yours first and
+  `browserLoans`, and 410 `ticket-spent` on opening are slices 5 and 3, as the slice
+  list says.
+- **The Ledger.** `ticket-sent`, `lent` and `returned` are logged. Until slice 3 gives
+  loans a kind of their own they are filed with accounts and links, and until slice 9
+  the page shows their kind as it is stored ("lent").
+- **The back office's 1.x fields**, as the `adminTicket` row above now says. A spent
+  link shows as "Used up" until slice 9.
+- **Three small changes to 1.1.0's pages**, which the plan had not asked for. Settings'
+  "Time to come back (hours)" became "Due back after, for new links (days)", because
+  the old field had nothing left to show or save. The film page's line before Play
+  counts the loan's days in hours ("…come back to it for 72 hours"), where it would
+  have gone on promising 48. And the page and player know three of the new codes: `out`
+  and `spent` from Play are explained by the page after it reads itself again, and a
+  tape that comes due while it plays says "This tape has gone back to the shop."
+- **Cost on every segment** (Risks, below), measured on a throwaway database in memory
+  with 300 films and 3,000 links: `mayStream` for the browser that is playing takes
+  about 10 microseconds, against 5 in 1.1.0, and a refusal about 7 against 5.
+- **In a browser.** `e2e/playback.spec.js` and two journeys of `e2e/shell.spec.js` (a
+  reload resumes; a browser signed out while it plays) pass in Chromium, each run alone
+  on a fresh shop. Run together the journeys fail, as expected until slice 10: they
+  share one film, and its tape is out after the first.
+
 ### 3. Coming back
 
-- [ ] `returnTape` and `POST /api/films/:slug/return` with its `takenAt`, without
+- [x] `returnTape` and `POST /api/films/:slug/return` with its `takenAt`, without
   responses yet.
-- [ ] Take back by loan, with the member's other links for the film; revoke, restore,
+- [x] Take back by loan, with the member's other links for the film; revoke, restore,
   holder and Sign out browsers as in the rules; the void route refuses a loan's
   screening (it goes in slice 9); moving a due date, through `loanDays` on
   `PATCH /api/admin/tickets/:id`; the new events and the Ledger's three kinds.
-- [ ] A spent link: `POST /api/tickets/open` answers 410 `ticket-spent` to a browser
+- [x] A spent link: `POST /api/tickets/open` answers 410 `ticket-spent` to a browser
   that doesn't hold it, and its preview shows the shop (`server/page.js:54-59`).
 
 **Done when** a return frees the film at once, spends the link and stops the borrower's
 other device at its next report; a return from a tab left open on an earlier loan
 changes nothing; a take-back stops both kinds of borrower with `taken-back`, cancels
 the link, and another link can take the tape, but not the same member's second link;
-and a return racing a take-back has one winner. Waits on questions 6, 8 and 14.
+and a return racing a take-back has one winner. Questions 6, 8 and 14, which it waited
+on, were answered on 11 Nov 2026.
+
+Built on 11 Nov 2026, not yet committed, with slice 2. 896 unit tests became 934, all
+passing on Node 26 (22 and 24 still wait for the draft pull request). What differs from
+the lines above, or was left open by them:
+
+- **Where the rules are.** `returnTape`, `takeBack`, `cancelTicket`, `restoreTicket`,
+  `forgetBrowsers` (Sign out browsers), `setLoanDays` and `voidScreening` are in
+  `server/access.js`, beside `setTicketPerson`, which gained its guard. The routes in
+  `server/routes/admin.js` only call them and turn a refusal into a 409. Each runs
+  `closeStale` first, so a tape past due is never taken back, returned or held to its
+  link: its end is written as `due`, at its due time.
+- **A response before slice 4.** The return route already checks the body as the API
+  table says (400 for no `takenAt`, a message with no response, or a response that
+  isn't one of the four). A borrower who sends a response is answered 409
+  `cannot-respond` and the tape stays out, so nobody's words are dropped before there
+  is somewhere to keep them. Anyone else is told `nothing-to-return`, as for every
+  other return that isn't theirs.
+- **The take-back's answer** is `{ loan: { id, takenAt, dueAt, endedAt, endedHow },
+  ticket, alsoCancelled }`: the loan as `/api/admin/loans` will give it comes with
+  slice 5. An unknown loan is a 404, a missing `ticketId` a 400; a loan that is over,
+  or isn't on that link, is 409 `not-out`. `POST …/revoke` on a link that has the tape
+  is the same take-back, and answers the link with `tookBack` and `alsoCancelled`.
+- **Question 14, to the letter.** The links cancelled with a member's tape are that
+  member's other links for the film that have no loan: waiting ones, and ones past
+  their start-by date. Each logs `ticket-cancelled`. The link that had the tape logs
+  only `returned` (`taken-back`). A link anyone can use that the member's browser also
+  holds is left alone, so that browser's page then shows that link, with the tape in.
+- **Moving a due date** is whole days from when the tape was taken (`loanDays`, 1 to
+  30, or null for the shop's default as it is at that moment): there is no way to name
+  a time of day. A save whose days would make the tape due already is refused whole:
+  its label and start-by don't change either. A date moved earlier never shortens a
+  browser's session. A save that sends the days the link already has moves nothing
+  (from the review, below).
+- **Restore** is refused for every link that has a loan, cancelled or not: one that has
+  the tape, a spent one, one taken back, and a 1.x link the upgrade marked as lent.
+- **The void route** refuses every screening a loan names, also once the loan is over
+  (409 `tape-out`, the plan's code). A 1.x play that no loan names can still be given
+  back until the button goes.
+- **A spent link for one member** opens for that member, signed in, as before; anyone
+  else gets what they got before (sign in, or "for someone else"). 410 `ticket-spent`
+  is for links anyone can use, in a browser that doesn't hold them. The poster address
+  a spent link's preview once gave out is a 404 from then on.
+- **A progress report is one step now.** Its check and its write share one IMMEDIATE
+  transaction, as Play's do, so a report can't land on a tape returned or taken back
+  in between. The plan had not asked for that; the race test needed it to be exact.
+- **"Sign out every friend and member"** needed no code: a browser's tape comes back
+  by the test for "out", and a member's own tape is theirs again when they sign in.
+  Both are tested, as are the two ways a borrower stops being able to play that slice
+  2 had left: signing in as someone else, and this one.
+- **Races.** `test/loans-race.test.js` has four more pairs of threads, 200 rounds each:
+  a return against a take-back (one winner; each wins about half), Play on another
+  link against a take-back, a return against the borrower's own report, and Play
+  against a return at the millisecond the tape is due. `test/loans.test.js` asks the
+  first two over HTTP as well, in both orders.
+- **Never who.** `test/never-who.test.js` gained the return (five ways of asking, all
+  `nothing-to-return` or the same 400), a due date moved by you (the same new date
+  for both), a return (the reason, and when, reach the borrower only) and a take-back
+  (the borrower's page and another holder's are the same, byte for byte).
+- **Five small changes to 1.1.0's pages**, so the new answers have words until slices 7
+  to 9: the player says "{Host} has taken this tape back." for `taken-back` and "This
+  tape has been returned." for `returned`; the front page has the mock-up's notice
+  for a spent link ("That link has been used."); the link's page in the back office
+  puts `tape-out`, `lent-once`, `would-end-loan` and `not-out` in words; and the
+  Ledger has a Loans filter between Viewing and "Cards, passkeys and links".
+- **In a browser.** The journeys were made to run over the new server, in Chromium:
+  what changed in them, and why, is under "Browser journeys" in [Tests](#tests).
+
+Slices 2 and 3 were reviewed together on 11 Nov 2026, from three sides: races, "never
+who", and whether the tests fit the plan. Every row of the state table, the viewer
+table, "What can happen to a tape" and "Never who has it" was read against the code,
+with a random walk of 40 runs of 500 steps over HTTP, about 7,500 answers compared
+between shops that differ only in who has the tape, and 73 single-rule changes to the
+code, of which the tests caught 71. No leak of who has a tape was found. 934 unit tests
+became 943, all passing on Node 26. What changed, each with its test:
+
+- **Signing in with a tape out** made a new session with the shop's plain life and
+  moved the browser's loan onto it. Where `VIEWER_SESSION_DAYS` is set shorter than
+  the loan has left, the tape came back as `signed-out` days early and the link was
+  spent. It can't happen at the default 90 days. Sign-in now makes the new session last
+  a day past the due time, and its cookie with it.
+- **Saving a link whose days hadn't changed** moved the due date of a tape that was out
+  if the shop's default had changed since, or refused the whole save. No page sends
+  `loanDays` yet, so nobody could reach it; slice 9's form will. The same would have
+  moved the date of a loan the upgrade made, which isn't whole days from when it was
+  taken. The link's own value sent again is now no change.
+- **A tape's end dated in the future.** With the server's clock behind a session's
+  sign-out time, `closeStale` wrote the tape back as `due`, at its due date, days
+  ahead, and the Ledger with it. Never later than the moment of writing now.
+- **Play reads the browser's session again inside its step.** Unreachable in one
+  process; from a second process on the same file a Play that lost to a sign-out took
+  the tape for a dead session and spent its link.
+- **Tests the review found missing**, with no change to the code: a take-back from a
+  member leaves their spent links for the film as they were (one of the two changes the
+  tests had missed); a take-back stops the play (the other); in
+  `test/never-who.test.js`, a tape out on a member's own link against one out to a
+  browser, the borrower's own second device on the link that lent, and a newcomer
+  opening the link that lent or one that waits; and in the upgraded shop over HTTP, a
+  return and a take-back on loans the upgrade made, and restore refused for a link
+  that lent before 2.0.
+- **One journey** clicked "Status" wherever it found it. On a computer with a nearly
+  full disk the back office shows a second Status link, and the journey failed for
+  that alone, with or without version 2. It now clicks the tab
+  (`e2e/admin.spec.js:65`).
+- **The journeys' tape lock could lock two journeys against each other**, which showed
+  once the journey above ran to its end: about one run in two had five journeys time
+  out. It is one lock for a project's tapes now, not one for each film ("Browser
+  journeys", under [Tests](#tests)). Only the journeys were wrong; the app was not.
+- **Left to you:** questions 16 and 17, above. Not built, and offered: a minimum of 31
+  for `VIEWER_SESSION_DAYS`, which would rule the first case out a second way but
+  changes a 1.x setting.
 
 ### 4. Picked for you, and responses (server)
 
@@ -948,7 +1123,7 @@ Reuses, from 1.1.0: `Counter` (`web/src/pages/Film.jsx:271-336`), `TitleTape` an
 **Done when** every state in the mock-up's friend table that isn't a "today" state is
 on the page at 1440, 390 and 320 pixels, with the out pages' words as this plan has
 them where the two differ, and `test/friend-words.test.js` and `test/look.test.js` are
-rewritten and pass. Waits on questions 10, 11, 12 and 13.
+rewritten and pass. Waits on questions 10, 11 and 13.
 
 ### 8. The friend's front page, handing it back, and notices
 
@@ -957,7 +1132,7 @@ and `Hand` (`web/src/look/objects.jsx:275-292`), `confirmSignOut`
 (`web/src/site.jsx:146-158`), and the kit's fieldset, choice and textarea pieces.
 
 - [ ] The front page in sections: On your card (or "Out to this browser", without the
-  mock-up's "Sign in to keep them on your membership card" if question 2 is (a)),
+  mock-up's "Sign in to keep them on your membership card": question 2, answer a),
   Picked for you, your other links, On the shelf for members.
 - [ ] Hand it back, as a view inside the film page and not a new route: one response
   required, "Only {host} sees this", "Return it without a note". The "Picked for you"
@@ -987,6 +1162,9 @@ Reuses the Films table and `Mark tone="info"` for "out" (`web/src/admin/Films.js
   holds (question 14).
 - [ ] The send form: "Picked for you" with its hint, "Due back after", the warning when
   the film is out or has a link waiting. "Plays" and "Days after the first play" go.
+  The link's edit form may send "Due back after" with every save: the days a link
+  already has move nothing (slice 3's review). Changing them on a link that has the
+  tape moves the date, so that field says so there.
 - [ ] Tapes: Out now, then the links. A link's page: its loan and states, no Give back.
   While it has the tape, "Let anyone with the link use it", "Give it to someone else"
   and Sign out browsers are disabled, with a line saying why (question 2, answer a).
@@ -1043,7 +1221,15 @@ waits for your go-ahead.
   sweep in between (the loan stays ended, the link stays spent); a loan whose session
   ended before `taken_at` by the clock (closed at `taken_at`, no error); a film's
   files breaking mid-loan (the borrower keeps `tape: 'yours'`, the due date and the
-  return, and it stays on their card).
+  return, and it stays on their card). And from the review of slices 2 and 3: signing
+  in with a tape out where the shop's sessions are shorter than the loan (the new
+  session and its cookie last a day past the due time); a save that sends a link's own
+  days again after the shop's default changed, and on a loan whose date is off the
+  grid of whole days (nothing moves, the rest is saved); a session signed out at a time
+  the clock hasn't reached (written back now, never ahead); Play for a session that
+  ended since the route read it (nothing taken, the link not spent); a take-back from
+  a member that leaves their spent link alone, and one that stops the play; and a
+  take-back from a signed-in member's browser, which pins question 16 as built.
 - `test/loans-race.test.js`. In one process: two links pressed together, Play against
   take-back, return against take-back. From two: two `worker_threads`, each with its
   own `openDb` on one file, released together many times; every round has one success
@@ -1056,7 +1242,11 @@ waits for your go-ahead.
   Both links carry a start-by, and the comparison is made three times: at once, after
   the clock passes the start-by with the tape still out, and with the film's files
   marked broken. It starts in slice 2 and gains rows as their routes arrive: return in
-  slice 3, `pickNote` in 4, the members' shelf in 5.
+  slice 3, `pickNote` in 4, the members' shelf in 5. A last suite, on two films alike
+  but for who has the tape, compares a tape out on a member's own link with one out
+  to a browser, the borrower's own second device with any other member on the link
+  that lent, and a newcomer opening the link that lent with one opening a link that
+  waits.
 - One test for each way a borrower stops being able to play (sign out, sign out
   everywhere, "Sign out every friend and member", card turned off, passkey removed,
   keys taken back, signing in as someone else): the loan ends, another link takes it.
@@ -1073,14 +1263,19 @@ waits for your go-ahead.
   date has passed since its first play (a loan); and two plays heard from at the same
   moment (the earlier one). It asserts that no open loan comes
   out of the migration already over. The failing fixture is the one in slice 1.
+  Over HTTP as well, since the review of slices 2 and 3: a loan the upgrade made is
+  returned by its borrower and another taken back by its loan, and restore is refused
+  for a link that lent before 2.0.
 - Settings (the retired key is accepted and dropped); sessions: `prolong`, and with a
   session made 89 days ago, the `Set-Cookie` on Play's answer as well as the row, then
   two days on; and a loan across the clocks changing on 25 October with
   `TZ=Europe/London`.
 
 **Browser journeys** (`npm run e2e`; not in CI, `.github/workflows/tests.yml:3`). Each
-journey that presses Play holds `exclusively('tape:<slug>')` (`e2e/fixtures.js:41-57`),
-and `issueTicket` stops sending `screeningLimit` (`e2e/fixtures.js:80`).
+journey that presses Play holds its browser project's tapes to itself (as built: one
+lock for the project's two films, `tapes-<project>`, in `e2e/fixtures.js`; the first
+draft of this line had a lock for each film), and `issueTicket` stops sending
+`screeningLimit` (`e2e/fixtures.js:80`).
 
 1. **Lend and return.** One browser plays, a second sees "Out on loan" with no Play, the
    first returns it with the confirmation, the second plays, the first sees spent.
@@ -1092,6 +1287,57 @@ and `issueTicket` stops sending `screeningLimit` (`e2e/fixtures.js:80`).
 6. **A spent link** in a fresh browser shows the notice.
 7. Rewritten: `e2e/shell.spec.js:56-64` (plays left) and `:191-205`, the keep journey in
    `e2e/passkeys.spec.js`, and `e2e/account.spec.js`.
+
+Begun with slices 2 and 3, on 11 Nov 2026, in Chromium only; the rest is slice 10's.
+Run as they were, 19 of the 64 journeys failed, nearly all because they share one film
+and its tape was out after the first Play. What changed:
+
+- **One tape, one journey at a time** (`e2e/fixtures.js`). `admin.issueTicket` holds
+  the project's tapes for its journey (`holdTape`, the lock `tapes-<project>`), and
+  stops sending `screeningLimit`. When the journey ends, every link that has lent, for
+  each film it sent a link for, is cancelled, which takes the tape back if it is still
+  out, so the next journey finds it in. Waiting for another journey's tapes doesn't
+  count against a journey's own time. A journey that makes its link in the back
+  office's pages calls `holdTape` itself; none presses Play on such a link today.
+  As first built the lock was one for each film (`tape-<slug>`). Two journeys send
+  links for both films, in opposite orders (the admin's, and the two-film journey of
+  `e2e/tracks.spec.js`); when they overlapped, each held one tape and waited for the
+  other until both timed out, and three more journeys behind them. One lock for both
+  films can't do that, and costs nothing: only those two journeys use the second film.
+- **Take it back** (journey 2) is `e2e/revoke.spec.js`, rewritten: the report is
+  answered 409, the player says "{Host} has taken this tape back.", never "no longer
+  valid", and the page is gone. Its second journey, a play given back mid-film, went
+  with Give back.
+- **One member, two devices** (journey 4) is `e2e/takeover.spec.js`, rewritten: the
+  second device is the same member signed in again (`anotherDevice`), not a second
+  browser on a link anyone can use.
+- **A spent link** (journey 6) is new in `e2e/shell.spec.js`. There is no Return it
+  now button until slice 7, so the page returns the tape by asking the server itself.
+- **Journey 7.** `e2e/shell.spec.js`: "3 plays left" became the line that says how
+  long the link lends for (`loanDays: 2`, "for 48 hours"), and the link "valid one day
+  after its first play" became one that lends for a day. `e2e/account.spec.js`: the
+  other browser opens the link and no longer plays it before the member keeps it
+  (question 2). The keep journey in `e2e/passkeys.spec.js` needed nothing: it never
+  pressed Play, and only failed while another journey's tape was out.
+- Journeys 1, 3 and 5 wait for the pages they walk through (slices 7 to 9).
+
+With that, all 64 journeys in the chromium project passed (one more is WebKit's own and
+skips), twice running, when slices 2 and 3 were built. The review of 11 Nov 2026 did
+not see that again at first, for two reasons, both mended since:
+
+- Its own two runs had 63 pass and one fail, `e2e/admin.spec.js`, at its Status step:
+  nothing to do with version 2. The back office's status line shows a second "Status"
+  link whenever the server has something to look at, and the computer running the
+  journeys had under a tenth of its disk free. The journey now clicks the tab in the
+  back office's navigation.
+- With that mended the admin's journey reaches its Ledger step, where it sends a link
+  for the second film and then one for the main film. Of the next two runs, one
+  passed (64) and one had 59 pass and 5 time out after six minutes, waiting for a
+  tape: the lock for each film, held in opposite orders by two journeys, as the first
+  bullet above says. With one lock for a project's tapes, three runs in a row passed:
+  64 each, one skipped, about a minute each, as before.
+
+Firefox, WebKit and Chrome have not been run.
 
 ## Docs to update
 
@@ -1140,7 +1386,8 @@ and `issueTicket` stops sending `screeningLimit` (`e2e/fixtures.js:80`).
   (`CHANGELOG.md:94-105`). Every back office string that says "tape" gets a second
   pass, the API's error messages included (`server/routes/admin.js:299`).
 - **The journeys aren't in CI**, so two of them fighting over one tape would only show
-  when they are run by hand before the release.
+  when they are run by hand before the release. (It did, once, in the review of slices
+  2 and 3: "Browser journeys", under Tests.)
 - **The end of the film is two things.** The player's `ended` and the server's 92% can
   disagree: skip the credits and no end panel shows. After a reload the page goes by
   the server's mark.
@@ -1155,8 +1402,8 @@ and `issueTicket` stops sending `screeningLimit` (`e2e/fixtures.js:80`).
   journal: 2.x, as the roadmap says.
 - A page of its own for a tape taken back, a loan length per film, and responses after
   a tape goes back on its own (questions 6 and 1, and the tentative answer of 10 Nov).
-- A tape that moves with its link when the link is kept or given, unless you answer
-  question 2 the other way. A fuller loan for links caught part-way at the upgrade
+- A tape that moves with its link when the link is kept or given (question 2, answered
+  on 11 Nov). A fuller loan for links caught part-way at the upgrade
   (question 15, answered on 11 Nov). Keeping the name behind a browser's loan after its
   session is gone.
 - The main button's colour, still open from the look, is not part of this plan.

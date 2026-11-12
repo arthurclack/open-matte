@@ -24,7 +24,8 @@ const PLAY_ERRORS = {
   'playing-elsewhere': { lead: "It's playing on another device right now.", text: 'Pause it there, or give it a minute, then try again.' },
   'too-many-requests': { lead: 'Play was pressed too many times from this connection.', text: 'Wait a few minutes, then try again.' },
   'no-ticket': null, // the counter explains these after a reload
-  used_up: null,
+  out: null,
+  spent: null,
   expired: null,
   unavailable: null,
   'not-found': null, // and after these the page itself goes
@@ -325,7 +326,7 @@ function Counter({ access, film, site, name, onPlay, starting, playing, onKept, 
                 {left && <p className="fl-left">{left}</p>}
               </div>
             ))}
-          <p className="fl-clock">{clockLines(t, { windowHours: site?.resumeWindowHours ?? 48 }).join(' ')}</p>
+          <p className="fl-clock">{clockLines(t, { windowHours: (t.loanDays ?? site?.loanDays ?? 3) * 24 }).join(' ')}</p>
           {t.inAccount && <p className="fl-keep">This tape is on your card, so it's on every device you sign in on.</p>}
           {access.canKeep && !playing && <KeepOffer film={film} signedIn={signedIn} onKept={onKept} onNewPasskeys={onNewPasskeys} />}
         </>

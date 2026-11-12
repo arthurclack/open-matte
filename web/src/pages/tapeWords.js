@@ -100,7 +100,12 @@ export function haltMessages(site) {
   return {
     'playing-elsewhere': 'This tape is now playing on another device.',
     'screening-ended': 'This play has ended.',
+    // It was due while the film played, and went back.
+    due: 'This tape has gone back to the shop.',
     expired: 'This tape has gone back to the shop.',
+    // Returned from another of the borrower's devices while this one played.
+    returned: 'This tape has been returned.',
+    'taken-back': `${Host(site)} has taken this tape back.`,
     revoked: `${Host(site)} has taken this tape back.`,
     unavailable: "This film isn't available right now.",
     unpublished: "This film isn't available right now.",

@@ -156,7 +156,12 @@ describe('a milestone 1 database', () => {
     const me = await (await get('/api/me')).json();
     assert.equal(me.person, null);
     assert.deepEqual(me.tickets.map((t) => t.film.slug), ['arrival']);
-    assert.equal(me.tickets[0].ticket.openScreening.position, 42);
+    // Its open play is now its loan: the tape is this browser's, where it had got to,
+    // due back at the end of that play's time to come back.
+    const mine = me.tickets[0].ticket;
+    assert.deepEqual([mine.state, mine.tape, mine.loan.position, mine.loan.toBrowser], ['ok', 'yours', 42, true]);
+    assert.equal(mine.dueBack, rows(db, 'screenings')[0].resumable_until);
+    assert.deepEqual([mine.openScreening.position, mine.openScreening.resumableUntil, mine.expiresAt], [42, mine.dueBack, mine.dueBack]);
     for (const url of ['/media/arrival/hls/master.m3u8', '/media/arrival/hls/v_h264_720/index.m3u8', '/media/arrival/hls/v_h264_720/seg_0.m4s', '/media/arrival/subtitles/en.vtt']) {
       assert.equal((await get(url)).status, 200, url);
     }
@@ -951,6 +956,208 @@ describe('a schema 7 database', () => {
 // TABLE, after both ALTER TABLEs have run. The second has a row no screen can make,
 // "0 days after first play", which fails the loan length's CHECK in the migration's
 // last statement, after every loan has been made.
+// The same shop, upgraded and then used: what the friends who were part-way through,
+// and the ones who weren't, find when they come back (docs/version-2.md, "Upgrading an
+// existing shop"). A shop of its own, so nothing here disturbs the rows read above.
+describe('a schema 7 shop, upgraded, over HTTP', () => {
+  const dir = tempDir();
+  const mediaDir = tempDir();
+  const file = path.join(dir, 'open-matte.db');
+  let now;
+  let F;
+  let T;
+  let SC;
+  let db;
+  let server;
+  let base;
+
+  before(async () => {
+    const m7 = schemaSevenDb(file);
+    now = Date.now();
+    ({ F, T, SC } = fillShop(m7, now));
+    m7.close();
+    db = openDb(file);
+    // The films' folders, for the ones played below. The shop's rows say they are well.
+    for (const slug of ['crowd', 'solo', 'fortnight', 'done']) makeFilm(mediaDir, slug);
+    const app = createApp({
+      db: watchPlays(db),
+      mediaDir,
+      dataDir: dir,
+      metadataOptions: { envKey: '' },
+      backupOptions: { backupDir: path.join(dir, 'backups') },
+      webDist: path.join(mediaDir, 'no-web-build'),
+      webauthn: { publicUrl: '', rpId: '', production: false },
+    });
+    server = await new Promise((resolve) => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    base = `http://127.0.0.1:${server.address().port}`;
+  });
+  after(async () => {
+    if (server) await new Promise((r) => server.close(r));
+    db?.close();
+  });
+
+  // A browser of the shop's, by the name its session was made with (test/schema7.js).
+  const as = (name) => {
+    const headers = { cookie: `om_session=${encodeURIComponent(name)}`, 'content-type': 'application/json' };
+    const answer = async (res) => ({ status: res.status, data: (res.headers.get('content-type') ?? '').includes('json') ? await res.json() : await res.text() });
+    return {
+      get: async (url) => answer(await fetch(base + url, { headers })),
+      post: async (url, body = {}) => answer(await fetch(base + url, { method: 'POST', headers, body: JSON.stringify(body) })),
+    };
+  };
+  const pageOf = async (b, slug) => (await b.get(`/api/films/${slug}`)).data.access;
+  const press = (b, slug) => b.post(`/api/films/${slug}/screenings`);
+  const loanOf = (ticketId) => db.prepare('SELECT * FROM loans WHERE ticket_id = ?').get(ticketId);
+  const comeDue = (ticketId) => {
+    const l = loanOf(ticketId);
+    db.prepare('UPDATE loans SET taken_at = ?, due_at = ? WHERE id = ?').run(Date.now() - 1 - (l.due_at - l.taken_at), Date.now() - 1, l.id);
+  };
+  const master = (slug) => `/media/${slug}/hls/master.m3u8`;
+
+  test('several plays were open on one film: the winner streams from its position, a loser is told its play has ended, and every other link sees the tape out', async () => {
+    const [a, b, c, ada, ben] = ['a', 'b', 'c', 'ada phone', 'ben'].map(as);
+    const due = loanOf(T.crowdPlaying).due_at;
+    assert.equal(due, now - HOUR + 48 * HOUR, 'the end of that play’s time to come back');
+
+    // The browser that was playing has the tape, where it had got to.
+    const mine = await pageOf(a, 'crowd');
+    assert.equal(mine.canPlay, true);
+    assert.deepEqual([mine.ticket.state, mine.ticket.tape, mine.ticket.dueBack], ['ok', 'yours', due]);
+    assert.deepEqual(mine.ticket.loan, { takenAt: now - HOUR, position: 3000, finishedAt: null, toBrowser: true });
+    assert.equal((await a.get(master('crowd'))).status, 200);
+    const resumed = await press(a, 'crowd');
+    assert.equal(resumed.status, 200, JSON.stringify(resumed.data));
+    assert.deepEqual([resumed.data.screeningId, resumed.data.resumed, resumed.data.took, resumed.data.position, resumed.data.dueBack], [SC.crowdPlaying, true, false, 3000, due]);
+    assert.equal((await a.post(`/api/screenings/${SC.crowdPlaying}/heartbeat`, { position: 3010 })).status, 200);
+
+    // The two who were also part-way: their player stops at its next report, their
+    // page says the tape is out, and nothing plays.
+    for (const [who, play] of [[c, SC.crowdPaused], [ada, SC.crowdAda]]) {
+      const report = await who.post(`/api/screenings/${play}/heartbeat`, { position: 700 });
+      assert.deepEqual([report.status, report.data], [409, { error: 'screening-ended' }]);
+      const page = await pageOf(who, 'crowd');
+      assert.deepEqual([page.canPlay, page.ticket.state, page.ticket.tape, page.ticket.dueBack, page.ticket.loan], [false, 'out', 'out', due, null]);
+      assert.deepEqual((await press(who, 'crowd')).data, { error: 'out' });
+      assert.equal((await who.get(master('crowd'))).status, 403);
+    }
+    assert.equal(db.prepare('SELECT position_seconds FROM screenings WHERE id = ?').get(SC.crowdPaused).position_seconds, 600, 'a refused report moves nothing');
+    // Every other link: the same link in a second browser, a link nobody had played, a member's kept one.
+    for (const who of [b, ben]) {
+      const page = await pageOf(who, 'crowd');
+      assert.deepEqual([page.canPlay, page.canKeep, page.ticket.state, page.ticket.tape, page.ticket.dueBack], [false, false, 'out', 'out', due]);
+      assert.deepEqual((await press(who, 'crowd')).data, { error: 'out' });
+    }
+    // Nobody but the borrower learns which play has the tape.
+    const others = await b.post(`/api/screenings/${SC.crowdPlaying}/heartbeat`, { position: 1 });
+    assert.deepEqual([others.status, others.data], [404, { error: 'not-found' }]);
+
+    // Once the tape is back, a loser's link lends once: from the beginning, not from
+    // the place it had reached in 1.x. The winner's link is spent.
+    comeDue(T.crowdPlaying);
+    const again = await press(c, 'crowd');
+    assert.equal(again.status, 200, JSON.stringify(again.data));
+    assert.notEqual(again.data.screeningId, SC.crowdPaused);
+    assert.deepEqual([again.data.took, again.data.resumed, again.data.position], [true, false, 0]);
+    assert.equal(again.data.dueBack, again.data.takenAt + 3 * DAY, 'for the shop’s three days: the stored "Time to come back" is ignored');
+    assert.deepEqual((await press(a, 'crowd')).data, { error: 'spent' });
+    assert.deepEqual((await pageOf(a, 'crowd')).ticket.returned, { at: loanOf(T.crowdPlaying).due_at, how: 'due' });
+    assert.equal(db.prepare('SELECT first_played_at FROM tickets WHERE id = ?').get(T.crowdPaused).first_played_at, now - 5 * HOUR, 'its first play in 1.x is still when it was first played');
+  });
+
+  test('one play open: it is the link’s one loan, due at the end of its time to come back, and then the link is spent', async () => {
+    const a = as('a');
+    const page = await pageOf(a, 'solo');
+    assert.deepEqual([page.ticket.state, page.ticket.tape, page.ticket.dueBack, page.ticket.loan.position], ['ok', 'yours', now - 3 * HOUR + 48 * HOUR, 1800]);
+    assert.equal((await a.get(master('solo'))).status, 200);
+    assert.equal((await a.post(`/api/screenings/${SC.solo}/heartbeat`, { position: 1900 })).status, 200);
+    comeDue(T.solo);
+    assert.equal((await a.get(master('solo'))).status, 403);
+    assert.deepEqual((await a.post(`/api/screenings/${SC.solo}/heartbeat`, { position: 1950 })).data, { error: 'due' });
+    assert.deepEqual((await press(a, 'solo')).data, { error: 'spent' });
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM screenings WHERE film_id = ?').get(F.solo).n, 1);
+  });
+
+  test('a link 1.x would have let play again keeps the tape for that play only: due tomorrow, not in 13 days, then spent (question 15)', async () => {
+    const b = as('b');
+    const page = await pageOf(b, 'fortnight');
+    const due = now - 26 * HOUR + 48 * HOUR;
+    assert.deepEqual([page.ticket.state, page.ticket.tape, page.ticket.dueBack, page.ticket.loan.position], ['ok', 'yours', due, 5000]);
+    assert.ok(due < now + 14 * DAY - 26 * HOUR, 'sooner than 1.x’s fourteen days');
+    assert.equal((await press(b, 'fortnight')).data.position, 5000);
+    comeDue(T.fortnight);
+    assert.deepEqual((await press(b, 'fortnight')).data, { error: 'spent' });
+    assert.equal((await pageOf(b, 'fortnight')).ticket.state, 'spent');
+  });
+
+  test('links with nothing open: a used-up one is spent, and one with plays left lends once more, from the new Play', async () => {
+    const [a, b, c] = ['a', 'b', 'c'].map(as);
+    // Used up in 1.x: spent, and its browser is told when its last play ran out.
+    const used = await pageOf(c, 'done');
+    assert.deepEqual([used.canPlay, used.ticket.state, used.ticket.tape], [false, 'spent', null]);
+    assert.deepEqual(used.ticket.returned, { at: loanOf(T.usedUp).ended_at, how: 'due' }, 'never "before 2.0": the page learns nothing but that it was due');
+    assert.deepEqual((await press(c, 'done')).data, { error: 'spent' });
+    assert.equal((await pageOf(b, 'done')).ticket.state, 'spent');
+    // Played 40 days ago, no limit: it lends once more, for the shop's default.
+    const more = await pageOf(a, 'done');
+    assert.deepEqual([more.canPlay, more.ticket.state, more.ticket.tape, more.ticket.loanDays, more.ticket.startBy], [true, 'ok', 'in', 3, null]);
+    const took = await press(a, 'done');
+    assert.equal(took.status, 200, JSON.stringify(took.data));
+    assert.deepEqual([took.data.took, took.data.position, took.data.dueBack - took.data.takenAt], [true, 0, 3 * DAY]);
+    assert.notEqual(took.data.screeningId, SC.noLimit);
+    assert.equal(db.prepare('SELECT first_played_at FROM tickets WHERE id = ?').get(T.noLimit).first_played_at, now - 40 * DAY, 'no 1.x column is rewritten');
+    assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  });
+
+  // The loans the upgrade made are loans like any other: slice 3's ways back work on them.
+  test('a tape the upgrade found out comes back like any other: its borrower returns it, or you take it back by its loan; and a link that lent before 2.0 is never restored', async () => {
+    const admin = await adminBrowser(base);
+    const answer = (r) => [r.status, r.data];
+
+    // A browser part-way through, on a link anyone can use: it returns the tape.
+    const dee = as('dee');
+    const mine = loanOf(T.signedIn);
+    assert.deepEqual([mine.ended_at, mine.person_id, mine.taken_at], [null, null, now - 2 * HOUR]);
+    assert.deepEqual(answer(await dee.post('/api/films/signed-in/return', { takenAt: mine.taken_at + 1 })), [409, { error: 'nothing-to-return' }]);
+    const back = await dee.post('/api/films/signed-in/return', { takenAt: mine.taken_at });
+    assert.equal(back.status, 200, JSON.stringify(back.data));
+    assert.deepEqual([loanOf(T.signedIn).ended_at, loanOf(T.signedIn).ended_how], [back.data.returned.at, 'returned']);
+    const page = (await pageOf(dee, 'signed-in')).ticket;
+    assert.deepEqual([page.state, page.tape, page.returned], ['spent', null, { at: back.data.returned.at, how: 'returned' }]);
+    assert.deepEqual(answer(await dee.post(`/api/screenings/${SC.signedIn}/heartbeat`, { position: 61 })), [409, { error: 'returned' }]);
+    assert.deepEqual(answer(await press(dee, 'signed-in')), [409, { error: 'spent' }]);
+    assert.equal(db.prepare('SELECT position_seconds FROM screenings WHERE id = ?').get(SC.signedIn).position_seconds, 60);
+
+    // A member part-way through on his own link, with a browser part-way on another:
+    // you take his tape back, by its loan.
+    const ben = as('ben');
+    const his = loanOf(T.pairBen);
+    assert.equal(his.ended_at, null);
+    assert.equal(loanOf(T.pairAnyone), undefined, 'the other play on the film got no loan');
+    const takeBack = (ticketId) => admin.post(`/api/admin/loans/${his.id}/take-back`, { ticketId });
+    assert.deepEqual(answer(await takeBack(T.pairAnyone)), [409, { error: 'not-out' }]);
+    const taken = await takeBack(T.pairBen);
+    assert.equal(taken.status, 200, JSON.stringify(taken.data));
+    assert.deepEqual([taken.data.loan.endedHow, taken.data.ticket.state, taken.data.alsoCancelled], ['taken-back', 'revoked', []]);
+    assert.deepEqual(answer(await ben.post(`/api/screenings/${SC.pairBen}/heartbeat`, { position: 2500 })), [409, { error: 'taken-back' }]);
+    assert.deepEqual(answer(await ben.get('/api/films/pair')), [404, { error: 'not-found' }]);
+    assert.deepEqual(answer(await takeBack(T.pairBen)), [409, { error: 'not-out' }]);
+    assert.deepEqual(answer(await admin.post(`/api/admin/tickets/${T.pairBen}/restore`)), [409, { error: 'lent-once' }]);
+    // The link that was also part-way can take the tape now, once.
+    assert.deepEqual([(await pageOf(as('b'), 'pair')).ticket.state, (await pageOf(as('b'), 'pair')).ticket.tape], ['ok', 'in']);
+
+    // Lent before 2.0: used up in 1.x and cancelled there, or cancelled now. Neither comes back.
+    assert.equal(loanOf(T.usedUpCancelled).ended_how, 'before-2.0');
+    assert.deepEqual(answer(await admin.post(`/api/admin/tickets/${T.usedUpCancelled}/restore`)), [409, { error: 'lent-once' }]);
+    assert.equal(loanOf(T.usedUpGaveOneBack).ended_how, 'before-2.0');
+    assert.equal((await admin.post(`/api/admin/tickets/${T.usedUpGaveOneBack}/revoke`)).data.tookBack, false);
+    assert.deepEqual(answer(await admin.post(`/api/admin/tickets/${T.usedUpGaveOneBack}/restore`)), [409, { error: 'lent-once' }]);
+    assert.ok(db.prepare('SELECT revoked_at FROM tickets WHERE id = ?').get(T.usedUpGaveOneBack).revoked_at);
+    assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  });
+});
+
 describe('migration 8 failing part-way', () => {
   const failing = {
     'a table called loans already there': { break: (m7) => m7.exec("CREATE TABLE loans (note TEXT); INSERT INTO loans (note) VALUES ('mine')"), error: /table loans already exists/ },

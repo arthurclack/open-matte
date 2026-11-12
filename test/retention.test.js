@@ -1,7 +1,8 @@
 // Retention: milestone 3, slice 4. Written from docs/history/milestone-3.md (slice 4),
-// not from the implementation. Old events and ended browser sessions are deleted;
-// tickets and screenings never are, so deleting anything never changes what a viewer
-// can do. That rule comes first. createRetention is imported to run a clean-up at a
+// not from the implementation, and from docs/version-2.md ("Events, the Ledger,
+// retention and Status") for loans. Old events and ended browser sessions are deleted;
+// tickets, loans, responses and screenings never are, so deleting anything never
+// changes what a viewer can do. That rule comes first. createRetention is imported to run a clean-up at a
 // chosen `now` (the admin's Clear now always runs at the real time), and createAccess
 // and createSettings to read each ticket's state at times other than now, as the
 // server would.
@@ -10,7 +11,7 @@ import crypto from 'node:crypto';
 import { after, before, describe, test } from 'node:test';
 import { softAuthenticator } from './softauth.js';
 
-const { FILM_SECONDS, adminBrowser, browser, enroll, makeFilm, newPerson, playbackFiles, setupLink, signIn, startServer, tempDir } = await import('./helpers.js');
+const { FILM_SECONDS, addFilm, adminBrowser, browser, enroll, makeFilm, newPerson, playbackFiles, setupLink, signIn, startServer, tempDir } = await import('./helpers.js');
 const { openDb } = await import('../server/db.js');
 const { DEFAULT_SETTINGS, createSettings } = await import('../server/settings.js');
 const { createAccess } = await import('../server/access.js');
@@ -32,20 +33,20 @@ const statuses = (b, urls) => Promise.all(urls.map(async (u) => (await b.get(u))
 const rowsOf = (db, table) => db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all().map(plain);
 // What the clean-up may delete, and everything it must leave exactly as it was.
 const DELETABLE = ['events', 'sessions', 'session_tickets'];
-const UNTOUCHED = ['films', 'tickets', 'screenings', 'people', 'passkeys', 'person_links', 'settings'];
+const UNTOUCHED = ['films', 'tickets', 'loans', 'responses', 'screenings', 'people', 'passkeys', 'person_links', 'settings'];
 const tables = (db, names = UNTOUCHED) => Object.fromEntries(names.map((t) => [t, rowsOf(db, t)]));
 
 // ====================================================================== the rule
 describe('the rule: deleting anything never changes what a viewer can do', () => {
   const mediaDir = tempDir();
   const NOW = Date.now();
-  // Times to read each ticket's state at: its deadlines and resume windows pass in between.
-  const AT = { now: NOW, tomorrow: NOW + DAY, 'in three days': NOW + 3 * DAY, 'in twenty years': NOW + 20 * YEAR };
+  // Times to read each link's state at: its start-by date and its tape's due time pass in between.
+  const AT = { now: NOW, tomorrow: NOW + DAY, 'in four days': NOW + 4 * DAY, 'in twenty years': NOW + 20 * YEAR };
   let srv;
   let admin;
   let access;
   const films = {};
-  // The tickets, by the state they're in.
+  // The links, by the state they're in. One tape per film, so a film each.
   const t = {};
   // [what, browser, film]: every browser and the film it watches.
   const seen = [];
@@ -54,17 +55,20 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
   let sam;
   let before1;
 
-  async function issue(fields, slug = 'arrival') {
-    const r = await admin.post('/api/admin/tickets', { filmId: films[slug], ...fields });
+  // A link for a film of its own, named after the state the link will be in.
+  async function issue(what, fields = {}) {
+    films[what] = (await addFilm(admin, mediaDir, what)).id;
+    const r = await admin.post('/api/admin/tickets', { filmId: films[what], label: what, ...fields });
     assert.equal(r.status, 201, JSON.stringify(r.data));
-    return r.data[0];
+    t[what] = r.data[0];
+    return t[what];
   }
   async function opened(b, ticket) {
     const r = await b.post('/api/tickets/open', { code: ticket.code });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     return b;
   }
-  async function play(b, slug = 'arrival') {
+  async function play(b, slug) {
     const r = await b.post(`/api/films/${slug}/screenings`);
     assert.equal(r.status, 200, JSON.stringify(r.data));
     return r.data.screeningId;
@@ -82,9 +86,16 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
   }
   const sql = (s, ...args) => srv.db.prepare(s).run(...args);
   const fresh = () => browser(srv.base);
+  const loanOf = (what) => srv.db.prepare('SELECT * FROM loans WHERE ticket_id = ?').get(t[what].id);
+  // The whole loan moves back in time: taken `taken` ago, due after its three days.
+  const takenAgo = (what, taken) => {
+    sql('UPDATE loans SET taken_at = ?, due_at = ? WHERE ticket_id = ?', NOW - taken, NOW - taken + 3 * DAY, t[what].id);
+    sql('UPDATE tickets SET first_played_at = ? WHERE id = ?', NOW - taken, t[what].id);
+    sql('UPDATE screenings SET started_at = ? WHERE ticket_id = ?', NOW - taken, t[what].id);
+  };
 
-  // What each browser can do: its film's page, its tickets, every playback file and the
-  // poster, and Play where Play is refused (Play that works would start a screening).
+  // What each browser can do: its film's page, its links, every playback file and the
+  // poster, and Play where Play is refused (Play that works would take a tape).
   async function whatBrowsersCanDo() {
     const out = {};
     for (const [what, b, slug] of seen) {
@@ -106,7 +117,7 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
     return out;
   }
 
-  // Every ticket as the admin reads it, leaving out what isn't the ticket's own: how
+  // Every link as the admin reads it, leaving out what isn't the link's own: how
   // many browsers opened it, its last activity, and the device names of browsers.
   async function whatTheAdminSees() {
     const out = {};
@@ -123,7 +134,7 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
     return out;
   }
 
-  // access.ticketStatus for every ticket, now and later.
+  // access.ticketStatus for every link, now and later: its state, its loan and the film's.
   function ticketStates() {
     const out = {};
     for (const [what, { id }] of Object.entries(t)) {
@@ -131,7 +142,7 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
       out[what] = Object.fromEntries(
         Object.entries(AT).map(([when, at]) => {
           const s = access.ticketStatus(row, at);
-          return [when, { ...s, open: plain(s.open) }];
+          return [when, { ...s, loan: plain(s.loan), out: plain(s.out) }];
         }),
       );
     }
@@ -151,15 +162,9 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
 
   before(async () => {
     makeFilm(mediaDir, 'arrival');
-    makeFilm(mediaDir, 'heat', { title: 'Heat', year: 1995 });
-    makeFilm(mediaDir, 'solaris', { title: 'Solaris', year: 1972 });
     srv = await startServer({ mediaDir, limits: { scale: 100 } });
     admin = await adminBrowser(srv.base);
     await admin.post('/api/admin/scan');
-    for (const f of (await admin.get('/api/admin/films')).data) {
-      films[f.slug] = f.id;
-      await admin.patch(`/api/admin/films/${f.id}`, { published: true });
-    }
     access = createAccess(srv.db, createSettings(srv.db));
 
     // Sam, signed in on a phone; a laptop that signed in and then out.
@@ -173,111 +178,134 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
     assert.equal((await laptop.post('/api/signout')).status, 200);
     sam = { p, phone };
 
-    // Tickets for anyone, each opened in a browser of its own.
-    t.unlimited = await issue({ label: 'Unlimited' });
-    const unlimited = await opened(fresh(), t.unlimited);
-    await watched(unlimited, 'arrival', 30);
-    seen.push(['unlimited, paused at 30s', unlimited, 'arrival']);
-
-    // Used up in a browser that has since ended (the first clean-up deletes it), and
-    // opened in another that hasn't.
-    t.usedUp = await issue({ label: 'Used up', screeningLimit: 1 });
-    const player = await opened(fresh(), t.usedUp);
-    await watched(player, 'arrival', 20);
+    // Spent: the tape went out ten weeks ago, in a browser that has since ended (the
+    // first clean-up deletes it), and came due three days later; the link was opened
+    // in another browser that hasn't ended. The server's sweep wrote the end down.
+    // (1.x opened it in the second browser afterwards. A spent link opens only in a
+    // browser that already holds it, so here the second browser opened it first.)
+    await issue('spent');
+    const alsoOpened = await opened(fresh(), t.spent);
+    const player = await opened(fresh(), t.spent);
+    await watched(player, 'spent', 20);
     ended.player = hashOf(player);
-    seen.push(['limited and used up', await opened(fresh(), t.usedUp), 'arrival']);
+    takenAgo('spent', 70 * DAY);
+    assert.equal(access.sweep(NOW), 1);
+    assert.equal((await fresh().post('/api/tickets/open', { code: t.spent.code })).status, 410);
+    seen.push(['spent', await opened(alsoOpened, t.spent), 'spent']);
 
-    t.expired = await issue({ label: 'Expired', daysAfterFirstPlay: 1 });
-    const expired = await opened(fresh(), t.expired);
-    await watched(expired, 'arrival', 10);
-    seen.push(['expired a day after first play', expired, 'arrival']);
+    // Links for anyone, each opened in a browser of its own. Out: the tape is with it.
+    await issue('out');
+    const out = await opened(fresh(), t.out);
+    await watched(out, 'out', 30);
+    seen.push(['out with this browser, paused at 30s', out, 'out']);
 
-    t.startByPassed = await issue({ label: 'Start by passed', startBy: NOW - HOUR });
-    seen.push(['start-by passed', await opened(fresh(), t.startByPassed), 'arrival']);
+    // Due: taken four days ago, due back yesterday.
+    await issue('due');
+    const due = await opened(fresh(), t.due);
+    await watched(due, 'due', 10);
+    takenAgo('due', 4 * DAY);
+    seen.push(['came due a day ago', due, 'due']);
 
-    t.startByPending = await issue({ label: 'Start by pending', startBy: NOW + 2 * DAY, screeningLimit: 2 });
-    seen.push(['start-by in two days', await opened(fresh(), t.startByPending), 'arrival']);
+    await issue('start-by-passed', { startBy: NOW - HOUR });
+    seen.push(['start-by passed', await opened(fresh(), t['start-by-passed']), 'start-by-passed']);
 
-    t.finished = await issue({ label: 'Finished', screeningLimit: 2 });
+    await issue('start-by-pending', { startBy: NOW + 2 * DAY });
+    seen.push(['start-by in two days', await opened(fresh(), t['start-by-pending']), 'start-by-pending']);
+
+    await issue('finished');
     const finished = await opened(fresh(), t.finished);
-    const f = await play(finished);
+    const f = await play(finished, 'finished');
     await heartbeat(finished, f, FILM_SECONDS / 2);
     await heartbeat(finished, f, FILM_SECONDS);
     await heartbeat(finished, f, FILM_SECONDS, false);
-    seen.push(['played and finished', finished, 'arrival']);
+    seen.push(['played and finished, the tape still out', finished, 'finished']);
 
-    t.revoked = await issue({ label: 'Revoked' });
+    // Returned by its browser before it was due; and one whose tape the owner took back.
+    await issue('returned');
+    const returned = await opened(fresh(), t.returned);
+    await watched(returned, 'returned', 12);
+    assert.equal((await returned.post('/api/films/returned/return', { takenAt: loanOf('returned').taken_at })).status, 200);
+    seen.push(['returned early', returned, 'returned']);
+
+    await issue('taken-back');
+    const takenBack = await opened(fresh(), t['taken-back']);
+    await watched(takenBack, 'taken-back', 14);
+    assert.equal((await admin.post(`/api/admin/loans/${loanOf('taken-back').id}/take-back`, { ticketId: t['taken-back'].id })).status, 200);
+    seen.push(['its tape taken back', takenBack, 'taken-back']);
+
+    // Cancelled before it lent. (Cancelling a link that has the tape is taking the tape back.)
+    await issue('revoked');
     const revoked = await opened(fresh(), t.revoked);
-    await watched(revoked, 'arrival', 5);
     assert.equal((await admin.post(`/api/admin/tickets/${t.revoked.id}/revoke`)).status, 200);
-    seen.push(['revoked', revoked, 'arrival']);
+    seen.push(['revoked', revoked, 'revoked']);
 
-    t.voided = await issue({ label: 'Voided', screeningLimit: 1 });
-    const voided = await opened(fresh(), t.voided);
-    const v = await watched(voided, 'arrival', 50);
-    assert.equal((await admin.post(`/api/admin/screenings/${v}/void`)).status, 200);
-    seen.push(['its screening given back', voided, 'arrival']);
+    await issue('never-opened', { loanDays: 7 });
 
-    t.neverOpened = await issue({ label: 'Never opened', screeningLimit: 3, daysAfterFirstPlay: 7 });
-
-    // Kept by Sam, from a link another browser had opened first.
-    t.kept = await issue({ label: 'Kept', claimable: true }, 'solaris');
+    // Kept by Sam, from a link another browser had opened first; then the tape went out to Sam.
+    await issue('kept', { claimable: true });
     const first = await opened(fresh(), t.kept);
     await opened(phone, t.kept);
-    assert.equal((await phone.post('/api/films/solaris/keep')).status, 200);
-    await watched(phone, 'solaris', 15);
-    seen.push(['kept by Sam', phone, 'solaris'], ['kept: the browser that opened it first', first, 'solaris']);
+    assert.equal((await phone.post('/api/films/kept/keep')).status, 200);
+    await watched(phone, 'kept', 15);
+    seen.push(['kept by Sam', phone, 'kept'], ['kept: the browser that opened it first', first, 'kept']);
 
     // Only for Sam, signed in.
-    t.forSam = await issue({ label: 'For Sam', personId: p.id }, 'heat');
-    assert.equal((await phone.get('/api/films/heat')).status, 200);
-    await watched(phone, 'heat', 40);
-    seen.push(['for Sam', phone, 'heat']);
+    await issue('for-sam', { personId: p.id });
+    assert.equal((await phone.get('/api/films/for-sam')).status, 200);
+    await watched(phone, 'for-sam', 40);
+    seen.push(['for Sam', phone, 'for-sam']);
 
-    // A browser holding a screening that can still be resumed, signed out long ago (as
-    // far as the database can tell), and another browser that opened the same link.
-    t.heldByEnded = await issue({ label: 'Held by an ended browser' });
-    const holder = await opened(fresh(), t.heldByEnded);
-    await watched(holder, 'arrival', 25);
-    const other = await opened(fresh(), t.heldByEnded);
-    seen.push(['held by an ended browser', holder, 'arrival'], ['held by an ended browser: another browser', other, 'arrival']);
+    // A tape out with a browser that was signed out long ago (as far as the database can
+    // tell). The tape is back from that moment, but nothing has written its end.
+    await issue('held-by-ended');
+    const holder = await opened(fresh(), t['held-by-ended']);
+    await watched(holder, 'held-by-ended', 25);
+    ended.holder = hashOf(holder);
+    seen.push(['its tape out with an ended browser', holder, 'held-by-ended']);
 
     // Opened in a browser whose session expired long ago.
-    t.oldBrowser = await issue({ label: 'Opened in an expired browser' });
-    const old = await opened(fresh(), t.oldBrowser);
+    await issue('old-browser');
+    const old = await opened(fresh(), t['old-browser']);
     ended.expired = hashOf(old);
-    seen.push(['opened in a browser that expired', old, 'arrival']);
+    seen.push(['opened in a browser that expired', old, 'old-browser']);
 
-    // Time passes. Every event is 400 days old; the used-up and expired tickets'
-    // screenings can no longer be resumed; the expired ticket was first played two days
-    // ago; three browsers ended long ago, and a fourth holds a screening still running.
+    // Time passes. Every event is 400 days old; three browsers ended long ago, one of
+    // them the one whose tape nobody has written back; and a fourth expired.
     sql('UPDATE events SET at = at - ?', 400 * DAY);
-    sql('UPDATE screenings SET resumable_until = ? WHERE ticket_id IN (?, ?)', NOW - MINUTE, t.usedUp.id, t.expired.id);
-    sql('UPDATE tickets SET first_played_at = first_played_at - ? WHERE id = ?', 2 * DAY, t.expired.id);
-    sql('UPDATE screenings SET started_at = started_at - ? WHERE ticket_id = ?', 2 * DAY, t.expired.id);
-    sql('UPDATE sessions SET revoked_at = ? WHERE id_hash IN (?, ?, ?)', NOW - 60 * DAY, ended.laptop, ended.player, hashOf(holder));
+    sql('UPDATE sessions SET revoked_at = ? WHERE id_hash IN (?, ?, ?)', NOW - 60 * DAY, ended.laptop, ended.player, ended.holder);
     sql('UPDATE sessions SET created_at = ?1, last_seen_at = ?1, expires_at = ?2 WHERE id_hash = ?3', NOW - 130 * DAY, NOW - 40 * DAY, ended.expired);
   });
   after(() => srv.close());
 
-  test('tickets in every state, with old events and ended browsers everywhere', async () => {
+  test('links in every state, with old events and ended browsers everywhere', async () => {
     const state = Object.fromEntries(await Promise.all(Object.entries(t).map(async ([what, { id }]) => [what, (await admin.get(`/api/admin/tickets/${id}`)).data])));
+    // As the back office still says it, in 1.x's words: 'used_up' is a link that has lent.
     const expected = {
-      unlimited: 'ok', usedUp: 'used_up', expired: 'expired', startByPassed: 'expired', startByPending: 'ok', finished: 'ok',
-      revoked: 'revoked', voided: 'ok', neverOpened: 'ok', kept: 'ok', forSam: 'ok', heldByEnded: 'ok', oldBrowser: 'ok',
+      spent: 'used_up', out: 'ok', due: 'used_up', 'start-by-passed': 'expired', 'start-by-pending': 'ok', finished: 'ok',
+      returned: 'used_up', 'taken-back': 'revoked', revoked: 'revoked', 'never-opened': 'ok', kept: 'ok', 'for-sam': 'ok', 'held-by-ended': 'used_up', 'old-browser': 'ok',
     };
     assert.deepEqual(Object.fromEntries(Object.entries(state).map(([what, a]) => [what, a.state])), expected);
+    // And as access.js reads them, in version 2's.
+    const now = Object.fromEntries(Object.entries(ticketStates()).map(([what, at]) => [what, at.now.state]));
+    assert.deepEqual(now, {
+      spent: 'spent', out: 'lent', due: 'spent', 'start-by-passed': 'expired', 'start-by-pending': 'in', finished: 'lent',
+      returned: 'spent', 'taken-back': 'revoked', revoked: 'revoked', 'never-opened': 'in', kept: 'lent', 'for-sam': 'lent', 'held-by-ended': 'spent', 'old-browser': 'in',
+    });
     assert.equal(state.finished.finished, true);
-    assert.equal(state.voided.screeningsUsed, 0);
+    assert.equal(state.out.openScreening.resumableUntil, loanOf('out').due_at);
     assert.equal(state.kept.person.id, sam.p.id);
     assert.ok(state.kept.claimedAt);
-    assert.equal(state.forSam.person.id, sam.p.id);
-    assert.equal(state.startByPending.startBy, NOW + 2 * DAY);
-    assert.equal(state.heldByEnded.openScreening?.resumableUntil > NOW, true);
+    assert.equal(state['for-sam'].person.id, sam.p.id);
+    assert.equal(state['start-by-pending'].startBy, NOW + 2 * DAY);
+    assert.deepEqual([loanOf('spent').ended_how, loanOf('spent').ended_at], ['due', loanOf('spent').due_at]);
+    assert.deepEqual([loanOf('due').ended_at, loanOf('held-by-ended').ended_at], [null, null], 'back by the clock, with no end written');
+    assert.deepEqual([loanOf('returned').ended_how, loanOf('taken-back').ended_how], ['returned', 'taken-back']);
+    assert.equal(state['held-by-ended'].openScreening, null);
     const old = srv.db.prepare('SELECT COUNT(*) AS n FROM events WHERE at < ?').get(NOW - 300 * DAY).n;
     assert.equal(old, srv.db.prepare('SELECT COUNT(*) AS n FROM events').get().n, 'every event is old');
     assert.ok(srv.db.prepare("SELECT COUNT(*) AS n FROM events WHERE type = 'heartbeat'").get().n > 0, 'progress reports among them');
     assert.ok(srv.db.prepare("SELECT COUNT(*) AS n FROM events WHERE person_id IS NOT NULL").get().n > 0, 'account events too');
+    assert.ok(srv.db.prepare("SELECT COUNT(*) AS n FROM events WHERE type IN ('lent', 'returned', 'ticket-sent', 'ticket-cancelled')").get().n > 5, 'and the events about loans');
   });
 
   test('clearing now with the smallest windows deletes the old events and the ended browsers, and nothing else', async () => {
@@ -287,34 +315,37 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
     before1 = { browsers: browsersBefore, ...(await record()) };
     const sessionsBefore = rowsOf(srv.db, 'sessions').map((s) => s.id_hash);
     const heldTicketsBefore = rowsOf(srv.db, 'session_tickets');
+    assert.equal(loanOf('held-by-ended').ended_at, null, 'its end is still not written');
 
     const preview = (await admin.get('/api/admin/retention')).data.preview;
     const r = await admin.post('/api/admin/retention/run', {});
     assert.equal(r.status, 200, JSON.stringify(r.data));
     assert.deepEqual(r.data.lastRun.deleted, preview, 'it deleted what the preview said');
     assert.ok(preview.progressReports > 0 && preview.events > 0, JSON.stringify(preview));
-    assert.equal(preview.sessions, 3, 'the laptop and the used-up ticket’s browser, signed out long ago, and the browser that expired long ago');
+    assert.equal(preview.sessions, 3, 'the laptop and the spent link’s browser, signed out long ago, and the browser that expired long ago');
 
     assert.equal(srv.db.prepare('SELECT COUNT(*) AS n FROM events WHERE at < ?').get(Date.now() - 30 * DAY).n, 0, 'no old event is left');
+    const gone = [ended.laptop, ended.player, ended.expired];
     const sessionsAfter = rowsOf(srv.db, 'sessions').map((s) => s.id_hash);
-    assert.deepEqual(sessionsAfter, sessionsBefore.filter((h) => !Object.values(ended).includes(h)));
-    assert.ok(sessionsAfter.includes(srv.db.prepare('SELECT session_hash FROM screenings WHERE ticket_id = ?').get(t.heldByEnded.id).session_hash),
-      'the ended browser holding a screening that can still be resumed stays');
-    assert.deepEqual(rowsOf(srv.db, 'session_tickets'), heldTicketsBefore.filter((st) => !Object.values(ended).includes(st.session_hash)), 'only the deleted browsers’ tickets went with them');
-    assert.equal(srv.db.prepare('SELECT session_hash FROM screenings WHERE ticket_id = ?').get(t.usedUp.id).session_hash, ended.player, 'the used-up screening stays, naming its deleted browser');
+    assert.deepEqual(sessionsAfter, sessionsBefore.filter((h) => !gone.includes(h)));
+    // The loan is over once its browser's session ended, and when that was is read from this row.
+    assert.ok(sessionsAfter.includes(ended.holder), 'the ended browser named by a loan whose end isn’t written stays');
+    assert.deepEqual(rowsOf(srv.db, 'session_tickets'), heldTicketsBefore.filter((st) => !gone.includes(st.session_hash)), 'only the deleted browsers’ tickets went with them');
+    assert.deepEqual([loanOf('spent').session_hash, loanOf('spent').device !== null], [ended.player, true], 'the spent loan stays, naming its deleted browser and keeping its device');
+    assert.equal(srv.db.prepare('SELECT session_hash FROM screenings WHERE ticket_id = ?').get(t.spent.id).session_hash, ended.player);
   });
 
-  test('every ticket reads the same: state, screenings, finished, resume positions and deadlines, now and later', async () => {
+  test('every link reads the same: state, loan, plays, finished, resume positions and deadlines, now and later', async () => {
     const after1 = await record();
-    assert.deepEqual(after1.tables, before1.tables, 'films, tickets, screenings, people, passkeys, links and settings are untouched');
+    assert.deepEqual(after1.tables, before1.tables, 'films, tickets, loans, responses, screenings, people, passkeys, links and settings are untouched');
     assert.deepEqual(after1.tickets, before1.tickets);
     assert.deepEqual(after1.states, before1.states);
     assert.deepEqual(after1.pages, before1.pages, 'the film pages, their summaries, and Sam’s page');
   });
 
-  test('every browser can do what it could before, and an open screening still plays for the browser holding it', async () => {
+  test('every browser can do what it could before, and a tape that is out still plays for its borrower', async () => {
     assert.deepEqual(await whatBrowsersCanDo(), before1.browsers);
-    const holders = [['unlimited, paused at 30s', 30], ['played and finished', FILM_SECONDS], ['for Sam', 40], ['kept by Sam', 15]];
+    const holders = [['out with this browser, paused at 30s', 30], ['played and finished, the tape still out', FILM_SECONDS], ['for Sam', 40], ['kept by Sam', 15]];
     for (const [what, position] of holders) {
       const [, b, slug] = seen.find(([w]) => w === what);
       assert.deepEqual(await statuses(b, playbackFiles(slug)), playbackFiles(slug).map(() => 200), what);
@@ -326,8 +357,17 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
     }
   });
 
-  test('at a far-future now, with every event and browser gone, every ticket still reads the same', async () => {
+  test('at a far-future now, with every event and browser gone, every link still reads the same', async () => {
     const FAR = NOW + 20 * YEAR;
+    // By then the server's sweep has long written down every tape that came back. The
+    // one whose browser was signed out before the loan began, by these clocks, ended
+    // when it began: never before, whatever the clocks say.
+    assert.equal(access.sweep(FAR), 5);
+    const held = loanOf('held-by-ended');
+    assert.deepEqual([held.ended_how, held.ended_at], ['signed-out', held.taken_at]);
+    assert.deepEqual([loanOf('out').ended_how, loanOf('out').ended_at], ['due', loanOf('out').due_at]);
+    assert.equal(srv.db.prepare('SELECT COUNT(*) AS n FROM loans WHERE ended_at IS NULL').get().n, 0);
+
     const before2 = await record();
     const retention = createRetention({ db: srv.db, settings: createSettings(srv.db) });
     const preview = retention.preview(FAR);
@@ -370,9 +410,18 @@ function fixture(NOW) {
       .run(name, 'viewer', 'Safari on iPhone', NOW - 500 * DAY, NOW - 400 * DAY, expires, revoked);
     db.prepare('INSERT INTO session_tickets (session_hash, ticket_id, added_at) VALUES (?, ?, ?)').run(name, ticket, NOW - 500 * DAY);
   };
-  const screening = (holder, resumableUntil) =>
-    db.prepare('INSERT INTO screenings (ticket_id, film_id, session_hash, started_at, resumable_until, last_heartbeat_at, active_until) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(ticket, film, holder, resumableUntil - 2 * DAY, resumableUntil, resumableUntil - 2 * DAY, resumableUntil - 2 * DAY);
+  // A tape that browser took on a link of its own, 120 days ago, due three days later.
+  // Its browser ended 100 days ago; `endWritten` says whether anything wrote that down.
+  const loan = (holder, endWritten) => {
+    const taken = NOW - 120 * DAY;
+    const link = Number(db.prepare('INSERT INTO tickets (code, film_id, created_at) VALUES (?, ?, 0)').run(`loan${holder.length}xxxxxxxx`.slice(0, 13), film).lastInsertRowid);
+    const play = Number(
+      db.prepare('INSERT INTO screenings (ticket_id, film_id, session_hash, started_at, resumable_until, last_heartbeat_at, active_until) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(link, film, holder, taken, taken + 3 * DAY, taken, taken).lastInsertRowid,
+    );
+    db.prepare('INSERT INTO loans (film_id, ticket_id, screening_id, session_hash, device, taken_at, due_at, ended_at, ended_how) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(film, link, play, holder, 'Safari on iPhone', taken, taken + 3 * DAY, endWritten ? taken + 3 * DAY : null, endWritten ? 'due' : null);
+  };
 
   session('live');
   session('live, named only by old events');
@@ -384,10 +433,10 @@ function fixture(NOW) {
   session('ended, named by an event', { revoked: NOW - 100 * DAY });
   session('ended, named by a progress report', { revoked: NOW - 100 * DAY });
   session('ended, named only by old events', { revoked: NOW - 400 * DAY });
-  session('ended, holding a screening that can be resumed', { revoked: NOW - 100 * DAY });
-  session('ended, holding a screening that has ended', { revoked: NOW - 100 * DAY });
-  screening('ended, holding a screening that can be resumed', NOW + DAY);
-  screening('ended, holding a screening that has ended', NOW - 50 * DAY);
+  session('ended, named by a loan whose end is not written', { revoked: NOW - 100 * DAY });
+  session('ended, named by a loan that has ended', { revoked: NOW - 100 * DAY });
+  loan('ended, named by a loan whose end is not written', false);
+  loan('ended, named by a loan that has ended', true);
 
   event('heartbeat 31 days old', 'heartbeat', NOW - 31 * DAY);
   event('heartbeat 29 days old', 'heartbeat', NOW - 29 * DAY);
@@ -412,7 +461,7 @@ function fixture(NOW) {
 // With the default windows, at the fixture's NOW.
 const DELETED = { progressReports: 1, events: 5, sessions: 4 };
 const DELETED_EVENTS = ['heartbeat 31 days old', 'opened a year and a day ago', 'opened 400 days ago by a live browser', 'play 400 days ago', 'signed-in 400 days ago', 'ticket-kept 366 days ago'];
-const DELETED_SESSIONS = ['signed out 31 days ago', 'expired 31 days ago', 'ended, named only by old events', 'ended, holding a screening that has ended'];
+const DELETED_SESSIONS = ['signed out 31 days ago', 'expired 31 days ago', 'ended, named only by old events', 'ended, named by a loan that has ended'];
 
 describe('what a clean-up deletes', () => {
   const NOW = Date.UTC(2027, 5, 15, 4);
@@ -424,16 +473,33 @@ describe('what a clean-up deletes', () => {
     assert.deepEqual(f.left(), all.filter((name) => !DELETED_EVENTS.includes(name)));
   });
 
-  test('a browser goes only when it ended long enough ago, no event names it, and it holds no screening that can be resumed; its tickets go with it', () => {
+  // 1.x kept an ended browser while it held a play that could still be resumed. The
+  // loan is what matters now: one whose end isn't written needs its browser's row, to
+  // read when that browser ended; once the end is written the loan has all it needs.
+  test('a browser goes only when it ended long enough ago, no event names it, and no loan whose end isn’t written names it; its tickets go with it', () => {
     const f = fixture(NOW);
     const sessions = rowsOf(f.db, 'sessions').map((s) => s.id_hash);
     const screenings = rowsOf(f.db, 'screenings');
+    const loans = rowsOf(f.db, 'loans');
     f.retention.run(NOW);
     const left = rowsOf(f.db, 'sessions').map((s) => s.id_hash);
     assert.deepEqual(left, sessions.filter((h) => !DELETED_SESSIONS.includes(h)));
     assert.ok(left.includes('live') && left.includes('live, named only by old events'), 'a live browser is never deleted');
+    assert.ok(left.includes('ended, named by a loan whose end is not written'));
     assert.deepEqual(rowsOf(f.db, 'session_tickets').map((st) => st.session_hash), left, 'the tickets of deleted browsers went with them, and only theirs');
     assert.deepEqual(rowsOf(f.db, 'screenings'), screenings, 'screenings keep the browser that held them, even a deleted one');
+    assert.deepEqual(rowsOf(f.db, 'loans'), loans, 'and so do loans, with its device');
+    // The sweep writes that loan's end, and logs it against its browser, dated when it
+    // was due. From then the browser lives only as long as that event, like any other.
+    const named = 'ended, named by a loan whose end is not written';
+    assert.equal(createAccess(f.db, f.settings).sweep(NOW), 1);
+    const swept = rowsOf(f.db, 'loans').find((l) => l.session_hash === named);
+    assert.deepEqual([swept.ended_how, swept.ended_at], ['due', swept.due_at], 'it came due before its browser signed out');
+    f.retention.run(NOW);
+    assert.ok(rowsOf(f.db, 'sessions').some((x) => x.id_hash === named), 'its "returned" event, 117 days old, still names it');
+    f.retention.run(NOW + 300 * DAY);
+    assert.equal(rowsOf(f.db, 'sessions').some((x) => x.id_hash === named), false, 'gone with that event, a year after the tape came back');
+    assert.deepEqual(rowsOf(f.db, 'loans').find((l) => l.session_hash === named), swept, 'the loan is untouched, and still says which device');
     for (const e of rowsOf(f.db, 'events').filter((e) => e.session_hash)) assert.ok(left.includes(e.session_hash), 'every event left still finds its browser');
   });
 
@@ -448,7 +514,7 @@ describe('what a clean-up deletes', () => {
     assert.deepEqual(f.retention.run(NOW), none);
   });
 
-  test('films, tickets, screenings, people, passkeys, links and settings are never touched', () => {
+  test('films, tickets, loans, responses, screenings, people, passkeys, links and settings are never touched', () => {
     const f = fixture(NOW);
     const untouched = tables(f.db);
     f.retention.run(NOW);

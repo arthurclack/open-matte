@@ -62,7 +62,9 @@ test('the admin signs in, lends a tape from the film page, and reads Tapes, Stat
   });
 
   await test.step('Status', async () => {
-    await page.getByRole('link', { name: 'Status', exact: true }).click();
+    // The tab, not the status line's own "Status" link, which shows whenever the
+    // server has something to look at (a nearly full disk on the computer running this).
+    await page.getByRole('navigation', { name: 'Back office' }).getByRole('link', { name: 'Status', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Status' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'Needs attention' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'The server' })).toBeVisible();
@@ -105,7 +107,10 @@ test('the admin signs in, lends a tape from the film page, and reads Tapes, Stat
     await page.getByRole('link', { name: 'Ledger', exact: true }).click();
     await answer;
     await expect(page.getByRole('heading', { level: 1, name: 'Ledger' })).toBeVisible();
-    for (const text of [label, otherLabel, givenLabel]) await expect(rows(text).first()).toBeVisible();
+    // Only the two links just sent: the unfiltered Ledger shows the newest 200 events
+    // of the whole shop, and with four browsers' journeys writing to it this journey's
+    // first link can already be further down. It is looked for under the film's filter.
+    for (const text of [otherLabel, givenLabel]) await expect(rows(text).first()).toBeVisible();
 
     answer = loaded(onlyThisFilm);
     await page.getByRole('combobox', { name: 'Film' }).selectOption({ label: film.title });

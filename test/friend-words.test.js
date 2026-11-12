@@ -145,6 +145,11 @@ describe("the player's reasons for stopping", { skip }, () => {
     assert.equal(m['screening-ended'], 'This play has ended.');
     assert.equal(m.expired, 'This tape has gone back to the shop.');
     assert.equal(m.revoked, 'Arthur has taken this tape back.');
+    // Version 2's reasons, which reach the borrower only: taken back by the owner
+    // (question 6: the player says who took it back), or returned from their other device.
+    assert.equal(m['taken-back'], 'Arthur has taken this tape back.');
+    assert.equal(m.returned, 'This tape has been returned.');
+    assert.equal(m.due, 'This tape has gone back to the shop.');
     assert.equal(m['not-found'], 'This tape is no longer valid.');
     assert.equal(m['signed-out'], 'This browser has been signed out, so the film has stopped.');
     for (const code of ['unavailable', 'unpublished', 'forbidden', 'unsupported', 'error']) assert.ok(m[code], code);

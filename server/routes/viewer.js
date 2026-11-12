@@ -1,4 +1,5 @@
 import express from 'express';
+import { isSpent } from '../access.js';
 import { filmDetail, filmSummary, masterUrl, ticketForViewer } from '../films.js';
 
 const OPENED_DEDUPE_MS = 30 * 60 * 1000;
@@ -63,7 +64,14 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
       return res.status(403).json({ error: 'ticket-for-someone-else' });
     }
 
-    const viewer = sessions.load(req, 'viewer') || sessions.create(req, res, 'viewer');
+    // A link that has lent, and whose tape is back, has done its job. A browser that
+    // holds it still has its page (returned, or it was due). Any other gets nothing:
+    // no session, no cookie, not the film. Whether the film's tape is out now is
+    // never read here: opening is the same with the tape in or out, and takes nothing.
+    const known = sessions.load(req, 'viewer');
+    if (isSpent(status) && !(known && q.holds.get(known.id_hash, ticket.id))) return res.status(410).json({ error: 'ticket-spent' });
+
+    const viewer = known || sessions.create(req, res, 'viewer');
     q.attach.run(viewer.id_hash, ticket.id, Date.now());
     q.firstOpen.run(Date.now(), ticket.id);
     res.json({ slug: q.filmById.get(ticket.film_id).slug });
@@ -83,7 +91,7 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
       // belongs under memberFilms.
       if (a.via !== 'ticket') continue;
       seen.add(film.id);
-      tickets.push({ film: filmSummary(film), ticket: ticketForViewer(a.ticket, a.status) });
+      tickets.push({ film: filmSummary(film), ticket: ticketForViewer(a) });
     }
     const person = viewer?.person_id != null ? { name: viewer.person_name } : null;
     const memberFilms = person
@@ -116,12 +124,16 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
         access.logEvent('opened', { filmId: film.id, ticketId: a.ticket.id, sessionHash: viewer.id_hash });
       }
     }
+    // A tape this browser has out lives as long as its session, which was made to
+    // last a day past the due time (and again when a due date is moved later): the
+    // cookie is sent again here, so the browser keeps it that long too.
+    if (a.tape === 'yours' && a.status.loan.person_id == null) sessions.refreshViewerCookie(req, res);
     res.json({
       film: filmDetail(film),
       access: {
         canPlay: a.canPlay,
         via: a.via,
-        ticket: ticketForViewer(a.ticket, a.status),
+        ticket: ticketForViewer(a),
         preview: a.via === 'admin',
         published: Boolean(film?.published),
         mediaStatus: film.media_status,
@@ -133,29 +145,40 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
     });
   });
 
-  // Pressing Play: start or resume a screening, then hand over the playlist.
-  // A person presses it a few times an evening; the limit stops a script that
-  // presses it in a loop with a forwarded link.
+  // Pressing Play: take the tape if it is in, or carry on with it if it is this
+  // browser's, then hand over the playlist. A person presses it a few times an
+  // evening; the limit stops a script that presses it in a loop with a forwarded link.
   const playLimit = limit({ windowMs: 10 * 60 * 1000, max: 60 });
   router.post('/api/films/:slug/screenings', playLimit, (req, res) => {
     const { viewer, admin } = who(req);
     const film = q.filmBySlug.get(req.params.slug);
     if (!film) return res.status(404).json({ error: 'not-found' });
     // A browser signed in to the admin always plays in preview mode and never
-    // uses a screening. Test tickets in another browser or a private window.
+    // takes a tape. Trying a link in another browser or a private window does.
     if (admin) return res.json({ screeningId: null, preview: true, masterUrl: masterUrl(film), position: 0 });
     if (!viewer) return res.status(404).json({ error: 'not-found' });
 
     const r = access.startScreening(viewer, film);
     if (r.error === 'no-access') return res.status(404).json({ error: 'not-found' });
-    // Including no-ticket: a film shown to members, which this browser may read about but not play.
+    // The view's name is the code: out, spent, expired, unavailable. Also
+    // playing-elsewhere, and no-ticket: a film shown to members, which this browser
+    // may read about but not play.
     if (r.error) return res.status(409).json({ error: r.error });
+    // The tape is this browser's, and its session was made to last a day past the
+    // due time: the cookie is sent again with that life, after the transaction.
+    const toBrowser = r.loan.person_id == null;
+    if (toBrowser) sessions.refreshViewerCookie(req, res);
     res.json({
       screeningId: r.screening.id,
       resumed: r.resumed,
+      took: !r.resumed,
       position: r.screening.position_seconds,
-      resumableUntil: r.screening.resumable_until,
       masterUrl: masterUrl(film),
+      takenAt: r.loan.taken_at,
+      dueBack: r.loan.due_at,
+      toBrowser,
+      // 1.1.0's, kept until its pages are rebuilt.
+      resumableUntil: r.loan.due_at,
     });
   });
 
@@ -170,7 +193,30 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
     const film = q.filmBySlug.get(req.params.slug);
     const r = film ? access.keep(viewer, film) : { error: 'cannot-keep' };
     if (r.error) return res.status(409).json({ error: r.error });
-    res.json({ ticket: ticketForViewer(r.ticket, access.ticketStatus(r.ticket)) });
+    res.json({ ticket: ticketForViewer(access.filmAccess({ viewer }, film)) });
+  });
+
+  // Return it now: the borrower hands the tape back before it's due. takenAt is the
+  // loan's, as the film page gave it, so a tab left open from an earlier loan can't
+  // return a later one. Anyone who isn't the borrower of that loan gets one answer,
+  // whatever they send and whether or not there is such a film, as keep does: 409
+  // nothing-to-return. A request that couldn't be a return (no takenAt, a message
+  // with no response) is a 400 before anything is looked up, the same for everyone.
+  // A response comes with slice 4 ("Hand it back"): until then the borrower who
+  // sends one gets 409 cannot-respond, and the tape stays out.
+  const RESPONSES = ['loved-it', 'still-thinking', 'not-for-me', 'lets-talk'];
+  const returnLimit = limit({ windowMs: 10 * 60 * 1000, max: 30 });
+  router.post('/api/films/:slug/return', returnLimit, (req, res) => {
+    const b = req.body || {};
+    if (!Number.isSafeInteger(b.takenAt)) return res.status(400).json({ error: 'taken-at-required' });
+    if (b.response != null && !RESPONSES.includes(b.response)) return res.status(400).json({ error: 'bad-response' });
+    if (b.message != null && (typeof b.message !== 'string' || b.message.length > 2000)) return res.status(400).json({ error: 'bad-message' });
+    if (b.message != null && b.response == null) return res.status(400).json({ error: 'message-needs-response' });
+    const viewer = sessions.load(req, 'viewer');
+    const film = q.filmBySlug.get(req.params.slug);
+    const r = access.returnTape(viewer, film, { takenAt: b.takenAt, response: b.response ?? null });
+    if (r.error) return res.status(409).json({ error: r.error });
+    res.json({ returned: r.returned, responded: false });
   });
 
   router.post('/api/screenings/:id/heartbeat', (req, res) => {

@@ -5,10 +5,11 @@ import { tx } from './db.js';
 // Progress reports (heartbeat events) go after retainProgressDays, every other
 // event after retainEventsDays, and browser sessions retainSessionsDays after
 // they ended, once no remaining event names them. Nothing here touches tickets,
-// screenings, people or passkeys: screening limits, "finished", resume
-// positions, start-by deadlines, expiry and first-opened times all come from
-// those, so deleting never changes what a viewer can do. Backups keep what they
-// had until they expire themselves.
+// loans, responses, screenings, people or passkeys: whether a tape is out and with
+// whom, since when, whether a link is spent, "finished", resume positions,
+// start-by deadlines and first-opened times all come from those, so deleting never
+// changes what a viewer can do. Backups keep what they had until they expire
+// themselves.
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -18,15 +19,17 @@ const KEPT_EVENT = "at >= CASE type WHEN 'heartbeat' THEN :progress ELSE :events
 // A session to delete: ended (signed out or expired) more than
 // retainSessionsDays ago, counted from the earlier of the two when it has both.
 // Activity finds a viewing event's person and device through its session, so a
-// session lives as long as any of its events. One still holding a screening that
-// can be resumed stays too, although an ended session can't play it anyway.
-// Screenings and events refer to sessions by plain text, never changed here;
-// session_tickets rows go with their session (ON DELETE CASCADE).
+// session lives as long as any of its events. One named by a loan whose end isn't
+// written yet stays too: the loan is over once its browser's session ends, and
+// access.js reads when that was from this row. A loan keeps its browser's device
+// itself, so once its end is written the session can go. Loans, screenings and
+// events refer to sessions by plain text, never changed here; session_tickets rows
+// go with their session (ON DELETE CASCADE).
 const OLD_SESSION = `
   (revoked_at IS NOT NULL OR expires_at <= :now)
   AND MIN(expires_at, COALESCE(revoked_at, expires_at)) < :sessions
   AND id_hash NOT IN (SELECT session_hash FROM events WHERE session_hash IS NOT NULL AND ${KEPT_EVENT})
-  AND id_hash NOT IN (SELECT session_hash FROM screenings WHERE session_hash IS NOT NULL AND resumable_until > :now)`;
+  AND id_hash NOT IN (SELECT session_hash FROM loans WHERE session_hash IS NOT NULL AND ended_at IS NULL)`;
 
 export function createRetention({ db, settings }) {
   const q = {

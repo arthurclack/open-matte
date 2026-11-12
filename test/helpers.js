@@ -106,19 +106,28 @@ export function tempDir() {
   return fs.mkdtempSync(path.join(tempRoot, 'dir-'));
 }
 
-// One film, one test to press Play on it. Version 2 lends one tape per film, so a
-// second test pressing Play on a film an earlier test left out would find the shelf
-// empty. After every test, each database a server was started on (or a test handed
-// to watchPlays) is read for screenings begun since the last look, and the test fails
-// if another test in the file already began one on that film. The one exception is a
-// journey told over several tests: the ticket the first test played may be played
-// again by the tests after it (journey.test.js gives a screening back, then plays
-// again). Nothing is taken back or tidied here: a test gets its own film from makeFilm
-// (or addFilm, on a server already running). A test that builds its app with
-// createApp, not startServer, hands its database to watchPlays itself.
+// One film, one test to take its tape. Version 2 lends one tape per film, so a second
+// test pressing Play on a film an earlier test left out would find the shelf empty.
+// After every test, each database a server was started on (or a test handed to
+// watchPlays) is read for screenings begun since the last look, and the test fails if
+// another test in the file already began one on that film. Play writes one screening
+// for each loan, when it takes the tape, and none when it resumes: so a journey told
+// over several tests may press Play again on the tape its first test took, and no
+// test can take a tape on a film another test has lent, whichever link it uses.
+// Nothing is taken back or tidied here: a test gets its own film from makeFilm (or
+// addFilm, on a server already running). A test that builds its app with createApp,
+// not startServer, hands its database to watchPlays itself. Plays already in a database
+// when it is handed over (a shop upgraded from 1.x) were pressed by no test here: the
+// watch begins after them.
 const watched = [];
 export function watchPlays(db) {
-  watched.push({ db, seen: 0, pressedBy: new Map() });
+  let seen = 0;
+  try {
+    seen = db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM screenings').get().id;
+  } catch {
+    // No such table yet: nothing has been played.
+  }
+  watched.push({ db, seen, pressedBy: new Map() });
   return db;
 }
 
@@ -128,20 +137,17 @@ export function sharedPlays(testName) {
     const w = watched[i];
     let rows;
     try {
-      rows = w.db
-        .prepare('SELECT s.id, s.ticket_id AS ticket, f.slug FROM screenings s JOIN films f ON f.id = s.film_id WHERE s.id > ? ORDER BY s.id')
-        .all(w.seen);
+      rows = w.db.prepare('SELECT s.id, f.slug FROM screenings s JOIN films f ON f.id = s.film_id WHERE s.id > ? ORDER BY s.id').all(w.seen);
     } catch {
       // Closed, or an older schema a migration test is working on: nothing to read.
       watched.splice(i, 1);
       continue;
     }
-    for (const { id, ticket, slug } of rows) {
+    for (const { id, slug } of rows) {
       w.seen = id;
       const first = w.pressedBy.get(slug);
-      if (first === undefined) w.pressedBy.set(slug, { test: testName, tickets: new Set([ticket]) });
-      else if (first.test === testName) first.tickets.add(ticket);
-      else if (!first.tickets.has(ticket) && !shared.some((s) => s.slug === slug)) shared.push({ slug, first: first.test });
+      if (first === undefined) w.pressedBy.set(slug, testName);
+      else if (first !== testName && !shared.some((s) => s.slug === slug)) shared.push({ slug, first });
     }
   }
   return shared;

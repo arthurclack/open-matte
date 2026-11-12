@@ -8,7 +8,7 @@ import { after, before, describe, test } from 'node:test';
 
 // TMDB's image server, as an install might set it: read when config.js is first loaded.
 process.env.TMDB_IMAGE_BASE = 'https://images.example.test/t/p/';
-const { adminBrowser, browser, makeFilm, startServer, tempDir } = await import('./helpers.js');
+const { addFilm, adminBrowser, browser, makeFilm, startServer, tempDir } = await import('./helpers.js');
 const { LOCKED_POLICY, createCspReports, originOf, pagePath, pagePolicy, readReports, styleHash } = await import('../server/csp.js');
 const { createRefusalLog } = await import('../server/routes/media.js');
 
@@ -45,7 +45,7 @@ before(async () => {
   await admin.post('/api/admin/scan');
   const filmId = (await admin.get('/api/admin/films')).data[0].id;
   await admin.patch(`/api/admin/films/${filmId}`, { published: true });
-  ticket = (await admin.post('/api/admin/tickets', { filmId, screeningLimit: null })).data[0];
+  ticket = (await admin.post('/api/admin/tickets', { filmId })).data[0];
 });
 after(() => srv.close());
 
@@ -681,14 +681,25 @@ describe('the media refusal log line', () => {
     }
     const flood = logged.mock.callCount();
     assert.ok(flood <= 10, `${flood} lines for ${sent} refusals`);
-    // In the same minute, a browser with a ticket that hasn't pressed Play.
+    // In the same minute, a browser with a ticket that hasn't pressed Play: for a film
+    // of its own, whose tape is in (Arrival's is out, with the browser that played above).
+    const film = await addFilm(admin, mediaDir, 'not-played');
+    const unplayed = (await admin.post('/api/admin/tickets', { filmId: film.id })).data[0];
     const viewer = browser(srv.base);
-    assert.equal((await viewer.post('/api/tickets/open', { code: ticket.code })).status, 200);
-    assert.equal((await viewer.get('/media/arrival/hls/master.m3u8')).status, 403);
+    assert.equal((await viewer.post('/api/tickets/open', { code: unplayed.code })).status, 200);
+    assert.equal((await viewer.get('/media/not-played/hls/master.m3u8')).status, 403);
+    // And one with the link whose tape is out with that other browser.
+    const late = browser(srv.base);
+    assert.equal((await late.post('/api/tickets/open', { code: ticket.code })).status, 200);
+    const refused = await late.get('/media/arrival/hls/master.m3u8');
+    assert.deepEqual([refused.status, refused.data], [403, ''], 'the browser is told nothing');
     assert.deepEqual(
       logged.mock.calls.slice(flood).map((c) => c.arguments.join(' ')),
-      ['media 403: /media/arrival/hls/master.m3u8 - no screening held by this browser - Browser on unknown device'],
+      [
+        'media 403: /media/not-played/hls/master.m3u8 - no screening held by this browser - Browser on unknown device',
+        'media 403: /media/arrival/hls/master.m3u8 - the tape is out with someone else - Browser on unknown device',
+      ],
     );
-    assert.equal(await booth(), before + sent + 1, 'the booth counts every one');
+    assert.equal(await booth(), before + sent + 2, 'the booth counts every one');
   });
 });

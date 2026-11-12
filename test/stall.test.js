@@ -182,36 +182,41 @@ describe('one browser, or one address, can’t take every place on the films’ 
     await Promise.all(servers.map((s) => s.close()));
   });
 
-  // A server with one published film whose poster and one segment are big, and
-  // `viewers` browsers, each holding a screening of its own ticket. Also the
-  // address of the poster in the first ticket link's preview.
+  // A server with `viewers` browsers, each holding the tape of a film of its own (one
+  // tape per film, so two viewers can't play one film at once): 'arrival' for the
+  // first, then 'arrival-2' and so on, each with a big poster and one big segment.
+  // Also the address of the poster in the first link's preview.
   async function cinema(mediaOptions, viewers = 2) {
     const mediaDir = tempDir();
     const webDist = tempDir();
-    makeFilm(mediaDir, 'arrival');
-    for (const f of ['hls/v_h264_720/big.m4s', 'poster.jpg']) {
-      const file = path.join(mediaDir, 'arrival', f);
-      fs.writeFileSync(file, '');
-      fs.truncateSync(file, BIG);
+    const slugs = Array.from({ length: viewers }, (_, i) => (i ? `arrival-${i + 1}` : 'arrival'));
+    for (const slug of slugs) {
+      makeFilm(mediaDir, slug);
+      for (const f of ['hls/v_h264_720/big.m4s', 'poster.jpg']) {
+        const file = path.join(mediaDir, slug, f);
+        fs.writeFileSync(file, '');
+        fs.truncateSync(file, BIG);
+      }
     }
     fs.writeFileSync(path.join(webDist, 'index.html'), '<!doctype html><html><head><title>app</title></head><body></body></html>');
     const srv = await startServer({ mediaDir, webDist, mediaOptions });
     servers.push(srv);
     const admin = await adminBrowser(srv.base);
     await admin.post('/api/admin/scan');
-    const film = (await admin.get('/api/admin/films')).data[0];
-    await admin.patch(`/api/admin/films/${film.id}`, { published: true });
+    const films = (await admin.get('/api/admin/films')).data;
     const cookies = [];
     let poster;
-    for (let i = 0; i < viewers; i++) {
-      const ticket = (await admin.post('/api/admin/tickets', { filmId: film.id, screeningLimit: null })).data[0];
+    for (const [i, slug] of slugs.entries()) {
+      const film = films.find((f) => f.slug === slug);
+      await admin.patch(`/api/admin/films/${film.id}`, { published: true });
+      const ticket = (await admin.post('/api/admin/tickets', { filmId: film.id })).data[0];
       if (i === 0) poster = /property="og:image" content="[^"]*?(\/poster\/[^"]+)"/.exec(await (await fetch(`${srv.base}/t/${ticket.code}`)).text())[1];
       const viewer = browser(srv.base);
       await viewer.post('/api/tickets/open', { code: ticket.code });
-      assert.equal((await viewer.post('/api/films/arrival/screenings')).status, 200);
+      assert.equal((await viewer.post(`/api/films/${slug}/screenings`)).status, 200);
       cookies.push([...viewer.jar].map(([k, v]) => `${k}=${v}`).join('; '));
     }
-    return { srv, cookies, poster };
+    return { srv, cookies, poster, slugs };
   }
 
   // Asks for a file and reads only the start of the answer: its status line,
@@ -234,12 +239,12 @@ describe('one browser, or one address, can’t take every place on the films’ 
   const sending = (stalled) => stalled.filter((s) => s.status === 200).length;
 
   test('a browser that opens many slow downloads leaves the other viewers their places', async () => {
-    const { srv, cookies } = await cinema({ inFlight: 4, artwork: 1, perClient: 2, timeoutMs: 1000, idleMs: 60_000 });
+    const { srv, cookies, slugs } = await cinema({ inFlight: 4, artwork: 1, perClient: 2, timeoutMs: 1000, idleMs: 60_000 });
     const [greedy, other] = cookies;
     // Started together: two are sent, and the others wait for one of those to finish.
     const stalled = Promise.all(Array.from({ length: 6 }, () => stall(srv.base, '/media/arrival/hls/v_h264_720/big.m4s', greedy)));
     await sleep(200);
-    const r = await timed(`${srv.base}/media/arrival/hls/v_h264_720/seg_0.m4s`, { headers: { cookie: other } });
+    const r = await timed(`${srv.base}/media/${slugs[1]}/hls/v_h264_720/seg_0.m4s`, { headers: { cookie: other } });
     assert.equal(r.status, 200, 'another viewer still plays');
     // Had the browser's waiting downloads held places everyone shares, this one would
     // only get one at their 503s, 800 ms in.
@@ -262,7 +267,7 @@ describe('one browser, or one address, can’t take every place on the films’ 
 
   test('one browser’s posters take all but one of the artwork’s places at most, and leave its player one of its own', async () => {
     // As in the Docker image: 16 places, 4 of them for artwork, 4 for one browser.
-    const { srv, cookies } = await cinema({ inFlight: 16, artwork: 4, perClient: 4, timeoutMs: 3000, idleMs: 60_000 });
+    const { srv, cookies, slugs } = await cinema({ inFlight: 16, artwork: 4, perClient: 4, timeoutMs: 3000, idleMs: 60_000 });
     const [greedy, other] = cookies;
     const poster = '/media/arrival/poster.jpg';
     // Five big posters at once, read slowly: three are sent, two wait for those.
@@ -276,7 +281,7 @@ describe('one browser, or one address, can’t take every place on the films’ 
     assert.equal(own.status, 200, 'the same browser’s segment');
     assert.ok(own.waited < 1500, `without waiting for a place (${own.waited} ms)`);
     // And another viewer's poster still has places of its own.
-    const theirs = await timed(srv.base + poster, { headers: { cookie: other } });
+    const theirs = await timed(`${srv.base}/media/${slugs[1]}/poster.jpg`, { headers: { cookie: other } });
     assert.equal(theirs.status, 200, 'another viewer’s poster');
     assert.ok(theirs.waited < 1500, `without waiting for a place (${theirs.waited} ms)`);
     const done = await stalled;
@@ -298,12 +303,12 @@ describe('one browser, or one address, can’t take every place on the films’ 
   });
 
   test('a download nobody reads is cut off, and its place goes to the next viewer', async () => {
-    const { srv, cookies } = await cinema({ inFlight: 1, artwork: 1, perClient: 1, timeoutMs: 3000, idleMs: 300 });
+    const { srv, cookies, slugs } = await cinema({ inFlight: 1, artwork: 1, perClient: 1, timeoutMs: 3000, idleMs: 300 });
     const [stopped, other] = cookies;
     const held = await stall(srv.base, '/media/arrival/hls/v_h264_720/big.m4s', stopped);
     assert.equal(held.status, 200);
     // The only place is taken: this waits, until the reader that stopped loses it.
-    const r = await timed(`${srv.base}/media/arrival/hls/v_h264_720/seg_0.m4s`, { headers: { cookie: other }, ms: 5000 });
+    const r = await timed(`${srv.base}/media/${slugs[1]}/hls/v_h264_720/seg_0.m4s`, { headers: { cookie: other }, ms: 5000 });
     assert.equal(r.status, 200, 'served once the place is free');
     assert.ok(r.ms < 2500, `after ${r.ms} ms`);
     // The server closed that connection: reading on, it ends before the file does.

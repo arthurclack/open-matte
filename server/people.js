@@ -107,6 +107,8 @@ export function createPeople({ db, sessions, access, settings, rp, ceremonies })
   }
 
   // Signed out everywhere, links cancelled, and unable to sign in until enabled.
+  // Tapes they have out on their own links come back in the same step: the card can
+  // be turned on again, and a loan must not come back to life with it.
   // Passkeys stay: for a lost or stolen device, use a reset instead.
   function disable(id) {
     return tx(db, () => {
@@ -116,6 +118,7 @@ export function createPeople({ db, sessions, access, settings, rp, ceremonies })
       db.prepare('UPDATE people SET disabled_at = ? WHERE id = ?').run(now, p.id);
       const signedOut = sessions.revokePersonSessions(p.id, now);
       q.cancelLinks.run(now, p.id);
+      access.endLoansOf(p.id, now);
       event('person-disabled', p.id, { signedOut }, {}, now);
       return getPerson(p.id);
     }, { immediate: true });

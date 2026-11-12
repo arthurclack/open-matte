@@ -1,6 +1,8 @@
 // Keeping a ticket: milestone 2, slice 3. Written from docs/history/milestone-2.md
 // ("Keeping a ticket", "Changes to server/access.js", "Route changes", "Slice 3"), not
-// from the implementation. No viewer browser here ever holds the admin cookie: the
+// from the implementation; and re-specified for version 2 (docs/version-2.md, question
+// 2, answer a): a link can be kept only before Play, and only while the tape is in. A
+// tape never changes hands with its link. No viewer browser here ever holds the admin cookie: the
 // admin's preview bypasses every person rule, so a pass there would prove nothing.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -10,7 +12,6 @@ import { addFilm, adminBrowser, browser, enroll, makeFilm, newPerson, playbackFi
 
 const mediaDir = tempDir();
 const master = (slug) => `/media/${slug}/hls/master.m3u8`;
-const segment = (i, slug) => `/media/${slug}/hls/v_h264_720/seg_${i}.m4s`;
 
 let srv;
 let admin;
@@ -43,7 +44,12 @@ const statuses = (b, urls) => Promise.all(urls.map(async (u) => (await b.get(u))
 const every = (urls, code) => urls.map(() => code);
 const status = async (b, url) => (await b.get(url)).status;
 const ticketRow = (id) => srv.db.prepare('SELECT * FROM tickets WHERE id = ?').get(id);
-const screeningRow = (id) => srv.db.prepare('SELECT * FROM screenings WHERE id = ?').get(id);
+const loanOf = (ticketId) => srv.db.prepare('SELECT * FROM loans WHERE ticket_id = ?').get(ticketId);
+// The tape came due a moment ago: the whole loan moves back, so it still began before it was due.
+const comeDue = (ticketId) => {
+  const l = loanOf(ticketId);
+  srv.db.prepare('UPDATE loans SET taken_at = ?, due_at = ? WHERE id = ?').run(Date.now() - 1 - (l.due_at - l.taken_at), Date.now() - 1, l.id);
+};
 const me = async (b) => {
   const r = await b.get('/api/me');
   assert.equal(r.status, 200);
@@ -166,25 +172,28 @@ describe('Let them keep it', () => {
     assert.equal(r.data.error, 'cannot-keep');
   });
 
-  test('a friend with no account still plays a keepable ticket, and is offered keeping', async () => {
-    const t = await keepable();
-    const b = await opened(fresh(), t);
-    const pg = await page(b);
+  test('a friend with no account still plays a keepable ticket, and is offered keeping until they press Play', async () => {
+    const slug = await ownFilm('no-account');
+    const t = await keepable({}, slug);
+    const b = await opened(fresh(), t, slug);
+    const pg = await page(b, slug);
     assert.equal(pg.status, 200);
     assert.equal(pg.data.access.canPlay, true);
     assert.equal(pg.data.access.canKeep, true, 'the page offers Sign in and keep it');
-    await play(b);
-    assert.deepEqual(await statuses(b, playbackFiles('arrival')), every(playbackFiles('arrival'), 200));
-    const r = await keep(b);
+    const r = await keep(b, slug);
     assert.equal(r.status, 401, 'keeping needs a sign-in');
     assert.equal(r.data.error, 'sign-in-required');
+    await play(b, slug);
+    assert.deepEqual(await statuses(b, playbackFiles(slug)), every(playbackFiles(slug), 200));
+    assert.equal((await page(b, slug)).data.access.canKeep, false, 'Play took the tape: the offer goes');
+    assert.equal((await keep(b, slug)).status, 401);
     assert.equal(ticketRow(t.id).person_id, null);
   });
 });
 
 // ====================================================================== keeping
 describe('keeping', () => {
-  test('needs this browser to hold the ticket, in the ok state', async () => {
+  test('needs this browser to hold the ticket, with the tape in and never lent', async () => {
     const t = await keepable();
     const { phone } = await member();
     // Signed in, but this browser never opened the link.
@@ -197,11 +206,14 @@ describe('keeping', () => {
     assert.equal((await page(b)).data.access.canKeep, false);
     assert.equal((await keep(b)).status, 409, 'an expired ticket can’t be kept');
 
-    const usedUp = await keepable({ screeningLimit: 1 }, 'heat');
+    // 1.x: "used up". A link that has lent is spent once its tape is back.
+    const usedUp = await keepable({}, 'heat');
     const c = await device(await opened(fresh(), usedUp, 'heat'));
     await play(c, 'heat');
-    srv.db.prepare('UPDATE screenings SET resumable_until = ? WHERE ticket_id = ?').run(Date.now() - 1, usedUp.id);
-    assert.equal((await keep(c, 'heat')).data.error, 'cannot-keep', 'nor a used-up one');
+    comeDue(usedUp.id);
+    assert.equal((await page(c, 'heat')).data.access.ticket.state, 'spent');
+    assert.equal((await page(c, 'heat')).data.access.canKeep, false);
+    assert.equal((await keep(c, 'heat')).data.error, 'cannot-keep', 'nor a spent one');
 
     const revoked = await keepable({}, 'heat');
     const d = await device(await opened(fresh(), revoked, 'heat'));
@@ -230,13 +242,13 @@ describe('keeping', () => {
 
   test('the row afterwards, and every other browser that opened the link loses it at once', async () => {
     const slug = await ownFilm('kept-row');
-    const t = await keepable({ screeningLimit: 3, daysAfterFirstPlay: 7 }, slug);
+    const t = await keepable({ loanDays: 7 }, slug);
     const friend = await opened(fresh(), t, slug);
     const { p, device } = await member();
     const b = await device(await opened(fresh(), t, slug));
     const before = Date.now();
     const k = await kept(b, slug);
-    assert.equal(k.state, 'ok');
+    assert.deepEqual([k.state, k.tape, k.loanDays], ['ok', 'in', 7], 'the link as its keeper now sees it: the tape in, its own days');
     const row = ticketRow(t.id);
     assert.equal(row.person_id, p.id);
     assert.equal(row.claimable, 0);
@@ -248,7 +260,9 @@ describe('keeping', () => {
     assert.equal(pg.data.access.canKeep, false);
     const third = await device();
     assert.equal((await listed(third, slug)).length, 1, "Sam's third device lists it without opening the link");
-    await play(third, slug);
+    const took = await play(third, slug);
+    assert.deepEqual([took.toBrowser, took.dueBack - took.takenAt], [false, 7 * 24 * 3600e3], 'kept, it lends to the keeper, for its days');
+    assert.equal(loanOf(t.id).person_id, p.id);
     assert.equal(await status(third, master(slug)), 200);
     // A stranger who gets the link now finds a ticket for one person.
     assert.equal((await fresh().post('/api/tickets/open', { code: t.code })).status, 401);
@@ -297,68 +311,73 @@ describe('keeping', () => {
     assert.equal(ticketRow(t.id).person_id, p.id);
   });
 
-  test('not while another browser is playing it; once that browser pauses, the keeper resumes the same screening', async () => {
+  // 1.x allowed a keep with a play open: refused only while another browser was playing
+  // it, and the keeper then took the same play over. A link that has the tape can't
+  // change hands at all now (question 2, answer a).
+  test('not once Play has taken the tape on it: not for the borrower who signs in afterwards, nor for another browser, playing, paused or quiet', async () => {
     const slug = await ownFilm('playing-elsewhere');
-    const t = await keepable({ screeningLimit: 2, daysAfterFirstPlay: 3 }, slug);
+    const t = await keepable({}, slug);
     const tv = await opened(fresh(), t, slug);
     const { screeningId } = await play(tv, slug);
     assert.equal((await heartbeat(tv, screeningId, { position: 30 })).status, 200);
     const { device } = await member();
     const laptop = await device(await opened(fresh(), t, slug));
 
-    const busy = await keep(laptop, slug);
-    assert.equal(busy.status, 409);
-    assert.equal(busy.data.error, 'playing-elsewhere');
-    assert.equal(ticketRow(t.id).person_id, null);
-
-    const clocks = () => {
-      const r = ticketRow(t.id);
-      const s = screeningRow(screeningId);
-      return { firstPlayed: r.first_played_at, limit: r.screening_limit, days: r.days_after_first_play, startedAt: s.started_at, resumableUntil: s.resumable_until };
+    const refusedFor = async (b, why) => {
+      assert.equal((await page(b, slug)).data.access.canKeep, false, why);
+      const r = await keep(b, slug);
+      assert.deepEqual([r.status, r.data], [409, { error: 'cannot-keep' }], why);
+      assert.equal(ticketRow(t.id).person_id, null, why);
     };
-    const beforeKeep = clocks();
-    const expiresBefore = (await adminTicket(t.id)).expiresAt;
+    await refusedFor(laptop, 'while another browser plays it');
     assert.equal((await pause(tv, screeningId, 40)).status, 200);
-    await kept(laptop, slug);
-    assert.deepEqual(clocks(), beforeKeep, 'limits and clocks unchanged');
-    assert.equal((await adminTicket(t.id)).expiresAt, expiresBefore);
-    assert.equal((await adminTicket(t.id)).screeningsUsed, 1);
-
-    // The TV lost it: its next request is refused, and it can't hold on to the screening.
-    assert.equal(await status(tv, segment(3, slug)), 403);
-    assert.equal((await heartbeat(tv, screeningId, { position: 46 })).status, 404);
-    await lostIt(tv, t, slug);
-
-    // The keeper takes the same screening over at once, at the same place.
-    const s = await play(laptop, slug);
-    assert.equal(s.screeningId, screeningId);
-    assert.equal(s.resumed, true);
-    assert.equal(s.position, 40);
-    assert.equal(await status(laptop, master(slug)), 200);
-    assert.equal((await adminTicket(t.id)).screeningsUsed, 1, 'still one screening used');
-  });
-
-  test('a browser that has gone quiet, or can no longer play, doesn’t block keeping', async () => {
-    const slug = await ownFilm('gone-quiet');
-    const t = await keepable({}, slug);
-    const tv = await opened(fresh(), t, slug);
-    const { screeningId } = await play(tv, slug);
-    const { device } = await member();
-    const laptop = await device(await opened(fresh(), t, slug));
+    await refusedFor(laptop, 'paused');
     // Quiet for longer than a heartbeat allows.
     srv.db.prepare('UPDATE screenings SET active_until = ? WHERE id = ?').run(Date.now() - 1, screeningId);
-    await kept(laptop, slug);
+    await refusedFor(laptop, 'gone quiet');
 
-    const other = await ownFilm('signed-out-of-it');
-    const t2 = await keepable({}, other);
-    const tv2 = await opened(fresh(), t2, other);
-    const s2 = await play(tv2, other);
-    const laptop2 = await device(await opened(fresh(), t2, other));
-    // The playing browser was signed out of the ticket.
-    await admin.post(`/api/admin/tickets/${t2.id}/sign-out-browsers`);
-    await opened(laptop2, t2, other);
-    await kept(laptop2, other);
-    assert.equal((await play(laptop2, other)).screeningId, s2.screeningId);
+    // The borrower signs in afterwards: the tape stays in that browser only, and isn't on their card.
+    const sam = await member();
+    await sam.device(tv);
+    const mine = (await page(tv, slug)).data.access;
+    assert.deepEqual([mine.ticket.tape, mine.ticket.inAccount, mine.ticket.loan.toBrowser, mine.canKeep], ['yours', false, true, false]);
+    await refusedFor(tv, 'the borrower, signed in after Play');
+    assert.deepEqual(await listed(sam.phone, slug), [], 'not on their card: their other devices have nothing');
+    // Signing in carried the tape along with the browser: it plays on, from the same place.
+    const s = await play(tv, slug);
+    assert.deepEqual([s.screeningId, s.resumed, s.position], [screeningId, true, 40]);
+    assert.equal(await status(tv, master(slug)), 200);
+
+    // Back, the link is spent: it lent once, and can't go on anyone's card.
+    comeDue(t.id);
+    await refusedFor(laptop, 'spent');
+    await refusedFor(tv, 'spent, for the borrower');
+    assert.equal((await adminTicket(t.id)).screeningsUsed, 1);
+  });
+
+  test('a waiting link can’t be kept while the tape is out on another link; once it is back it can, and then lends to its keeper', async () => {
+    const slug = await ownFilm('waiting-keep');
+    const first = await issue({}, slug);
+    const friend = await opened(fresh(), first, slug);
+    await play(friend, slug);
+    const t = await keepable({}, slug);
+    const sam = await member();
+    const b = await sam.device(await opened(fresh(), t, slug));
+    const pg = (await page(b, slug)).data.access;
+    assert.deepEqual([pg.ticket.state, pg.canKeep], ['out', false], 'no keep offer on the out page');
+    assert.deepEqual((await keep(b, slug)).data, { error: 'cannot-keep' });
+    assert.equal(ticketRow(t.id).person_id, null);
+
+    comeDue(first.id);
+    assert.equal((await page(b, slug)).data.access.canKeep, true);
+    assert.equal(loanOf(first.id).ended_at, null, 'nothing has written the end yet');
+    const k = await kept(b, slug);
+    assert.deepEqual([k.state, k.tape], ['ok', 'in']);
+    assert.deepEqual([loanOf(first.id).ended_at, loanOf(first.id).ended_how], [loanOf(first.id).due_at, 'due'], 'keeping wrote it, dated when it was due');
+    assert.equal(ticketRow(t.id).person_id, sam.p.id);
+    const took = await play(sam.phone, slug);
+    assert.deepEqual([took.took, took.toBrowser], [true, false], 'on any of the keeper’s devices');
+    assert.equal(loanOf(t.id).person_id, sam.p.id);
   });
 
   test('two keeps at once: exactly one wins, and the other browser is told it was kept', async () => {
@@ -442,8 +461,10 @@ describe('giving and releasing', () => {
     const { screeningId } = await play(friend, slug);
     assert.equal(await status(friend, master(slug)), 200);
     await pause(friend, screeningId, 12);
-    assert.equal((await play(b, slug)).screeningId, screeningId);
-    assert.equal(await status(friend, master(slug)), 403, 'one device at a time: the keeper took it over last');
+    // 1.x: the keeper's browser took the paused play over. The first to press Play has the tape.
+    assert.deepEqual((await b.post(`/api/films/${slug}/screenings`)).data, { error: 'out' });
+    assert.equal((await play(friend, slug)).screeningId, screeningId);
+    assert.equal(await status(friend, master(slug)), 200, 'the friend who pressed Play first keeps the tape');
     assert.deepEqual(await listed(keeperOnly, slug), [], 'a device of the keeper that never opened the link loses it');
   });
 
@@ -475,24 +496,35 @@ describe('giving and releasing', () => {
     await play(phone, slug);
   });
 
-  test('giving a kept ticket to someone else, and its open screening moves with it', async () => {
+  // 1.x: given on with a play open, "its open screening moves with it". A link that has
+  // the tape can't be given at all (question 2, answer a: 409 tape-out), so this gives
+  // one whose tape is in: nothing moves but the link. Once its tape is out, it stays put.
+  test('giving a kept ticket to someone else, before it has lent: theirs to play, and no longer the keeper’s', async () => {
     const slug = await ownFilm('given-on');
     const t = await keepable({}, slug);
     const sam = await member();
     const alex = await member(uniq('Alex'));
     const b = await sam.device(await opened(fresh(), t, slug));
     await kept(b, slug);
-    const { screeningId } = await play(b, slug);
-    assert.equal((await heartbeat(b, screeningId, { position: 20 })).status, 200);
+    assert.equal((await page(b, slug)).data.access.canPlay, true);
     await holder(t.id, { personId: alex.p.id });
     assert.equal(ticketRow(t.id).person_id, alex.p.id);
-    assert.equal(await status(b, segment(2, slug)), 403, "Sam's browser stops on its next request");
-    // Sam's browser was still "playing", but can't any more: Alex takes over at once.
+    assert.equal((await page(b, slug)).status, 410, "Sam's browser, which opened the link, is told it's someone's now");
+    assert.equal((await b.post(`/api/films/${slug}/screenings`)).status, 404);
     const s = await play(alex.phone, slug);
-    assert.equal(s.screeningId, screeningId);
+    assert.deepEqual([s.took, s.toBrowser], [true, false]);
+    assert.equal(loanOf(t.id).person_id, alex.p.id, 'the tape goes out to the one the link is for when Play is pressed');
     const types = (await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.events.map((e) => [e.type, e.personId]);
     assert.ok(types.some(([type, pid]) => type === 'ticket-released' && pid === sam.p.id));
     assert.ok(types.some(([type, pid]) => type === 'ticket-given' && pid === alex.p.id));
+    // Now it has the tape: it can't be given back to Sam, nor let loose, and nothing is logged.
+    for (const to of [{ personId: sam.p.id }, { personId: null, claimable: true }]) {
+      const refused = await admin.post(`/api/admin/tickets/${t.id}/holder`, to);
+      assert.deepEqual([refused.status, refused.data], [409, { error: 'tape-out' }]);
+    }
+    assert.equal(ticketRow(t.id).person_id, alex.p.id);
+    assert.equal((await admin.get(`/api/admin/activity?ticket=${t.id}`)).data.events.filter((e) => /^ticket-(given|released)$/.test(e.type)).length, types.filter(([type]) => /^ticket-(given|released)$/.test(type)).length);
+    assert.equal((await play(alex.phone, slug)).resumed, true, 'Alex plays on');
   });
 
   test('refused without a personId, for someone disabled or unknown; the same person is no change', async () => {

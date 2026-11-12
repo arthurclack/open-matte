@@ -139,3 +139,62 @@ test('two different session cookies sign the browser in as neither, viewer or ad
   assert.ok(load([ours.cookie, admin.cookie], 'admin'));
   db.close();
 });
+
+// A browser with a tape out keeps its session until a day past the due time
+// (docs/version-2.md, "What can happen to a tape"). The row is prolonged inside the
+// transaction that takes the tape; the cookie is sent again by the routes afterwards.
+test('prolonging a session only ever lengthens it, and only a viewer’s', async () => {
+  const { openDb } = await import('../server/db.js');
+  const { sessionProlonger } = await import('../server/sessions.js');
+  const db = openDb(':memory:');
+  const store = createSessionStore(db, { adminPassword: 'a password' });
+  const req = { get: () => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Version/26.0 Safari/605.1.15', secure: false };
+  const viewer = store.create(req, { append: () => {} }, 'viewer');
+  const admin = store.create(req, { append: () => {} }, 'admin');
+  const expires = (row) => db.prepare('SELECT expires_at FROM sessions WHERE id_hash = ?').get(row.id_hash).expires_at;
+  const DAY = 24 * 60 * 60 * 1000;
+
+  assert.equal(store.prolong(viewer.id_hash, viewer.expires_at + DAY), true);
+  assert.equal(expires(viewer), viewer.expires_at + DAY);
+  assert.equal(store.prolong(viewer.id_hash, viewer.expires_at), false, 'never shortened');
+  assert.equal(store.prolong(viewer.id_hash, viewer.expires_at + DAY), false, 'nor written when it changes nothing');
+  assert.equal(expires(viewer), viewer.expires_at + DAY);
+  assert.equal(store.prolong(admin.id_hash, admin.expires_at + 365 * DAY), false, 'an admin session is never prolonged');
+  assert.equal(expires(admin), admin.expires_at);
+  assert.equal(store.prolong('no such session', Date.now() + DAY), false);
+  // access.js makes its own from the database alone, to use inside its transaction: the same statement.
+  assert.equal(sessionProlonger(db)(viewer.id_hash, viewer.expires_at + 2 * DAY), true);
+  assert.equal(expires(viewer), viewer.expires_at + 2 * DAY);
+  db.close();
+});
+
+test('the viewer cookie is sent again with the life its session has now: the same token, never a new session, and nothing for a session that has ended', async () => {
+  const { openDb } = await import('../server/db.js');
+  const db = openDb(':memory:');
+  const store = createSessionStore(db, { adminPassword: 'a password' });
+  const ua = { get: () => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Version/26.0 Safari/605.1.15', secure: false };
+  let first;
+  const viewer = store.create(ua, { append: (_, value) => (first = value) }, 'viewer');
+  const token = decodeURIComponent(first.split(';')[0].split('=')[1]);
+  const DAY = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const sent = (cookieHeader, at) => {
+    const out = [];
+    store.refreshViewerCookie({ ...ua, headers: { cookie: cookieHeader } }, { append: (name, value) => out.push([name, value]) }, at);
+    return out;
+  };
+
+  // Four days left on the row: the cookie gets those four days, to the second.
+  db.prepare('UPDATE sessions SET expires_at = ? WHERE id_hash = ?').run(now + 4 * DAY, viewer.id_hash);
+  const [[name, cookie]] = sent(`om_session=${token}`, now);
+  assert.equal(name, 'Set-Cookie');
+  assert.equal(cookie, `om_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${4 * 24 * 60 * 60}`);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM sessions').get().n, 1, 'no session is made');
+  // No cookie, an unknown one, an expired or signed-out session: nothing is sent.
+  assert.deepEqual(sent('', now), []);
+  assert.deepEqual(sent('om_session=made-up', now), []);
+  assert.deepEqual(sent(`om_session=${token}`, now + 4 * DAY), [], 'expired by then');
+  store.revoke(viewer.id_hash);
+  assert.deepEqual(sent(`om_session=${token}`, now), []);
+  db.close();
+});

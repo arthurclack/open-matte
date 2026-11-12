@@ -1,16 +1,20 @@
 // Activity, filtered and paged; the film and person summaries; and the ticket list's
 // last activity once its events have gone: milestone 3, slice 4. Written from
 // docs/history/milestone-3.md (slice 4), not from the implementation. Summaries are
-// built from tickets and screenings only, so the clean-up never changes them.
+// built from tickets and screenings only, so the clean-up never changes them. From
+// version 2 a film is one tape, so where several links for one film are played here,
+// each tape comes back (it comes due) before the next goes out.
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { softAuthenticator } from './softauth.js';
-import { FILM_SECONDS, adminBrowser, browser, enroll, makeFilm, newPerson, setupLink, startServer, tempDir } from './helpers.js';
+import { FILM_SECONDS, adminBrowser, browser, enroll, makeFilm, newPerson, setupLink, signIn, startServer, tempDir } from './helpers.js';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const VIEWING = ['opened', 'play', 'heartbeat', 'finished'];
+// Written from docs/version-2.md's table of kinds, not from the server's list.
+const LOANS = ['ticket-sent', 'lent', 'returned', 'due-changed', 'ticket-cancelled', 'ticket-restored'];
 const TINY = { retainProgressDays: 1, retainEventsDays: 30, retainSessionsDays: 1 };
 const DEFAULTS = { retainProgressDays: 30, retainEventsDays: 365, retainSessionsDays: 30 };
 
@@ -47,17 +51,29 @@ function cinema() {
     assert.equal(r.status, 200, JSON.stringify(r.data));
     return r.data.screeningId;
   };
+  // The tape that went out on this link came due a moment ago: the film is in again.
+  c.back = (ticket) => {
+    const l = c.srv.db.prepare('SELECT * FROM loans WHERE ticket_id = ?').get(ticket.id);
+    c.sql('UPDATE loans SET taken_at = ?, due_at = ? WHERE id = ?', Date.now() - 1 - (l.due_at - l.taken_at), Date.now() - 1, l.id);
+  };
   c.heartbeat = async (b, id, position, playing = true) => {
     const r = await b.post(`/api/screenings/${id}/heartbeat`, { position, playing });
     assert.equal(r.status, 200, JSON.stringify(r.data));
   };
-  // A person with a passkey, signed in on the browser returned.
+  // A person with a passkey, signed in on the browser returned. device() signs
+  // another browser in as them.
   c.member = async (name) => {
     const p = await newPerson(c.admin, name);
     const phone = c.fresh();
-    const r = await enroll(phone, (await setupLink(c.admin, p.id)).token, { auth: softAuthenticator() });
+    const auth = softAuthenticator();
+    const r = await enroll(phone, (await setupLink(c.admin, p.id)).token, { auth });
     assert.equal(r.status, 200, JSON.stringify(r.data));
-    return { p, phone };
+    const device = async () => {
+      const b = c.fresh();
+      assert.equal((await signIn(b, auth)).status, 200);
+      return b;
+    };
+    return { p, phone, device };
   };
   c.sql = (s, ...args) => c.srv.db.prepare(s).run(...args);
   // Every event made so far is a year and more old; the clean-up runs with the
@@ -114,7 +130,8 @@ describe('Activity, filtered and paged', () => {
 
     // Events made up for paging, all for Solaris: 30 of them, four to each moment, and
     // inserted out of order so ids don't follow times.
-    const types = ['opened', 'play', 'heartbeat', 'finished', 'ticket-given', 'link-created'];
+    // Kinds of all three sets: viewing, loans, and accounts (every other kind).
+    const types = ['opened', 'play', 'heartbeat', 'finished', 'ticket-given', 'link-created', 'ticket-sent', 'lent', 'returned', 'due-changed', 'ticket-cancelled', 'ticket-restored', 'ticket-kept'];
     const t0 = Date.now() - HOUR;
     const made = Array.from({ length: 30 }, (_, i) => ({ at: t0 - Math.floor(i / 4) * MINUTE, type: types[i % types.length] }));
     made.sort((a, b) => ((a.at * 7919) % 31) - ((b.at * 7919) % 31) || a.type.localeCompare(b.type));
@@ -161,33 +178,56 @@ describe('Activity, filtered and paged', () => {
     assert.equal(r.data.next, null);
   });
 
-  test('kind: viewing, or accounts and links, or everything', async () => {
+  // 1.x had two kinds: viewing, and everything else. Version 2 has three (version-2.md,
+  // "Events, the Ledger, retention and Status"): viewing as before; loans, which is
+  // what happens to a link and its tape; and accounts, which is every other kind.
+  // 1.x's "not viewing" would file every loan under cards, passkeys and links.
+  test('kind: viewing, loans, accounts, or everything; each event is in exactly one kind', async () => {
     const types = async (query) => (await pages(query, 4)).flatMap((p) => p.events).map((e) => e.type);
     const film = `film=${c.films.solaris}`;
+    const accounts = (e) => !VIEWING.includes(e.type) && !LOANS.includes(e.type);
     assert.deepEqual(await types(`${film}&kind=viewing&heartbeats=1`), page.filter((e) => VIEWING.includes(e.type)).map((e) => e.type));
     assert.deepEqual(await types(`${film}&kind=viewing`), page.filter((e) => VIEWING.includes(e.type) && e.type !== 'heartbeat').map((e) => e.type), 'progress reports only when asked for');
-    assert.deepEqual(await types(`${film}&kind=accounts`), page.filter((e) => !VIEWING.includes(e.type)).map((e) => e.type));
-    assert.deepEqual(await types(`${film}&kind=accounts&heartbeats=1`), page.filter((e) => !VIEWING.includes(e.type)).map((e) => e.type));
+    assert.deepEqual(await types(`${film}&kind=loans`), page.filter((e) => LOANS.includes(e.type)).map((e) => e.type));
+    assert.deepEqual(await types(`${film}&kind=loans&heartbeats=1`), page.filter((e) => LOANS.includes(e.type)).map((e) => e.type));
+    assert.deepEqual(await types(`${film}&kind=accounts`), page.filter(accounts).map((e) => e.type));
+    assert.deepEqual(await types(`${film}&kind=accounts&heartbeats=1`), page.filter(accounts).map((e) => e.type));
     assert.deepEqual(await types(film), page.filter((e) => e.type !== 'heartbeat').map((e) => e.type));
+    // The three kinds together are everything, and no event is in two.
+    assert.deepEqual(new Set(await types(`${film}&kind=loans`)), new Set(LOANS), 'the six kinds about a link and its tape');
+    assert.deepEqual(new Set(await types(`${film}&kind=accounts`)), new Set(['ticket-given', 'link-created', 'ticket-kept']), 'keeping, giving and releasing a link stay with accounts');
+    const counts = await Promise.all(['viewing&heartbeats=1', 'loans', 'accounts'].map(async (kind) => (await types(`${film}&kind=${kind}`)).length));
+    assert.equal(counts.reduce((a, b) => a + b), page.length);
+    const unknown = await c.admin.get('/api/admin/activity?kind=tapes');
+    assert.deepEqual([unknown.status, unknown.data], [400, { error: 'kind must be viewing, loans or accounts' }]);
   });
 
   test('the ticket, film and person filters still work, alone and with kind', async () => {
     const all = async (query) => (await pages(query, 1000)).flatMap((p) => p.events);
     const types = async (query) => (await all(query)).map((e) => e.type).sort();
 
-    assert.deepEqual(await types(`ticket=${samTicket.id}`), ['opened', 'play']);
-    assert.deepEqual(await types(`ticket=${samTicket.id}&heartbeats=1`), ['heartbeat', 'opened', 'play']);
+    // A link's sending and its tape going out are events too: the Ledger's third kind, loans.
+    assert.deepEqual(await types(`ticket=${samTicket.id}`), ['lent', 'opened', 'play', 'ticket-sent']);
+    assert.deepEqual(await types(`ticket=${samTicket.id}&heartbeats=1`), ['heartbeat', 'lent', 'opened', 'play', 'ticket-sent']);
+    assert.deepEqual(await types(`ticket=${samTicket.id}&kind=viewing`), ['opened', 'play']);
+    assert.deepEqual(await types(`ticket=${samTicket.id}&kind=loans`), ['lent', 'ticket-sent']);
     assert.deepEqual(await types(`ticket=${samTicket.id}&kind=accounts`), []);
 
-    // A person's account events, and their viewing events through the browser.
-    assert.deepEqual(await types(`person=${sam.p.id}`), ['link-created', 'opened', 'passkey-added', 'play']);
+    // A person's account events, the link sent to them, and their viewing events and
+    // the tape they took, through the browser.
+    assert.deepEqual(await types(`person=${sam.p.id}`), ['lent', 'link-created', 'opened', 'passkey-added', 'play', 'ticket-sent']);
     assert.deepEqual(await types(`person=${sam.p.id}&kind=viewing`), ['opened', 'play']);
     assert.deepEqual(await types(`person=${sam.p.id}&kind=viewing&heartbeats=1`), ['heartbeat', 'opened', 'play']);
+    assert.deepEqual(await types(`person=${sam.p.id}&kind=loans`), ['lent', 'ticket-sent']);
     assert.deepEqual(await types(`person=${sam.p.id}&kind=accounts`), ['link-created', 'passkey-added']);
     for (const e of await all(`person=${sam.p.id}&heartbeats=1`)) assert.equal(e.personId, sam.p.id);
+    const lent = (await all(`ticket=${samTicket.id}`)).find((e) => e.type === 'lent');
+    const loan = c.srv.db.prepare('SELECT * FROM loans WHERE ticket_id = ?').get(samTicket.id);
+    assert.deepEqual(lent.detail, { loanId: loan.id, dueAt: loan.due_at });
+    assert.deepEqual((await all(`ticket=${samTicket.id}`)).find((e) => e.type === 'ticket-sent').detail, { loanDays: null, note: false });
 
     const heat = await all(`film=${c.films.heat}`);
-    assert.deepEqual(heat.map((e) => e.type).sort(), ['opened', 'play']);
+    assert.deepEqual(heat.map((e) => e.type).sort(), ['lent', 'opened', 'play', 'ticket-sent']);
     for (const e of heat) assert.equal(e.ticketId, anyone.id);
     assert.ok(heat.every((e) => e.personId === null), 'a browser that isn’t signed in names nobody');
 
@@ -236,7 +276,10 @@ describe('the ticket list’s last activity, once the events have gone', () => {
     assert.ok(screening > latest.at, 'the screening was updated after the last event');
     assert.deepEqual(await detail(t.played.id), latest);
     assert.deepEqual((await listed())[t.played.id], latest);
+    // Sending a link is logged, and isn't activity on it.
+    assert.equal(c.srv.db.prepare("SELECT COUNT(*) AS n FROM events WHERE ticket_id = ? AND type = 'ticket-sent'").get(t.untouched.id).n, 1);
     assert.equal(await detail(t.untouched.id), null);
+    assert.equal((await listed())[t.untouched.id], null);
   });
 
   test('then the latest screening, then when it was first opened', async () => {
@@ -298,44 +341,42 @@ describe('summaries on the film and person pages', () => {
 
   before(async () => {
     alex = await c.member('Alex');
-    // Heat: six tickets.
+    // Heat: six links. One tape, so each comes back before the next goes out.
     const finished = await c.issue({ label: 'Finished' }, 'heat');
     await finish(await c.opened(c.fresh(), finished), 'heat');
+    c.back(finished);
     const started = await c.issue({ label: 'Started' }, 'heat');
     const b = await c.opened(c.fresh(), started);
     const id = await c.play(b, 'heat');
     await c.heartbeat(b, id, 30, false);
+    c.back(started);
     await c.opened(c.fresh(), await c.issue({ label: 'Opened' }, 'heat'));
     await c.issue({ label: 'Not yet opened' }, 'heat');
     const revoked = await c.issue({ label: 'Revoked' }, 'heat');
     assert.equal((await c.admin.post(`/api/admin/tickets/${revoked.id}/revoke`)).status, 200);
-    // Alex's own: two screenings, the second watched to the end.
+    // Alex's own, watched to the end. (1.x: two plays on it. A link lends once, so one.)
     const mine = await c.issue({ personId: alex.p.id, label: 'Alex' }, 'heat');
     assert.equal((await alex.phone.get('/api/films/heat')).status, 200);
-    const first = await c.play(alex.phone, 'heat');
-    await c.heartbeat(alex.phone, first, 10, false);
-    c.sql('UPDATE screenings SET resumable_until = ? WHERE id = ?', Date.now() - MINUTE, first);
     await finish(alex.phone, 'heat');
-    assert.equal((await c.admin.get(`/api/admin/tickets/${mine.id}`)).data.screeningsUsed, 2);
+    assert.equal((await c.admin.get(`/api/admin/tickets/${mine.id}`)).data.screeningsUsed, 1);
 
-    // Solaris: Alex's ticket, finished, given back, and started again.
+    // Solaris: Alex's link, watched to the end in 1.x and that play then given back
+    // (the back office's Give back, which goes: here the row is marked as 1.x left it).
     await c.issue({ personId: alex.p.id, label: 'Alex' }, 'solaris');
     assert.equal((await alex.phone.get('/api/films/solaris')).status, 200);
     const given = await finish(alex.phone, 'solaris');
-    assert.equal((await c.admin.post(`/api/admin/screenings/${given}/void`)).status, 200);
-    const again = await c.play(alex.phone, 'solaris');
-    await c.heartbeat(alex.phone, again, 12, false);
+    c.sql('UPDATE screenings SET voided_at = ? WHERE id = ?', Date.now(), given);
 
-    // Arrival: a ticket for anyone that Alex's phone opened and played. Not Alex's own.
+    // Arrival: a link for anyone that Alex's phone opened and played. Not Alex's own.
     await c.opened(alex.phone, await c.issue({ label: 'Opened on Alex’s phone' }));
     await c.play(alex.phone);
   });
 
   test("a film's numbers come from its tickets and screenings", async () => {
-    assert.deepEqual(filmSummary(await filmPage('heat')), { issued: 6, revoked: 1, opened: 4, played: 3, finished: 2, screenings: 4 });
+    assert.deepEqual(filmSummary(await filmPage('heat')), { issued: 6, revoked: 1, opened: 4, played: 3, finished: 2, screenings: 3 });
   });
 
-  test('a screening given back doesn’t count as finished', async () => {
+  test('a play given back in 1.x doesn’t count as finished', async () => {
     const s = filmSummary(await filmPage('solaris'));
     assert.deepEqual({ issued: s.issued, revoked: s.revoked, opened: s.opened, played: s.played, finished: s.finished }, { issued: 1, revoked: 0, opened: 1, played: 1, finished: 0 });
   });
@@ -349,7 +390,7 @@ describe('summaries on the film and person pages', () => {
 
   test('the clean-up changes none of them', async () => {
     const before1 = { heat: filmSummary(await filmPage('heat')), solaris: filmSummary(await filmPage('solaris')), arrival: filmSummary(await filmPage('arrival')), alex: personSummary(await personPage()) };
-    // Every browser ended long ago, too: those holding no screening that can still be resumed go.
+    // Every browser ended long ago, too: those no loan with its end unwritten names go.
     c.sql("UPDATE sessions SET revoked_at = ? WHERE kind = 'viewer'", Date.now() - 60 * DAY);
     const r = await c.clearEverythingOld();
     assert.ok(r.lastRun.deleted.events > 0 && r.lastRun.deleted.sessions > 0, JSON.stringify(r.lastRun));
@@ -416,11 +457,14 @@ describe('how often viewing is recorded', () => {
     assert.equal(c.srv.db.prepare('SELECT position_seconds FROM screenings WHERE id = ?').get(id).position_seconds, 50);
   });
 
-  test('play: every new screening and every move to another browser, but the same browser again at most every 5 minutes', async () => {
+  // 1.x: two browsers on one link took the play from each other. Taking over is among
+  // one borrower's own devices now: a member's phone and laptop.
+  test('play: taking the tape and every move to another of the borrower’s devices, but the same device again at most every 5 minutes', async () => {
     // On Solaris, which no other test here plays.
-    const t = await c.issue({}, 'solaris');
-    const laptop = await c.opened(c.fresh(), t);
-    const tv = await c.opened(c.fresh(), t);
+    const sam = await c.member('Sam Plays');
+    const t = await c.issue({ personId: sam.p.id }, 'solaris');
+    const laptop = sam.phone;
+    const tv = await sam.device();
     const play = (b) => c.play(b, 'solaris');
     const resumed = () =>
       c.srv.db
@@ -436,7 +480,7 @@ describe('how often viewing is recorded', () => {
     assert.equal(await play(tv), id);
     await c.heartbeat(tv, id, 30, false);
     assert.equal(await play(laptop), id);
-    assert.equal(count('play', t.id), 3, 'moving to another browser and back always is');
+    assert.equal(count('play', t.id), 3, 'moving to another device and back always is');
 
     backdate('play', t.id, 4 * MINUTE);
     await play(laptop);
@@ -445,10 +489,17 @@ describe('how often viewing is recorded', () => {
     await play(laptop);
     assert.equal(count('play', t.id), 4, 'again after 5');
     assert.deepEqual(resumed(), [false, true, true, true]);
+    assert.equal(count('lent', t.id), 1, 'the tape went out once, however often Play was pressed');
 
-    // A new screening, once the last one's window has closed, always is.
-    c.sql('UPDATE screenings SET resumable_until = ? WHERE id = ?', Date.now() - 1, id);
-    assert.notEqual(await play(laptop), id);
-    assert.deepEqual(resumed(), [false, true, true, true, false]);
+    // 1.x: a new play once the last one's window had closed. A link lends once; the next
+    // link's first Play, which takes the tape, always is logged.
+    c.back(t);
+    assert.equal((await laptop.post('/api/films/solaris/screenings')).data.error, 'spent');
+    assert.equal(count('play', t.id), 4);
+    const next = await c.issue({}, 'solaris');
+    const other = await c.opened(c.fresh(), next);
+    assert.notEqual(await play(other), id);
+    assert.deepEqual([count('play', next.id), count('lent', next.id)], [1, 1]);
+    assert.deepEqual([count('returned', t.id), count('lent', t.id)], [1, 1], 'and the first tape’s coming back was written down, once');
   });
 });

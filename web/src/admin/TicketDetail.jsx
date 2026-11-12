@@ -6,8 +6,13 @@ import { KeepBox, PersonDisabledBadge, ticketKind, ticketMessage } from './Ticke
 import { Back, ErrorNote, Head, LinkBox, Mark, Progress, Table, TicketBadge, dateInputToMs, describeEvent, msToDateInput, useAction, useLoad } from './ui.jsx';
 
 // Giving a tape answers with a code when the member can't have it (their card turned
-// off in another tab since this page loaded, say); everything else it says in words.
+// off in another tab since this page loaded, say), and so does anything refused
+// because of where the tape is; everything else it says in words.
 const HOLDER_ERRORS = {
+  'tape-out': "This link has the tape out, so that can't be done now. Take the tape back first, or wait until it's back.",
+  'lent-once': 'This link has lent its tape, and a link lends once. Send a new link.',
+  'would-end-loan': "That would make the tape due before now. To end the loan, take the tape back.",
+  'not-out': "That tape isn't out any more. Reload the page.",
   'person-not-found': "That member isn't here any more. Reload the page and choose again.",
   'person-disabled': 'Their card is turned off: turn it back on, on their page, before giving them a tape.',
 };

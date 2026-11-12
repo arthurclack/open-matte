@@ -9,6 +9,7 @@ const PAGE = 100;
 const KINDS = [
   ['', 'All'],
   ['viewing', 'Viewing'],
+  ['loans', 'Loans'],
   ['accounts', 'Cards, passkeys and links'],
 ];
 

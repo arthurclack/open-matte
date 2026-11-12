@@ -91,6 +91,7 @@ export function createApp({
   app.locals.metadata = metadata;
   app.locals.backups = backups;
   app.locals.retention = retention;
+  app.locals.access = access;
   app.locals.refusals = refusals;
   app.locals.rp = rp;
 

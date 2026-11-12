@@ -72,24 +72,42 @@ export const masterUrl = (film) => {
   return media.hls ? `/media/${film.slug}/${media.hls}` : null;
 };
 
-export function ticketForViewer(ticket, status) {
-  if (!ticket || !status) return null;
+// A link as its holder sees it, from what access.filmAccess decided: one set of keys
+// in every state. Only the borrower learns anything about a loan. Anyone else with a
+// link for a film whose tape is out gets state and tape 'out' and the date it's due
+// back, and every other key as it would be whichever link has the tape.
+//   state      'ok' (Play is offered), 'out', 'spent', 'expired' or 'unavailable';
+//   tape       'in', 'yours', 'out', or null (spent, expired). It goes by the loan,
+//              not by state: an unavailable film keeps it;
+//   loanDays   with the tape in: how many days Play would lend it for;
+//   startBy    with the tape in, or once missed: the date to start by;
+//   dueBack    while the tape is out, with this browser or anyone;
+//   loan       while it is this browser's: when it was taken, where playback is, and
+//              whether it is out to this browser (a link for anyone) or to the person;
+//   returned   for a spent link, and only to the one who borrowed: when the tape came
+//              back, and whether they returned it ('returned') or it was due ('due').
+// expiresAt and openScreening are 1.1.0's, kept until its pages are rebuilt: the due
+// date, and the place to resume from, while the tape is this browser's.
+export function ticketForViewer(a) {
+  if (!a?.ticket || !a.status) return null;
+  const { ticket, status, view, tape } = a;
+  const yours = tape === 'yours';
+  const dueBack = yours || tape === 'out' ? status.out.due_at : null;
+  const position = yours ? a.screening.position_seconds : null;
   return {
-    state: status.state,
-    screeningLimit: status.screeningLimit,
-    screeningsUsed: status.screeningsUsed,
-    screeningsLeft: status.screeningsLeft,
-    startBy: status.startBy,
-    daysAfterFirstPlay: ticket.days_after_first_play,
-    expiresAt: status.expiresAt,
-    firstPlayedAt: ticket.first_played_at,
-    // Only while the ticket can still play it: expiry wins over a running resume
-    // window, so it can be resumed until whichever comes first.
-    openScreening:
-      status.state === 'ok' && status.open
-        ? { resumableUntil: Math.min(status.open.resumable_until, status.expiresAt ?? Infinity), position: status.open.position_seconds }
+    state: view === 'in' || view === 'yours' ? 'ok' : view,
+    tape,
+    loanDays: tape === 'in' ? status.loanDays : null,
+    startBy: tape === 'in' || view === 'expired' ? status.startBy : null,
+    dueBack,
+    loan: yours ? { takenAt: status.loan.taken_at, position, finishedAt: a.screening.finished_at, toBrowser: status.loan.person_id == null } : null,
+    returned:
+      view === 'spent' && a.mine
+        ? { at: status.loan.ended_at ?? status.loan.due_at, how: status.loan.ended_how === 'returned' ? 'returned' : 'due' }
         : null,
     // In the signed-in person's account, so on every device they sign in on.
     inAccount: ticket.person_id != null,
+    expiresAt: yours ? dueBack : null,
+    openScreening: yours ? { resumableUntil: dueBack, position } : null,
   };
 }

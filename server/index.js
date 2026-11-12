@@ -17,6 +17,8 @@ const app = createApp({ db });
 app.locals.backups.start();
 // Deleting old events and ended sessions: about a minute after start, then daily.
 app.locals.retention.start();
+// Writing down which tapes have come back (due, or their borrower signed out): every minute.
+app.locals.access.startSweeper();
 const server = app.listen(config.port, () => {
   console.log(`Open Matte listening on :${config.port} (media: ${config.mediaDir}, data: ${config.dataDir})`);
   const { rp } = app.locals;

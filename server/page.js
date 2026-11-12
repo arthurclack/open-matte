@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { isSpent } from './access.js';
 import { BRANDING_FILE, brandingType } from './branding.js';
 import { publicOrigin } from './config.js';
 import { styleHash } from './csp.js';
@@ -33,8 +34,11 @@ const scriptJson = (value) => JSON.stringify(value).replace(/[<>&]/g, (c) => ({ 
 // A ticket link that previews its film: a ticket for anyone, whose film
 // /api/tickets/open would show a stranger. A ticket for one person previews as
 // the cinema, since a browser that isn't signed in as them learns neither the
-// film nor the name. Over the limit every link previews as the cinema. Reading
-// this writes nothing: no session, no cookie, no "opened", no event.
+// film nor the name. So does a link that has lent, once its tape is back: it has
+// done its job, and tells a newcomer nothing (while its tape is out it previews as
+// it did before, like any other link for the film). Over the limit every link
+// previews as the cinema. Reading this writes nothing: no session, no cookie, no
+// "opened", no event.
 //
 // The preview's poster has an address of its own, made for the preview: the
 // ticket's id and a signature only this server can make (with `key`, a secret
@@ -53,8 +57,8 @@ export function createTicketPreviews({ db, access, counter, key }) {
   // The film the ticket previews, or null.
   function filmOf(ticket) {
     if (!ticket || ticket.person_id != null) return null;
-    const { state } = access.ticketStatus(ticket);
-    if (state === 'revoked' || state === 'unpublished') return null;
+    const status = access.ticketStatus(ticket);
+    if (status.state === 'revoked' || status.state === 'unpublished' || isSpent(status)) return null;
     return filmById.get(ticket.film_id);
   }
 

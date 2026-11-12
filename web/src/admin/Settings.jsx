@@ -24,7 +24,7 @@ const mainForm = (s) => ({
   cinemaName: s.cinemaName,
   ownerName: s.ownerName ?? '',
   welcome: s.welcome,
-  resumeWindowHours: String(s.resumeWindowHours),
+  loanDays: String(s.loanDays),
   poweredBy: s.poweredBy,
   mediaSessionTitle: s.mediaSessionTitle,
 });
@@ -49,7 +49,7 @@ export default function Settings() {
   async function save(e) {
     e.preventDefault();
     setNotice(null);
-    const r = await action.run(() => api.patch('/api/admin/settings', { ...form, resumeWindowHours: Number(form.resumeWindowHours) }));
+    const r = await action.run(() => api.patch('/api/admin/settings', { ...form, loanDays: Number(form.loanDays) }));
     if (r) {
       setData(r);
       setForm(mainForm(r));
@@ -126,21 +126,21 @@ export default function Settings() {
           </p>
         </div>
         <div className="ui-field">
-          <label className="ui-field__label" htmlFor={field('resume')}>
-            Time to come back (hours)
+          <label className="ui-field__label" htmlFor={field('loan')}>
+            Due back after, for new links (days)
           </label>
           <input
-            id={field('resume')}
+            id={field('loan')}
             className="ui-input ui-input--num"
             type="number"
             min="1"
-            max="720"
-            value={form.resumeWindowHours}
-            onChange={(e) => setForm({ ...form, resumeWindowHours: e.target.value })}
-            aria-describedby={field('resume-h')}
+            max="30"
+            value={form.loanDays}
+            onChange={(e) => setForm({ ...form, loanDays: e.target.value })}
+            aria-describedby={field('loan-h')}
           />
-          <p className="ui-field__hint" id={field('resume-h')}>
-            How long after pressing Play a friend can pause and come back. Applies to plays started from now on.
+          <p className="ui-field__hint" id={field('loan-h')}>
+            How many days a friend has a tape, counted from the moment they press Play. A tape that is already out keeps its date.
           </p>
         </div>
         <label className="ui-check">

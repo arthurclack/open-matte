@@ -10,8 +10,9 @@ export const DEFAULT_SETTINGS = {
   ownerName: '',
   welcome: 'This is a private video shop. If someone sent you a tape, open the link they gave you.',
   poweredBy: true,
-  // How long a screening can be resumed, counted from when it started.
-  resumeWindowHours: 48,
+  // How many days a tape is lent for, counted from the moment Play is pressed, for a
+  // link that doesn't say (tickets.loan_days). The tape is due back at the end of them.
+  loanDays: 3,
   // Language for film information fetched from TMDb.
   metadataLanguage: 'en-US',
   // Branding. The colours are checked together (see theme.js).
@@ -45,7 +46,7 @@ const RULES = {
   ownerName: (v) => typeof v === 'string' && v.trim().length <= 80,
   welcome: (v) => typeof v === 'string' && v.length <= 2000,
   poweredBy: (v) => typeof v === 'boolean',
-  resumeWindowHours: (v) => Number.isInteger(v) && v >= 1 && v <= 24 * 30,
+  loanDays: (v) => Number.isInteger(v) && v >= 1 && v <= 30,
   metadataLanguage: (v) => typeof v === 'string' && /^[a-z]{2}(-[A-Z]{2})?$/.test(v),
   accentColor: (v) => typeof v === 'string' && COLOR.test(v),
   backgroundColor: (v) => typeof v === 'string' && COLOR.test(v),
@@ -55,6 +56,11 @@ const RULES = {
   retainEventsDays: (v) => Number.isInteger(v) && v >= 30 && v <= 3650,
   retainSessionsDays: (v) => Number.isInteger(v) && v >= 1 && v <= 365,
 };
+
+// Settings that are no more. 1.x's Settings page sends resumeWindowHours ("Time to
+// come back") with every save, and an unknown key is refused, so these are accepted,
+// whatever they hold, and never stored. A row already stored stays, and is never read.
+const RETIRED = new Set(['resumeWindowHours']);
 
 // previewKey signs the addresses of ticket links' preview posters (page.js).
 // adminKeySalt goes into the admin's key, with ADMIN_PASSWORD (sessions.js).
@@ -89,11 +95,13 @@ export function createSettings(db) {
 
   // Throws for the first unknown key or invalid value, before anything is
   // written. A key that isn't a setting is refused rather than ignored, so a typo
-  // shows up at once. The logo and the icon aren't in RULES: only their upload
-  // routes set them. New colours are checked with the other one as it would be
-  // after the save, and the message says what's wrong with them.
+  // shows up at once (a retired one is let through, and dropped by update). The
+  // logo and the icon aren't in RULES: only their upload routes set them. New
+  // colours are checked with the other one as it would be after the save, and the
+  // message says what's wrong with them.
   function validate(patch) {
     for (const [key, value] of Object.entries(patch)) {
+      if (RETIRED.has(key)) continue;
       if (!Object.hasOwn(RULES, key)) throw Object.assign(new Error(`Not a setting you can change here: ${key.slice(0, 80)}`), { status: 400 });
       if (!RULES[key](value)) throw Object.assign(new Error(`Invalid value for ${key}`), { status: 400 });
     }
@@ -105,7 +113,7 @@ export function createSettings(db) {
 
   function update(patch) {
     validate(patch);
-    for (const [key, value] of Object.entries(patch)) upsert.run(key, JSON.stringify(tidy(key, value)));
+    for (const [key, value] of Object.entries(patch)) if (!RETIRED.has(key)) upsert.run(key, JSON.stringify(tidy(key, value)));
     return get();
   }
 

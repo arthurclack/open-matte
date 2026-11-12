@@ -7,14 +7,16 @@ import { VIEWER_COOKIE, deviceLabel } from '../sessions.js';
 
 const NO_COOKIE = 'no session cookie';
 
-// Why a media request was refused, for the server log. No IP addresses: just
-// enough to tell a missing cookie from a missing ticket or screening.
+// Why a media request was refused, for the server log and the admin's Status page,
+// never for the browser, which gets an empty 403. No IP addresses: just enough to
+// tell a missing cookie from a missing ticket, a tape that is out, or no screening.
 function denialReason(req, who, access, film) {
   if (!who.viewer) return (req.headers.cookie || '').includes(`${VIEWER_COOKIE}=`) ? 'session expired or unknown' : NO_COOKIE;
   const a = access.filmAccess(who, film);
   if (!a.canView) return 'no usable ticket for this film in this browser (or not signed in as its person)';
   if (a.via === 'member') return 'shown to members, but no ticket for this film in this browser';
-  if (!a.canPlay) return `ticket ${a.status?.state}`;
+  if (a.view === 'out') return 'the tape is out with someone else';
+  if (!a.canPlay) return `ticket ${a.view}`;
   return 'no screening held by this browser';
 }
 
@@ -447,8 +449,9 @@ export async function folderFile(mediaDir, film, rel) {
 // /media/<slug>/<path>. Every request is checked against the viewer's session:
 // artwork needs whatever lets you see the film page (a ticket, or being signed
 // in, for a film shown to members); master and child playlists, init and media
-// segments, audio and subtitles need a screening that this browser holds.
-// Knowing a file path is not enough.
+// segments, audio and subtitles need the film's tape, out with this browser (or
+// this person), and its screening held by this browser. Knowing a file path is
+// not enough, and a refusal never says why: not to the browser.
 export function mediaRoutes({ db, sessions, access, mediaDir, metadata, refusals, refusalLog, share, counter }) {
   const router = express.Router();
   const filmBySlug = db.prepare('SELECT * FROM films WHERE slug = ?');

@@ -263,31 +263,41 @@ describe('when the person has a ticket', () => {
     await playsEverything(phone, slug);
   });
 
+  // 1.x: revoked mid-play, restored, and it played again. Version 2: cancelling a link
+  // that has the tape takes the tape back, and a link that has lent can't be restored
+  // (409 lent-once). So the restore is tried before Play, and refused after.
   test('a revoked ticket gives the listing back, and playback stops from the next request', async () => {
     const { p, phone } = await member();
     const slug = await memberFilm('alien', 'Alien');
     const t = await issue({ personId: p.id }, slug);
-    await playsEverything(phone, slug);
     assert.equal((await admin.post(`/api/admin/tickets/${t.id}/revoke`)).status, 200);
     await readableOnly(phone, slug);
     assert.equal((await admin.post(`/api/admin/tickets/${t.id}/restore`)).status, 200);
     await playsEverything(phone, slug);
+    // Now it has the tape: cancelling it takes the tape back, and the listing is what is left.
+    const revoked = await admin.post(`/api/admin/tickets/${t.id}/revoke`);
+    assert.deepEqual([revoked.status, revoked.data.tookBack], [200, true]);
+    await readableOnly(phone, slug);
+    const restored = await admin.post(`/api/admin/tickets/${t.id}/restore`);
+    assert.deepEqual([restored.status, restored.data], [409, { error: 'lent-once' }]);
+    await readableOnly(phone, slug);
   });
 
-  test('a used-up ticket says so, rather than offering the film as a member film', async () => {
+  // 1.x: "used up", once its one play could no longer be resumed.
+  test('a spent link says so, rather than offering the film as a member film', async () => {
     const { p, phone } = await member();
     const slug = await memberFilm('paris-texas', 'Paris, Texas');
-    const t = await issue({ personId: p.id, screeningLimit: 1 }, slug);
+    const t = await issue({ personId: p.id }, slug);
     await playsEverything(phone, slug);
-    // The one screening's resume window has run out.
-    srv.db.prepare('UPDATE screenings SET resumable_until = ? WHERE ticket_id = ?').run(Date.now() - 1, t.id);
+    // The tape came due a moment ago.
+    srv.db.prepare('UPDATE loans SET taken_at = ?, due_at = ? WHERE ticket_id = ?').run(Date.now() - 1 - 3 * 24 * 3600e3, Date.now() - 1, t.id);
     const page = await phone.get(`/api/films/${slug}`);
     assert.equal(page.status, 200);
     assert.equal(page.data.access.via, 'ticket');
-    assert.equal(page.data.access.ticket.state, 'used_up');
+    assert.equal(page.data.access.ticket.state, 'spent');
     const p2 = await phone.post(`/api/films/${slug}/screenings`);
     assert.equal(p2.status, 409);
-    assert.equal(p2.data.error, 'used_up');
+    assert.equal(p2.data.error, 'spent');
     assert.deepEqual(await ticketSlugs(phone), [slug]);
     assert.ok(!(await memberSlugs(phone)).includes(slug));
   });

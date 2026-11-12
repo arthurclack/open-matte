@@ -98,6 +98,18 @@ export function clearCookie(req, res, name) {
 const ADMIN_KEY_BYTES = 32;
 export const ADMIN_KEY_COST = { N: 2 ** 17, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
 
+// A session ends 90 days after it was made, never later: except that a browser with
+// a tape out keeps its session until a day past the time the tape is due back, or
+// the server would go on counting the tape as out to a browser that had lost it.
+// Only ever lengthens. access.js calls this inside the transaction that takes the
+// tape (or moves its due date), so it is made from the database alone; the browser's
+// cookie is sent again afterwards (refreshViewerCookie, below). Signing in does the
+// same for the new session a tape comes along to (signIn, below).
+export function sessionProlonger(db) {
+  const prolong = db.prepare("UPDATE sessions SET expires_at = ?1 WHERE id_hash = ?2 AND kind = 'viewer' AND expires_at < ?1");
+  return (idHash, until) => Number(prolong.run(until, idHash).changes) === 1;
+}
+
 // adminPassword: tests pass their own; the app uses ADMIN_PASSWORD.
 export function createSessionStore(db, { adminPassword = config.adminPassword } = {}) {
   const salt = createSettings(db).ensureSecret('adminKeySalt', () => crypto.randomBytes(16).toString('base64url'));
@@ -119,6 +131,7 @@ export function createSessionStore(db, { adminPassword = config.adminPassword } 
     return crypto.timingSafeEqual(digest(given), digest(adminPassword));
   }
 
+  const prolong = sessionProlonger(db);
   const q = {
     insert: db.prepare(`INSERT INTO sessions (id_hash, kind, device, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`),
     insertSignedIn: db.prepare(`
@@ -134,6 +147,10 @@ export function createSessionStore(db, { adminPassword = config.adminPassword } 
     revoke: db.prepare(`UPDATE sessions SET revoked_at = ? WHERE id_hash = ? AND revoked_at IS NULL`),
     moveTickets: db.prepare('UPDATE session_tickets SET session_hash = ? WHERE session_hash = ?'),
     moveScreenings: db.prepare('UPDATE screenings SET session_hash = ? WHERE session_hash = ?'),
+    // A tape this browser took on a link for anyone stays this browser's.
+    moveLoans: db.prepare('UPDATE loans SET session_hash = ? WHERE session_hash = ?'),
+    // When the last of the tapes a browser has out is due back, if it has any.
+    lastDue: db.prepare('SELECT MAX(due_at) AS at FROM loans WHERE session_hash = ?1 AND person_id IS NULL AND ended_at IS NULL AND due_at > ?2'),
     // Live sessions only: expired ones are refused anyway, and counting them would
     // tell the admin more browsers were signed out than were ever shown.
     revokePerson: db.prepare(`UPDATE sessions SET revoked_at = ?1 WHERE person_id = ?2 AND revoked_at IS NULL AND expires_at > ?1`),
@@ -174,31 +191,51 @@ export function createSessionStore(db, { adminPassword = config.adminPassword } 
   // Signing in always makes a new session and cookie, so a planted cookie never
   // becomes a signed-in one. Runs inside the caller's IMMEDIATE transaction (tx()
   // can't nest), and re-reads the browser's current session there because the
-  // passkey check awaited before the transaction began. Link tickets and a held
-  // screening come along only from an anonymous session or the same person's. The
-  // caller sets the cookie after COMMIT, so a rolled-back sign-in never sends one.
+  // passkey check awaited before the transaction began. Link tickets, a held
+  // screening and a tape this browser has out come along only from an anonymous
+  // session or the same person's: signing in from another person's session carries
+  // nothing, so a tape that browser had out on a link for anyone comes back. A tape
+  // that does come along is still the browser's, and lives as long as its session:
+  // so the new session, like the old one, lasts a day past the time the tape is due
+  // back, where VIEWER_SESSION_DAYS alone would end it sooner. The caller sets the
+  // cookie after COMMIT, with the life returned here, so a rolled-back sign-in never
+  // sends one.
   function signIn(req, { personId, passkeyId, currentHash = null }, now = Date.now()) {
     const token = randomToken();
     const idHash = sha256(token);
-    const ttl = config.viewerSessionDays * DAY;
-    q.insertSignedIn.run(idHash, deviceLabel(req.get('user-agent')), now, now, now + ttl, personId, passkeyId, now);
+    q.insertSignedIn.run(idHash, deviceLabel(req.get('user-agent')), now, now, now + config.viewerSessionDays * DAY, personId, passkeyId, now);
     q.signedIn.run(now, personId);
     const current = currentHash ? q.get.get(currentHash, 'viewer') : null;
     if (current && current.id_hash !== idHash) {
       if (live(current, now) && (current.person_id == null || current.person_id === personId)) {
         q.moveTickets.run(idHash, current.id_hash);
         q.moveScreenings.run(idHash, current.id_hash);
+        q.moveLoans.run(idHash, current.id_hash);
+        const due = q.lastDue.get(idHash, now).at;
+        if (due != null) prolong(idHash, due + DAY);
       }
       q.revoke.run(now, current.id_hash);
     }
-    return { token, ttl, session: q.get.get(idHash, 'viewer') };
+    const session = q.get.get(idHash, 'viewer');
+    return { token, ttl: session.expires_at - now, session };
   }
 
   const setViewerCookie = (req, res, token, ttl) => setCookie(req, res, VIEWER_COOKIE, token, ttl);
+
+  // The cookie was set once, with the life the session had then, and nothing sends it
+  // again. So when a session has been prolonged for a tape, the routes that show the
+  // borrower their tape (Play, and the film's page) send the same token again, with
+  // the life its row has now. That is never less than the cookie had: a session's
+  // end is only ever moved later.
+  function refreshViewerCookie(req, res, now = Date.now()) {
+    const token = (req.cookies || (req.cookies = parseCookies(req.headers.cookie)))[VIEWER_COOKIE];
+    const row = token ? q.get.get(sha256(token), 'viewer') : null;
+    if (live(row, now)) setViewerCookie(req, res, token, row.expires_at - now);
+  }
 
   // Each returns how many browsers it signed out.
   const revokePersonSessions = (personId, now = Date.now()) => Number(q.revokePerson.run(now, personId).changes);
   const revokePasskeySessions = (passkeyId, now = Date.now()) => Number(q.revokePasskey.run(now, passkeyId).changes);
 
-  return { create, load, revoke, signIn, setViewerCookie, revokePersonSessions, revokePasskeySessions, adminPasswordMatches };
+  return { create, load, revoke, signIn, setViewerCookie, prolong, refreshViewerCookie, revokePersonSessions, revokePasskeySessions, adminPasswordMatches };
 }
