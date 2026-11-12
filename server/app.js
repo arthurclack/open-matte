@@ -84,7 +84,7 @@ export function createApp({
   // lines in the server log, within a budget a minute.
   const refusals = createRefusals();
   const refusalLog = createRefusalLog();
-  const booth = createBooth({ db, mediaDir, dataDir, backups, retention, refusals, startedAt });
+  const booth = createBooth({ db, mediaDir, dataDir, backups, retention, refusals, access, startedAt });
   // Reading from the films' folders, which may be network storage that stops answering.
   const share = createShare({ ...shareLimits(), ...mediaOptions });
   const deps = { db, mediaDir, dataDir, settings, metadata, backups, sessions, access, rp, people, limit, counter, branding, site, previews, retention, refusals, refusalLog, booth, share };

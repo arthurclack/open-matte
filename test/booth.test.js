@@ -157,6 +157,61 @@ describe('the projection booth', () => {
     assert.deepEqual(listed.map((t) => ({ ...pick(t, ['id', 'label', 'startBy']), film: pick(t.film, ['id', 'title']), person: t.person && pick(t.person, ['id', 'name']) })).sort(byId), expected.sort(byId));
   });
 
+  // Version 2, slice 6: the list goes by the date with the time the tape was out on
+  // other links given back (access.js, effectiveStartBy), soonest first, and leaves
+  // out links that have lent.
+  test('the start-by list goes by the date each link goes by now, not the date it was set to', async () => {
+    const sql = (text, ...args) => srv.db.prepare(text).run(...args);
+    const lend = async (film) => {
+      const lender = await issue({ label: `Lends ${film.slug}`, filmId: film.id });
+      const b = fresh();
+      await b.post('/api/tickets/open', { code: lender.code });
+      assert.equal((await b.post(`/api/films/${film.slug}/screenings`)).status, 200);
+      return lender;
+    };
+    const now = Date.now();
+    // A film whose tape was out from five days ago to two days ago, on a link of its own.
+    const back = await addFilm(admin, mediaDir, 'start-by-back');
+    const dated = {
+      // Set to four days ago, a day after the tape went out: three days given back. A day ago.
+      givenBack: await issue({ label: 'Given back', filmId: back.id, startBy: now - 4 * DAY }),
+      // Set to two days ahead: with three days given back, five days ahead. Too far to list.
+      pushedOut: await issue({ label: 'Pushed out', filmId: back.id, startBy: now + 2 * DAY }),
+      // Set to six days ago, before the tape went out: nothing back. Too long ago to list.
+      longPassed: await issue({ label: 'Long passed, tape or no tape', filmId: back.id, startBy: now - 6 * DAY }),
+    };
+    const lent = await lend(back);
+    sql('UPDATE tickets SET created_at = ? WHERE film_id = ?', now - 10 * DAY, back.id);
+    sql("UPDATE loans SET taken_at = ?, due_at = ?, ended_at = ?, ended_how = 'due' WHERE ticket_id = ?", now - 5 * DAY, now - 2 * DAY, now - 2 * DAY, lent.id);
+    // A film whose tape went out six days ago and is still out.
+    const out = await addFilm(admin, mediaDir, 'start-by-out');
+    // Set to five days ago, a day after the tape went out: a day left, for as long as it is out.
+    dated.waits = await issue({ label: 'Waits', filmId: out.id, startBy: now - 5 * DAY });
+    const has = await lend(out);
+    sql('UPDATE tickets SET created_at = ? WHERE film_id = ?', now - 10 * DAY, out.id);
+    sql('UPDATE loans SET taken_at = ?, due_at = ? WHERE ticket_id = ?', now - 6 * DAY, now + DAY, has.id);
+
+    const report = await booth();
+    const tickets = report.attention.tickets;
+    const of = (t) => tickets.find((x) => x.id === t.id);
+    assert.deepEqual(of(dated.givenBack), {
+      id: dated.givenBack.id, label: 'Given back', film: { id: back.id, title: 'Arrival' }, person: null,
+      startBy: now - DAY, startByAsSet: now - 4 * DAY, startByPaused: false,
+    });
+    assert.deepEqual(of(dated.waits), {
+      id: dated.waits.id, label: 'Waits', film: { id: out.id, title: 'Arrival' }, person: null,
+      // A day left, counted from the moment the report was made.
+      startBy: report.checkedAt + DAY, startByAsSet: now - 5 * DAY, startByPaused: true,
+    });
+    assert.deepEqual([of(dated.pushedOut), of(dated.longPassed)], [undefined, undefined]);
+    assert.deepEqual([of(lent), of(has)], [undefined, undefined], 'a link that has lent is not on the list');
+    // Soonest first, by the date each goes by.
+    assert.deepEqual(tickets.map((t) => t.startBy), tickets.map((t) => t.startBy).sort((a, b) => a - b));
+    assert.ok(tickets.findIndex((t) => t.id === dated.givenBack.id) < tickets.findIndex((t) => t.id === dated.waits.id));
+    assert.ok(tickets.every((t) => t.startBy > report.checkedAt - 3 * DAY && t.startBy <= report.checkedAt + 3 * DAY));
+    assert.ok(tickets.every((t) => t.startByAsSet <= t.startBy && typeof t.startByPaused === 'boolean'));
+  });
+
   test('refused media requests: counted by reason, repeats sharing a row, the latest shown, and nothing that identifies anyone', async () => {
     const ticket = await issue({ label: 'Refusals' });
     const holder = fresh();

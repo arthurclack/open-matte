@@ -79,10 +79,17 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
 
   // What this browser can see: the cinema's name, the tickets it holds and, when
   // signed in, the films shown to members that none of those tickets is for.
+  // tickets: what this browser has out comes first, the soonest due back first; then
+  // the rest, newest first. Only a tape that is this browser's (or this person's)
+  // moves a film up, so the order says nothing of anyone else's.
+  // memberFilms: each with whether its tape is in or out and when it's due back
+  // (access.shelfTape): never who has it.
+  // browserLoans: the titles this browser has out on links anyone can use, which a
+  // sign-out sends back; linkTickets: every link for anyone it holds.
   router.get('/api/me', (req, res) => {
     const { viewer, admin } = who(req);
     const seen = new Set();
-    const tickets = [];
+    const held = [];
     for (const ticket of access.usableTickets(viewer)) {
       if (seen.has(ticket.film_id)) continue;
       const film = q.filmById.get(ticket.film_id);
@@ -91,14 +98,18 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
       // belongs under memberFilms.
       if (a.via !== 'ticket') continue;
       seen.add(film.id);
-      tickets.push({ film: filmSummary(film), ticket: ticketForViewer(a) });
+      held.push({ film: filmSummary(film), ticket: ticketForViewer(a) });
     }
+    const yours = held.filter((x) => x.ticket.tape === 'yours').sort((a, b) => a.ticket.dueBack - b.ticket.dueBack);
+    const tickets = [...yours, ...held.filter((x) => x.ticket.tape !== 'yours')];
     const person = viewer?.person_id != null ? { name: viewer.person_name } : null;
     const memberFilms = person
-      ? q.memberFilms.all().filter((film) => access.filmAccess({ viewer }, film).via === 'member').map(filmSummary)
+      ? q.memberFilms.all()
+          .filter((film) => access.filmAccess({ viewer }, film).via === 'member')
+          .map((film) => ({ ...filmSummary(film), ...access.shelfTape(film) }))
       : [];
     const linkTickets = viewer ? q.linkTitles.all(viewer.id_hash).map((r) => r.title) : [];
-    res.json({ site: site(), admin: Boolean(admin), person, tickets, memberFilms, linkTickets });
+    res.json({ site: site(), admin: Boolean(admin), person, tickets, memberFilms, linkTickets, browserLoans: access.browserLoans(viewer) });
   });
 
   router.get('/api/site', (req, res) => res.json(site()));
@@ -128,6 +139,9 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
     // last a day past the due time (and again when a due date is moved later): the
     // cookie is sent again here, so the browser keeps it that long too.
     if (a.tape === 'yours' && a.status.loan.person_id == null) sessions.refreshViewerCookie(req, res);
+    // Who has the tape, since when and until when: for the admin's preview only.
+    // access.js gives nothing for any other browser, and then there is no such key.
+    const tape = access.tapeForPreview(a, film);
     res.json({
       film: filmDetail(film),
       access: {
@@ -141,6 +155,7 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
         canKeep: access.canKeep(a),
         // A film shown to members whose ticket this browser had was kept by someone.
         ticketKept: kept,
+        ...(tape && { tape }),
       },
     });
   });
@@ -202,8 +217,11 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
   // whatever they send and whether or not there is such a film, as keep does: 409
   // nothing-to-return. A request that couldn't be a return (no takenAt, a message
   // with no response) is a 400 before anything is looked up, the same for everyone.
-  // A response comes with slice 4 ("Hand it back"): until then the borrower who
-  // sends one gets 409 cannot-respond, and the tape stays out.
+  // Hand it back: the same return with one of the four responses, and a message or
+  // none, for the admin alone. Only the member who borrowed the tape on their own
+  // link can (access.js): a borrower who can't, on a browser's loan, gets 409
+  // cannot-respond and the tape stays out. Nothing a viewer is ever sent holds a
+  // response: this answers only that one was taken.
   const RESPONSES = ['loved-it', 'still-thinking', 'not-for-me', 'lets-talk'];
   const returnLimit = limit({ windowMs: 10 * 60 * 1000, max: 30 });
   router.post('/api/films/:slug/return', returnLimit, (req, res) => {
@@ -212,11 +230,19 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
     if (b.response != null && !RESPONSES.includes(b.response)) return res.status(400).json({ error: 'bad-response' });
     if (b.message != null && (typeof b.message !== 'string' || b.message.length > 2000)) return res.status(400).json({ error: 'bad-message' });
     if (b.message != null && b.response == null) return res.status(400).json({ error: 'message-needs-response' });
-    const viewer = sessions.load(req, 'viewer');
+    const { viewer, admin } = who(req);
     const film = q.filmBySlug.get(req.params.slug);
-    const r = access.returnTape(viewer, film, { takenAt: b.takenAt, response: b.response ?? null });
+    // The admin's browser sees every film as a preview, which never takes a tape and
+    // shows no loan: so it has nothing to return either, as Play there takes nothing,
+    // even if it is also signed in as the member who has the tape. The page and
+    // this route then agree for every browser.
+    if (admin) return res.status(409).json({ error: 'nothing-to-return' });
+    // A message of nothing but spaces is no message. (A NUL has no place in words,
+    // and SQLite would count a message that starts with one as empty.)
+    const message = b.message == null ? null : b.message.replaceAll('\0', '').trim() || null;
+    const r = access.returnTape(viewer, film, { takenAt: b.takenAt, response: b.response ?? null, message });
     if (r.error) return res.status(409).json({ error: r.error });
-    res.json({ returned: r.returned, responded: false });
+    res.json({ returned: r.returned, responded: r.responded });
   });
 
   router.post('/api/screenings/:id/heartbeat', (req, res) => {

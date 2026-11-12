@@ -27,6 +27,15 @@ const optText = (v, max, name) => {
   if (typeof v !== 'string') throw bad(`${name} must be text`);
   return v.trim() === '' ? null : v.trim().slice(0, max);
 };
+// The admin's words to a friend ("Picked for you"), or nothing. Too long is refused,
+// never cut short: what a friend reads is what the admin wrote, or the save fails.
+const optNote = (v, max, name) => {
+  if (v === null || v === undefined) return null;
+  if (typeof v !== 'string') throw bad(`${name} must be text`);
+  const text = v.replaceAll('\0', '').trim();
+  if (text.length > max) throw bad(`${name} can be up to ${max} characters`);
+  return text === '' ? null : text;
+};
 // A switch is true or false. Anything else is refused: the string "false" would turn it on.
 const bool = (v, name) => {
   if (typeof v !== 'boolean') throw bad(`${name} must be true or false`);
@@ -121,8 +130,14 @@ export function adminRoutes(deps) {
     return { ...filmViewing.tickets.get(filmId), screenings: s.started, voided: s.voided };
   }
 
-  // One film for the admin. The list leaves out `viewing`, which only the film's own page shows.
-  function adminFilm(f, { viewing = true } = {}) {
+  // One film for the admin. The list leaves out `viewing` and `lending`, which only
+  // the film's own page shows. From version 2 (all three decided in access.js):
+  //   tape     { state: 'in' | 'out' | 'off', loan }: who has it, while it is out;
+  //   links    { live, waiting, total }: its links that have the tape or could still
+  //            take it, those of them that haven't lent, and every link sent;
+  //   lending  how it has been lent, counted from links, loans and responses.
+  // tickets.active is 1.1.0's, until its Films page is rebuilt.
+  function adminFilm(f, { viewing = true, now = Date.now(), tape = access.filmTape(f, now), links = access.linkCounts('film_id', { film: f.id }, now).get(f.id) } = {}) {
     const media = filmMedia(f);
     const artwork = filmArtwork(f);
     const out = { id: f.id, slug: f.slug };
@@ -154,7 +169,9 @@ export function adminRoutes(deps) {
       lookup: looksLikeReleaseName(f.title) ? guessTitleYear(f.title) : { title: f.title, year: f.year },
       metaSources: parseJson(f.meta_sources, {}),
       media,
-      ...(viewing && { viewing: viewingOf(f.id) }),
+      tape,
+      links: links ?? { live: 0, waiting: 0, total: 0 },
+      ...(viewing && { viewing: viewingOf(f.id), lending: access.filmLending(f.id) }),
     };
   }
 
@@ -176,7 +193,16 @@ export function adminRoutes(deps) {
       db.prepare('SELECT film_id, COUNT(*) AS total, SUM(revoked_at IS NULL) AS active FROM tickets GROUP BY film_id').all().map((r) => [r.film_id, r]),
     );
     const films = db.prepare('SELECT * FROM films ORDER BY published DESC, sort_order, title COLLATE NOCASE').all();
-    res.json(films.map((f) => ({ ...adminFilm(f, { viewing: false }), tickets: { total: counts.get(f.id)?.total ?? 0, active: counts.get(f.id)?.active ?? 0 } })));
+    // Every tape that is out and every link, read once for the whole list.
+    const now = Date.now();
+    const out = new Map(access.adminLoans({ live: true }, now).map((l) => [l.film.id, l]));
+    const links = access.linkCounts('film_id', {}, now);
+    res.json(
+      films.map((f) => ({
+        ...adminFilm(f, { viewing: false, now, tape: access.filmTape(f, now, out.get(f.id) ?? null), links: links.get(f.id) ?? null }),
+        tickets: { total: counts.get(f.id)?.total ?? 0, active: counts.get(f.id)?.active ?? 0 },
+      })),
+    );
   });
 
   router.get('/api/admin/films/:id', (req, res) => res.json(adminFilm(getFilm(req.params.id))));
@@ -324,10 +350,12 @@ export function adminRoutes(deps) {
         .map((f) => [f.id, { film: { id: f.id, slug: f.slug, title: f.title }, durationSeconds: filmMedia(f).durationSeconds ?? null }]),
     );
     const people = new Map(db.prepare('SELECT id, name, disabled_at FROM people').all().map((p) => [p.id, { id: p.id, name: p.name, disabled: Boolean(p.disabled_at) }]));
-    if (ids && !ids.length) return { films, people, browsers: new Map(), lastEvent: new Map(), lastScreening: new Map(), progress: new Map() };
+    if (ids && !ids.length) return { films, people, loans: new Map(), browsers: new Map(), lastEvent: new Map(), lastScreening: new Map(), progress: new Map() };
     return {
       films,
       people,
+      // Each link's one loan, out now or over, as /api/admin/loans gives it.
+      loans: new Map((ids ? ids.flatMap((id) => access.adminLoans({ ticket: id }, now)) : access.adminLoans({}, now)).map((l) => [l.ticket.id, l])),
       browsers: byTicket(db.prepare(`SELECT st.ticket_id, COUNT(*) AS n FROM ${LIVE_HOLDERS} ${only} GROUP BY st.ticket_id`).all(now, ...args)),
       // The latest in Activity's order, (at, id), so of two events at the same
       // moment it's the one Activity lists first. Sending the link isn't activity on
@@ -346,7 +374,15 @@ export function adminRoutes(deps) {
     };
   }
 
-  // Until the back office is rebuilt for loans, a link is still described to it in
+  // A link for the admin. Version 2's own keys:
+  //   linkState  where it stands (access.js): unopened, opened, waiting, has, done,
+  //              missed, cancelled, off or unavailable;
+  //   loan       the one time it lent, out now or over, with who has (or had) the
+  //              tape, as /api/admin/loans gives it; null for a link that never lent;
+  //   loanDays   the link's own days, or null for the shop's default when Play is
+  //              pressed. Sent back unchanged, it changes nothing (access.js, setLoanDays);
+  //   pickNote   "Picked for you".
+  // Until the back office is rebuilt for loans, a link is also described to it in
   // 1.x's fields and states. A link that can lend, is waiting for the tape or has it
   // is 'ok'; one that has lent is 'used_up'. expiresAt and openScreening are its
   // loan's due time and playback while it has the tape. screeningLimit and
@@ -354,7 +390,7 @@ export function adminRoutes(deps) {
   const OLD_STATE = { in: 'ok', waiting: 'ok', lent: 'ok', spent: 'used_up' };
   const screeningRow = db.prepare('SELECT * FROM screenings WHERE id = ?');
 
-  function adminTicket(req, t, now = Date.now(), ctx = ticketContext([t.id])) {
+  function adminTicket(req, t, now = Date.now(), ctx = ticketContext([t.id], now)) {
     const status = access.ticketStatus(t, now);
     const film = ctx.films.get(t.film_id);
     const progress = ctx.progress.get(t.id) || {};
@@ -384,8 +420,21 @@ export function adminRoutes(deps) {
       // When its person kept it from a link. Null for one issued or given to them.
       claimedAt: t.claimed_at,
       label: t.label,
+      // "Picked for you": the admin's note to whoever has this link. Apart from the
+      // label, which no viewer sees, and from the film's staff pick.
+      pickNote: t.pick_note,
+      linkState: access.linkState(t, status),
+      loan: ctx.loans.get(t.id) ?? null,
+      loanDays: t.loan_days,
       screeningLimit: limit,
+      // The start-by date as it was set, which a form sends back as it came, and the
+      // date the link goes by: later by the time the tape has been out on other links
+      // since the link was made, and null once the link has been played (access.js,
+      // effectiveStartBy). Paused: the tape is out with someone else now, so the time
+      // left stands still and the date moves with the clock until the tape is back.
       startBy: t.start_by,
+      effectiveStartBy: status.startBy,
+      startByPaused: access.startByPaused(status, now),
       daysAfterFirstPlay: t.days_after_first_play,
       firstOpenedAt: t.first_opened_at,
       firstPlayedAt: t.first_played_at,
@@ -415,9 +464,14 @@ export function adminRoutes(deps) {
 
   // screeningLimit and daysAfterFirstPlay, which 1.x's forms still send, are accepted
   // and ignored: a link lends once, for its loan's days, and nothing reads the two.
+  // pickNote is "Picked for you": a column of its own on the link, so saving it never
+  // touches the film's staff pick (films.recommendation) or the link's label, and
+  // saving either of those never touches it. Only a save that names it changes it.
+  const pickNoteOf = (v) => optNote(v, 2000, 'The “Picked for you” note');
   function ticketFields(b, sets, args) {
     if ('label' in b) sets.push('label = ?'), args.push(optText(b.label, 200, 'The label'));
     if ('startBy' in b) sets.push('start_by = ?'), args.push(optTime(b.startBy, 'Start-by date'));
+    if ('pickNote' in b) sets.push('pick_note = ?'), args.push(pickNoteOf(b.pickNote));
   }
 
   // Only a ticket for anyone with the link can be keepable.
@@ -458,6 +512,9 @@ export function adminRoutes(deps) {
     const sets = [];
     const args = [];
     ticketFields({ label: b.label, startBy: b.startBy }, sets, args);
+    // Picked for you. That a link was sent with a note is logged; the note's words never are.
+    const pickNote = pickNoteOf(b.pickNote);
+    sets.push('pick_note = ?'), args.push(pickNote);
     // How long this link lends the tape for, from the moment Play is pressed. Left
     // out: the shop's default, as it is when Play is pressed.
     const loanDays = optInt(b.loanDays, 'Due back after', { min: 1, max: 30 });
@@ -477,7 +534,7 @@ export function adminRoutes(deps) {
           .prepare(`INSERT INTO tickets (code, film_id, ${cols.join(', ')}, created_at) VALUES (?, ?, ${cols.map(() => '?').join(', ')}, ?)`)
           .run(ticketCode(), film.id, ...args, Date.now());
         out.push(Number(r.lastInsertRowid));
-        access.logEvent('ticket-sent', { filmId: film.id, ticketId: out.at(-1), personId: b.personId != null ? Number(b.personId) : null, detail: { loanDays, note: false } });
+        access.logEvent('ticket-sent', { filmId: film.id, ticketId: out.at(-1), personId: b.personId != null ? Number(b.personId) : null, detail: { loanDays, note: pickNote != null } });
       }
       return out;
     });
@@ -587,9 +644,26 @@ export function adminRoutes(deps) {
     if (r.error === 'not-found') throw bad('Loan not found', 404);
     allowed(r);
     res.json({
-      loan: { id: r.loan.id, takenAt: r.loan.taken_at, dueAt: r.loan.due_at, endedAt: r.loan.ended_at, endedHow: r.loan.ended_how },
+      loan: access.adminLoans({ ticket: r.loan.ticket_id })[0],
       ticket: adminTicket(req, r.ticket),
       alsoCancelled: r.alsoCancelled,
+    });
+  });
+
+  // Loans, newest first: every time a tape went out, with who has (or had) it. For
+  // the admin alone, like everything under /api/admin. ?live=1 leaves only the tapes
+  // out now; film, person (the loan's own member) and ticket narrow it.
+  // (A filter that isn't an id is refused, never ignored: ignored, it would list every
+  // loan. So is one by any other name, such as the film[]= a query-string library sends.)
+  const queryId = (v, name) => optInt(v, name, { min: 1, max: Number.MAX_SAFE_INTEGER });
+  const LOAN_FILTERS = ['live', 'film', 'person', 'ticket'];
+  router.get('/api/admin/loans', (req, res) => {
+    const unknown = Object.keys(req.query).find((k) => !LOAN_FILTERS.includes(k));
+    if (unknown !== undefined) throw bad(`No such filter: ${unknown}`);
+    const { live, film, person, ticket } = req.query;
+    if (live !== undefined && live !== '1' && live !== '0') throw bad('live must be 1 or 0');
+    res.json({
+      loans: access.adminLoans({ live: live === '1', film: queryId(film, 'film'), person: queryId(person, 'person'), ticket: queryId(ticket, 'ticket') }),
     });
   });
 
@@ -599,6 +673,59 @@ export function adminRoutes(deps) {
     if (r.error === 'not-found') throw bad('Play not found', 404);
     allowed(r);
     res.json(adminTicket(req, getTicket(r.screening.ticket_id)));
+  });
+
+  // ------------------------------------------------------------ responses
+  // What borrowers said when handing a tape back, for the admin alone: nothing here
+  // is ever sent to a viewer, and no event holds a response's words. Newest first.
+  // Kept until the admin deletes one: the clean-up never touches them. `unread`
+  // counts those not yet marked as read, for the tab.
+  const responseRows = (where = '') => `
+    SELECT r.id, r.kind, r.message, r.created_at AS createdAt, r.read_at AS readAt,
+           p.id AS personId, p.name AS personName, p.disabled_at AS personDisabledAt,
+           f.id AS filmId, f.slug AS filmSlug, f.title AS filmTitle,
+           l.taken_at AS takenAt, l.due_at AS dueAt, l.ended_at AS endedAt
+    FROM responses r JOIN people p ON p.id = r.person_id JOIN films f ON f.id = r.film_id JOIN loans l ON l.id = r.loan_id
+    ${where} ORDER BY r.created_at DESC, r.id DESC`;
+  const rq = {
+    all: db.prepare(responseRows()),
+    one: db.prepare(responseRows('WHERE r.id = ?')),
+    unread: db.prepare('SELECT COUNT(*) AS n FROM responses WHERE read_at IS NULL'),
+    // The first time counts: marking it again leaves when it was first read.
+    read: db.prepare('UPDATE responses SET read_at = ? WHERE id = ? AND read_at IS NULL'),
+    remove: db.prepare('DELETE FROM responses WHERE id = ?'),
+  };
+  const adminResponse = (r) => ({
+    id: r.id,
+    kind: r.kind,
+    message: r.message,
+    createdAt: r.createdAt,
+    readAt: r.readAt,
+    person: { id: r.personId, name: r.personName, disabled: Boolean(r.personDisabledAt) },
+    film: { id: r.filmId, slug: r.filmSlug, title: r.filmTitle },
+    loan: { takenAt: r.takenAt, dueAt: r.dueAt, endedAt: r.endedAt },
+  });
+  const unread = () => rq.unread.get().n;
+  const getResponse = (id) => {
+    const r = rq.one.get(Number(id));
+    if (!r) throw bad('Response not found', 404);
+    return r;
+  };
+
+  router.get('/api/admin/responses', (req, res) => res.json({ responses: rq.all.all().map(adminResponse), unread: unread() }));
+
+  router.post('/api/admin/responses/:id/read', (req, res) => {
+    const r = getResponse(req.params.id);
+    rq.read.run(Date.now(), r.id);
+    res.json({ response: adminResponse(getResponse(r.id)), unread: unread() });
+  });
+
+  // For good: the loan stays as it was (returned), without what was said. Like every
+  // call that changes something, it is sent as JSON (app.js), with an empty body.
+  router.delete('/api/admin/responses/:id', (req, res) => {
+    const r = getResponse(req.params.id);
+    rq.remove.run(r.id);
+    res.json({ deleted: r.id, unread: unread() });
   });
 
   // ------------------------------------------------------------ activity

@@ -80,12 +80,20 @@ export const masterUrl = (film) => {
 //   tape       'in', 'yours', 'out', or null (spent, expired). It goes by the loan,
 //              not by state: an unavailable film keeps it;
 //   loanDays   with the tape in: how many days Play would lend it for;
-//   startBy    with the tape in, or once missed: the date to start by;
+//   startBy    with the tape in, or once missed: the date to start by, later than
+//              the admin set it by the time the tape was out on other links
+//              (access.js, effectiveStartBy). Never while the tape is out;
 //   dueBack    while the tape is out, with this browser or anyone;
-//   loan       while it is this browser's: when it was taken, where playback is, and
-//              whether it is out to this browser (a link for anyone) or to the person;
+//   loan       while it is this browser's: when it was taken, where playback is,
+//              whether it is out to this browser (a link for anyone) or to the person,
+//              and whether it can be handed back with a response (access.js decides,
+//              and the return route refuses by the same answer);
 //   returned   for a spent link, and only to the one who borrowed: when the tape came
-//              back, and whether they returned it ('returned') or it was due ('due').
+//              back, and whether they returned it ('returned') or it was due ('due');
+//   pickNote   "Picked for you": the admin's note to whoever has this link, or null.
+//              This link's own, in every state, and never another link's. Not the
+//              film's staff pick (film.recommendation), and not the link's label,
+//              which is the admin's alone and is never sent to a viewer.
 // expiresAt and openScreening are 1.1.0's, kept until its pages are rebuilt: the due
 // date, and the place to resume from, while the tape is this browser's.
 export function ticketForViewer(a) {
@@ -100,11 +108,14 @@ export function ticketForViewer(a) {
     loanDays: tape === 'in' ? status.loanDays : null,
     startBy: tape === 'in' || view === 'expired' ? status.startBy : null,
     dueBack,
-    loan: yours ? { takenAt: status.loan.taken_at, position, finishedAt: a.screening.finished_at, toBrowser: status.loan.person_id == null } : null,
+    loan: yours
+      ? { takenAt: status.loan.taken_at, position, finishedAt: a.screening.finished_at, toBrowser: status.loan.person_id == null, canRespond: Boolean(a.canRespond) }
+      : null,
     returned:
       view === 'spent' && a.mine
         ? { at: status.loan.ended_at ?? status.loan.due_at, how: status.loan.ended_how === 'returned' ? 'returned' : 'due' }
         : null,
+    pickNote: ticket.pick_note ?? null,
     // In the signed-in person's account, so on every device they sign in on.
     inAccount: ticket.person_id != null,
     expiresAt: yours ? dueBack : null,

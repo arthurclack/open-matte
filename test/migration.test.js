@@ -576,7 +576,7 @@ describe('a schema 7 database', () => {
   test('the loans it makes are these and no others', () => {
     const names = (where) => db.prepare(`SELECT ticket_id FROM loans WHERE ${where} ORDER BY ticket_id`).all().map((l) => nameOf(l.ticket_id)).sort();
     assert.deepEqual(names('ended_at IS NULL'), ['broken', 'crowdPlaying', 'fortnight', 'givenBack', 'kept', 'otherDevice', 'pairBen', 'rankLive', 'signedIn', 'solo', 'sooner', 'startByPassed', 'tieEarlier']);
-    assert.deepEqual(names('ended_at IS NOT NULL'), ['offShelfUsedUp', 'past', 'pastDays', 'pastDaysCancelled', 'pastDaysGivenBack', 'usedUp', 'usedUpCancelled', 'usedUpGaveOneBack', 'usedUpNobody']);
+    assert.deepEqual(names('ended_at IS NOT NULL'), ['finishedGivenBack', 'offShelfUsedUp', 'past', 'pastDays', 'pastDaysCancelled', 'pastDaysGivenBack', 'usedUp', 'usedUpCancelled', 'usedUpGaveOneBack', 'usedUpNobody']);
   });
 
   test('a film with several links nobody has played: nothing changes, and every link waits', () => {
@@ -584,6 +584,10 @@ describe('a schema 7 database', () => {
     assertLends('shelfAnyone', null);
     assertLends('shelfKept', null);
     assertLends('shelfMissed', null);
+    // Nobody played it, and its start-by date passed while another link's play was
+    // open: it lends like any other, and its date is kept as it was set.
+    assertLends('soloWaited', null);
+    assert.equal(link(T.soloWaited).start_by, now - 30 * MIN);
     // A kept link is still that member's, and a keepable one still keepable.
     assert.deepEqual([link(T.shelfKept).person_id, link(T.shelfKept).claimed_at, link(T.shelfKept).claimable], [P.ben, now - 3 * DAY, 0]);
     assert.equal(link(T.shelfKeepable).claimable, 1);
@@ -709,6 +713,7 @@ describe('a schema 7 database', () => {
     assertSpent('pastDays', SC.pastDays);
     assertSpent('pastDaysCancelled', SC.pastDaysCancelled);
     assertSpent('pastDaysGivenBack', SC.pastDaysGivenBack); // past its days, though its only play was given back
+    assertSpent('finishedGivenBack', SC.finishedGivenBack); // the same, watched to the end before it was given back
     assertSpent('offShelfUsedUp', SC.offShelfUsedUp); // whatever has become of its film
     // Its browser is remembered when the link was for anyone, and its row is still there.
     assert.deepEqual([loanOf(T.usedUp).session_hash, loanOf(T.usedUp).device], [S.c, 'Firefox on Mac']);
@@ -1025,7 +1030,7 @@ describe('a schema 7 shop, upgraded, over HTTP', () => {
     const mine = await pageOf(a, 'crowd');
     assert.equal(mine.canPlay, true);
     assert.deepEqual([mine.ticket.state, mine.ticket.tape, mine.ticket.dueBack], ['ok', 'yours', due]);
-    assert.deepEqual(mine.ticket.loan, { takenAt: now - HOUR, position: 3000, finishedAt: null, toBrowser: true });
+    assert.deepEqual(mine.ticket.loan, { takenAt: now - HOUR, position: 3000, finishedAt: null, toBrowser: true, canRespond: false });
     assert.equal((await a.get(master('crowd'))).status, 200);
     const resumed = await press(a, 'crowd');
     assert.equal(resumed.status, 200, JSON.stringify(resumed.data));
@@ -1064,6 +1069,75 @@ describe('a schema 7 shop, upgraded, over HTTP', () => {
     assert.deepEqual((await press(a, 'crowd')).data, { error: 'spent' });
     assert.deepEqual((await pageOf(a, 'crowd')).ticket.returned, { at: loanOf(T.crowdPlaying).due_at, how: 'due' });
     assert.equal(db.prepare('SELECT first_played_at FROM tickets WHERE id = ?').get(T.crowdPaused).first_played_at, now - 5 * HOUR, 'its first play in 1.x is still when it was first played');
+  });
+
+  // What the back office and the members are told of the loans the upgrade made
+  // (slices 4 to 6), before any of them comes back.
+  test('the back office’s loans, a response, the start-by date with time given back, and the members’ shelf, on the loans the upgrade made', async () => {
+    const admin = await adminBrowser(base);
+    const ok = async (promise) => {
+      const r = await promise;
+      assert.equal(r.status, 200, JSON.stringify(r.data));
+      return r.data;
+    };
+    const loanAt = async (ticketId) => {
+      const { loans } = await ok(admin.get(`/api/admin/loans?ticket=${ticketId}`));
+      assert.equal(loans.length, 1);
+      return loans[0];
+    };
+
+    // Lent before 2.0: over, as the upgrade wrote it, and a play that names no browser has no borrower to name.
+    const nobody = await loanAt(T.usedUpNobody);
+    assert.deepEqual([nobody.live, nobody.endedHow, nobody.borrower], [false, 'before-2.0', { kind: 'browser', device: null, signedInAs: null }]);
+    assert.deepEqual([nobody.finished, nobody.response, nobody.otherLinks], [true, null, []]);
+    // Watched to the end in 1.x and then given back: not finished, on the loan or in the film's count.
+    const givenBack = await loanAt(T.finishedGivenBack);
+    assert.deepEqual([givenBack.endedHow, givenBack.finished], ['before-2.0', false]);
+    assert.deepEqual((await ok(admin.get(`/api/admin/films/${F.finishedGivenBack}`))).lending, { sent: 1, cancelled: 0, opened: 1, lent: 1, finished: 0, responses: 0 });
+    // Every loan is listed: the upgrade's, live and over.
+    const everyLoan = (await ok(admin.get('/api/admin/loans'))).loans;
+    assert.equal(everyLoan.length, db.prepare('SELECT COUNT(*) AS n FROM loans').get().n);
+    assert.ok(everyLoan.some((l) => l.live) && everyLoan.some((l) => l.endedHow === 'before-2.0'));
+
+    // A member part-way through on his own link hands the tape back with a response,
+    // and the owner reads it.
+    const ben = as('ben');
+    const kept = (await pageOf(ben, 'kept')).ticket.loan;
+    assert.equal(kept.canRespond, true);
+    const r = await ok(ben.post('/api/films/kept/return', { takenAt: kept.takenAt, response: 'lets-talk', message: '  Can we talk about the ending?  ' }));
+    assert.equal(r.responded, true);
+    const { responses, unread } = await ok(admin.get('/api/admin/responses'));
+    assert.equal(unread, 1);
+    assert.deepEqual(
+      [responses[0].kind, responses[0].message, responses[0].person.name, responses[0].film.slug, responses[0].loan.takenAt],
+      ['lets-talk', 'Can we talk about the ending?', 'Ben', 'kept', kept.takenAt],
+    );
+    assert.deepEqual((await loanAt(T.kept)).response.kind, 'lets-talk');
+
+    // A link nobody played whose start-by passed half an hour ago, while the open play
+    // on Solo had the tape: it waits, its time stands still, and the three hours the
+    // tape has been out are given back, counted to the moment it is asked.
+    const solo = loanOf(T.solo);
+    const asked = Date.now();
+    const waited = await ok(admin.get(`/api/admin/tickets/${T.soloWaited}`));
+    const answered = Date.now();
+    assert.deepEqual([waited.linkState, waited.startByPaused, waited.startBy], ['waiting', true, now - 30 * MIN]);
+    assert.ok(
+      waited.effectiveStartBy >= waited.startBy + (asked - solo.taken_at) && waited.effectiveStartBy <= waited.startBy + (answered - solo.taken_at),
+      `the date given back the time out: ${waited.effectiveStartBy - waited.startBy} ms`,
+    );
+    const listed = (await ok(admin.get('/api/admin/booth'))).attention.tickets.find((t) => t.id === T.soloWaited);
+    assert.deepEqual([listed.startByAsSet, listed.startByPaused, listed.startBy > answered], [now - 30 * MIN, true, true]);
+    // Counted among the film's links that could still lend.
+    assert.equal((await ok(admin.get(`/api/admin/films/${F.solo}`))).links.waiting, 1);
+
+    // The members' shelf: a film shown to members that Dee has no link to is out, due
+    // back when the play the upgrade found is due, and says nothing of who has it.
+    await ok(admin.patch(`/api/admin/films/${F.crowd}`, { memberVisible: true }));
+    const shelf = (await ok(as('dee').get('/api/me'))).memberFilms.find((f) => f.slug === 'crowd');
+    const crowd = db.prepare(`SELECT * FROM loans WHERE film_id = ? AND ended_at IS NULL`).get(F.crowd);
+    assert.deepEqual([shelf.tape, shelf.dueBack], ['out', crowd.due_at]);
+    assert.ok(!JSON.stringify(shelf).includes('takenAt') && !JSON.stringify(shelf).includes('"c"'));
   });
 
   test('one play open: it is the link’s one loan, due at the end of its time to come back, and then the link is spent', async () => {

@@ -195,8 +195,9 @@ describe('the upgrade preview', { skip }, () => {
   });
 
   test('which links are spent: used up, or past their days after the first play, cancelled or not', () => {
-    assert.deepEqual(names(report.spent), ['offShelfUsedUp', 'past', 'pastDays', 'pastDaysCancelled', 'pastDaysGivenBack', 'usedUp', 'usedUpCancelled', 'usedUpGaveOneBack', 'usedUpNobody']);
+    assert.deepEqual(names(report.spent), ['finishedGivenBack', 'offShelfUsedUp', 'past', 'pastDays', 'pastDaysCancelled', 'pastDaysGivenBack', 'usedUp', 'usedUpCancelled', 'usedUpGaveOneBack', 'usedUpNobody']);
     assert.deepEqual(Object.fromEntries(report.spent.map((s) => [nameOf(s.link.id), s.why])), {
+      finishedGivenBack: 'past-its-days',
       usedUp: 'used-up',
       usedUpCancelled: 'used-up',
       usedUpGaveOneBack: 'used-up',
@@ -230,8 +231,12 @@ describe('the upgrade preview', { skip }, () => {
   test('every link is in one list or counted, and none in two', () => {
     const listed = [...report.out, ...report.cutOff, ...report.spent, ...report.lendOnceMore].map((r) => r.link.id);
     assert.equal(new Set(listed).size, listed.length);
-    assert.deepEqual(report.counts, { films: Object.keys(F).length, links: Object.keys(T).length, neverPlayed: 10, cancelled: 2 });
+    assert.deepEqual(report.counts, { films: Object.keys(F).length, links: Object.keys(T).length, neverPlayed: 11, cancelled: 2 });
     assert.equal(listed.length + report.counts.neverPlayed + report.counts.cancelled, report.counts.links);
+    // A link nobody played whose start-by passed while another link's play was open
+    // waits once upgraded, and has that time back: counted among those never played,
+    // and named nowhere (docs/version-2.md, the Upgrading table).
+    assert.ok(!listed.includes(T.soloWaited));
   });
 
   test('it agrees with the upgrade itself, run on another copy', () => {
@@ -252,7 +257,7 @@ describe('the upgrade preview', { skip }, () => {
     assert.match(text, /As of this backup, by this computer's clock: .+\(.+\)\./);
     assert.match(text, /decides by the clock when the server starts, so a Play pressed in between can change it/);
     assert.match(text, /only read, to copy it/);
-    for (const title of ['Tapes out after the upgrade: 13', 'Plays cut off: 4', 'Links spent early: 7', 'Links already spent: 9', 'Links that lend once more: 14', 'Loan lengths capped at 30 days: 3']) {
+    for (const title of ['Tapes out after the upgrade: 13', 'Plays cut off: 4', 'Links spent early: 7', 'Links already spent: 10', 'Links that lend once more: 14', 'Loan lengths capped at 30 days: 3']) {
       assert.ok(text.includes(`\n${title}\n`), title);
     }
     assert.match(text, new RegExp(`\\n  Solo: link ${T.solo} "Sam", out to a browser \\(Safari on iPhone\\), 30 min in, due back .+\\n`));
@@ -266,14 +271,15 @@ describe('the upgrade preview', { skip }, () => {
     assert.match(text, new RegExp(`\\n  Off the Shelf \\(off the shelf\\): link ${T.offShelfUsedUp}, used up\\n`));
     assert.match(text, new RegExp(`\\n  Done: link ${T.playsLeft} "Three goes", for 30 days\\n`));
     assert.match(text, new RegExp(`\\n  The Shelf: link ${T.shelfKeepable}, said 3650 days after the first play\\n`));
-    assert.match(text, /\nLinks never played: 10 of 52\n  Each waits for its first Play and lends once: for the days it said after the first play, at most 30, or else for 3 days\.\n/);
+    assert.match(text, /\nLinks never played: 11 of 54\n  Each waits for its first Play and lends once: for the days it said after the first play, at most 30, or else for 3 days\.\n/);
     assert.match(text, /\nCancelled links that were not spent: 2\n  They stay cancelled\.\n/);
+    assert.ok(!new RegExp(`link ${T.soloWaited}\\b`).test(text) && !text.includes('"Waited"'), 'the link whose start-by passed during an open play is not named');
     // A link's code is the link: whoever reads the report over a shoulder gets none.
     const raw = new DatabaseSync(shop.file, { readOnly: true });
     const codes = raw.prepare('SELECT code FROM tickets').all().map((t) => t.code);
     const hashes = raw.prepare('SELECT id_hash FROM sessions').all().map((s) => s.id_hash);
     raw.close();
-    assert.equal(codes.length, 52);
+    assert.equal(codes.length, 54);
     for (const secret of [...codes, ...hashes]) assert.ok(!text.includes(secret), secret);
   });
 

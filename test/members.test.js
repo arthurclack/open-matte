@@ -219,10 +219,13 @@ describe('a signed-in person with no ticket', () => {
     await hidden(phone, 'heat');
   });
 
-  test('the listing gives the film summary only', async () => {
+  // Version 2 (question 7: yes): with whether the film's tape is in or out, and when
+  // it's due back. 1.x gave the summary only. Never who has it: test/never-who.test.js.
+  test('the listing gives the film summary, and whether its tape is in or out', async () => {
     const { phone } = await member();
     const arrival = (await me(phone)).memberFilms.find((f) => f.slug === 'arrival');
-    assert.deepEqual(Object.keys(arrival).sort(), ['directors', 'posterUrl', 'runtimeMinutes', 'slug', 'title', 'year']);
+    assert.deepEqual(Object.keys(arrival).sort(), ['directors', 'dueBack', 'posterUrl', 'runtimeMinutes', 'slug', 'tape', 'title', 'year']);
+    assert.deepEqual([arrival.tape, arrival.dueBack], ['in', null]);
   });
 
   test('reading it records nothing: no event, no ticket opened, no screening', async () => {

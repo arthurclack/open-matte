@@ -14,7 +14,7 @@ const note = (v) => (v === null || v === undefined || String(v).trim() === '' ? 
 
 // People, their passkeys and their links, for the admin. Mounted inside
 // adminRoutes, after its sign-in check.
-export function peopleRoutes({ db, people }) {
+export function peopleRoutes({ db, people, access }) {
   const router = express.Router();
 
   const q = {
@@ -53,8 +53,22 @@ export function peopleRoutes({ db, people }) {
       GROUP BY f.id ORDER BY since DESC, f.id DESC`),
   };
 
+  // What the list needs about tapes and links, read once for everyone: each member's
+  // tapes out (by the loan's own member: a tape they took on a link anyone can use
+  // while signed in is that browser's loan, and isn't theirs here) and how many of
+  // their links have the tape or could still take it.
+  function lending(now, personId = null) {
+    const tapesOut = new Map();
+    for (const l of access.adminLoans({ live: true, person: personId }, now)) {
+      if (l.borrower.kind !== 'person') continue;
+      const id = l.borrower.person.id;
+      tapesOut.set(id, [...(tapesOut.get(id) ?? []), { film: l.film, dueAt: l.dueAt }]);
+    }
+    return { tapesOut, links: access.linkCounts('person_id', { person: personId }, now) };
+  }
+
   // The note is for the admin only; nothing here ever goes to a viewer.
-  function summary(p, now = Date.now()) {
+  function summary(p, now = Date.now(), ctx = lending(now, p.id)) {
     const c = q.counts.get(p.id);
     return {
       id: p.id,
@@ -66,6 +80,10 @@ export function peopleRoutes({ db, people }) {
       setUp: Boolean(c.setUp),
       passkeys: c.passkeys,
       tickets: c.tickets,
+      // The tapes they have out now, the soonest due back first, and their links
+      // that have the tape or could still take it.
+      tapesOut: (ctx.tapesOut.get(p.id) ?? []).sort((a, b) => a.dueAt - b.dueAt),
+      liveLinks: ctx.links.get(p.id)?.live ?? 0,
       // Kept on the person, so it outlives the sessions the clean-up deletes.
       lastSignedInAt: p.last_signed_in_at,
       linkWaiting: q.waiting.get(p.id, now) || null,
@@ -82,12 +100,15 @@ export function peopleRoutes({ db, people }) {
       browsers: q.browsers.all(p.id, now),
       links: q.links.all(p.id).map((l) => ({ ...l, reset: Boolean(l.reset) })),
       viewing: q.viewing.all(p.id).map(({ id, slug, title, ...v }) => ({ film: { id, slug, title }, ...v })),
+      // Every tape borrowed on their own links, newest first, out now or back.
+      loans: access.adminLoans({ person: p.id }, now),
     };
   }
 
   router.get('/api/admin/people', (req, res) => {
     const now = Date.now();
-    res.json(q.all.all().map((p) => summary(p, now)));
+    const ctx = lending(now);
+    res.json(q.all.all().map((p) => summary(p, now, ctx)));
   });
 
   router.post('/api/admin/people', (req, res) => {

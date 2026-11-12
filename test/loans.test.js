@@ -554,8 +554,8 @@ describe('the film, while its tape is out', () => {
       assert.equal(page.canPlay, false);
       assert.deepEqual(page.ticket, {
         state: 'unavailable', tape: 'yours', loanDays: null, startBy: null, dueBack,
-        loan: { takenAt, position: 33, finishedAt: null, toBrowser: false },
-        returned: null, inAccount: true, expiresAt: dueBack, openScreening: { resumableUntil: dueBack, position: 33 },
+        loan: { takenAt, position: 33, finishedAt: null, toBrowser: false, canRespond: true },
+        returned: null, pickNote: null, inAccount: true, expiresAt: dueBack, openScreening: { resumableUntil: dueBack, position: 33 },
       });
       // On their card still, on another device too.
       const laptop = await sam.device();
@@ -602,7 +602,7 @@ describe('the film, while its tape is out', () => {
 
 // ====================================================================== the state of a link
 describe('a link’s state, the same whoever asks', () => {
-  test('a start-by date that passes while the tape is out on another link leaves the link waiting until the tape is back; one that had already passed is expired', async () => {
+  test('a start-by date that passes while the tape is out on another link leaves the link waiting, and once the tape is back the link has that time back; one that had already passed is expired', async () => {
     const film = await ownFilm('start-by-out');
     const t0 = Date.now() + HOUR;
     const lends = await issue(film);
@@ -620,11 +620,23 @@ describe('a link’s state, the same whoever asks', () => {
     assert.equal(stateOf(waits, passed), 'waiting');
     assert.deepEqual(viewOf(b, film, passed), ['out', 'out']);
     assert.equal(press(b, film, passed).error, 'out');
-    // The tape comes back: start-by missed. (Slice 6 would give it the time back.)
+    // The tape comes back, three days after it went out, and the link has those three
+    // days back (slice 6): its date was a day after the tape was taken, and is a day
+    // after the tape came back. Nothing has written the loan's end yet: reading writes nothing.
     const due = t0 + 3 * DAY;
-    assert.deepEqual([stateOf(waits, due), viewOf(b, film, due)], ['expired', ['expired', null]]);
-    assert.equal(press(b, film, due).error, 'expired');
-    assert.equal(access.ticketStatus(ticketRow(waits), due).startBy, t0 + DAY);
+    assert.equal(loanOf(lends).ended_at, null);
+    assert.equal(access.ticketStatus(ticketRow(waits), due).startBy, due + DAY);
+    assert.deepEqual([stateOf(waits, due), viewOf(b, film, due)], ['in', ['in', 'in']]);
+    assert.deepEqual([stateOf(waits, due + DAY - 1), stateOf(waits, due + DAY)], ['in', 'expired'], 'a day left, as when the tape went out');
+    assert.deepEqual(viewOf(b, film, due + DAY), ['expired', null]);
+    // The link that had been missed before the tape went out is given nothing back.
+    assert.deepEqual([stateOf(missed, due), access.ticketStatus(ticketRow(missed), due).startBy], ['expired', t0 - HOUR]);
+    assert.equal(press(c, film, due + HOUR).error, 'expired');
+    // And Play takes the tape in the time given back, long after the date as it was set.
+    const took = press(b, film, due + HOUR);
+    assert.deepEqual([took.error, took.loan.ticket_id, took.loan.taken_at], [undefined, waits.id, due + HOUR]);
+    assert.deepEqual([loanOf(lends).ended_at, loanOf(lends).ended_how], [due, 'due'], 'the first loan’s end is written as it was read');
+    assert.equal(access.ticketStatus(ticketRow(waits), due + 2 * DAY).startBy, null, 'a start-by only matters until the first play');
   });
 
   test('a link that lent before its own start-by stays lent after the date; a tape that went out after a link’s date had passed leaves that link expired', async () => {
@@ -1038,8 +1050,10 @@ describe('Return it now', () => {
       assert.deepEqual(answer(await giveBack(browser(srv.base), film, body)), answer(mine), JSON.stringify(body));
       assert.deepEqual(answer(await b.post('/api/films/no-such-film/return', body)), answer(mine), JSON.stringify(body));
     }
-    // A response is slice 4's: until then the borrower who sends one is told it can't
-    // be taken, and the tape stays out. Anyone else: nothing to return, as ever.
+    // A response is only for a tape borrowed on a member's own link (slice 4,
+    // test/responses.test.js). This is a browser's tape, on a link anyone can use: the
+    // borrower who sends one is told it can't be taken, and the tape stays out.
+    // Anyone else: nothing to return, as ever.
     assert.deepEqual(answer(await giveBack(b, film, { takenAt, response: 'loved-it', message: 'Lovely.' })), [409, { error: 'cannot-respond' }]);
     assert.deepEqual(answer(await giveBack(browser(srv.base), film, { takenAt, response: 'loved-it' })), [409, { error: 'nothing-to-return' }]);
     assert.equal(loanOf(ticket).ended_at, null, 'nothing changed');

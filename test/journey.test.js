@@ -106,7 +106,7 @@ describe('a link from opening to the tape coming due', () => {
     assert.equal(page.data.access.canPlay, true);
     // One set of keys, in every state. The play limits and the days after the first play are gone.
     assert.deepEqual(page.data.access.ticket, {
-      state: 'ok', tape: 'in', loanDays: 5, startBy: null, dueBack: null, loan: null, returned: null, inAccount: false, expiresAt: null, openScreening: null,
+      state: 'ok', tape: 'in', loanDays: 5, startBy: null, dueBack: null, loan: null, returned: null, pickNote: null, inAccount: false, expiresAt: null, openScreening: null,
     });
     assert.equal(page.data.film.media.masterUrl, undefined, 'the playlist URL is only handed out on Play');
     assert.equal(loanRow(), undefined, 'opening takes nothing');
@@ -134,8 +134,8 @@ describe('a link from opening to the tape coming due', () => {
     assert.equal(page.canPlay, true);
     assert.deepEqual(page.ticket, {
       state: 'ok', tape: 'yours', loanDays: null, startBy: null, dueBack: loan.due_at,
-      loan: { takenAt: loan.taken_at, position: 0, finishedAt: null, toBrowser: true },
-      returned: null, inAccount: false,
+      loan: { takenAt: loan.taken_at, position: 0, finishedAt: null, toBrowser: true, canRespond: false },
+      returned: null, pickNote: null, inAccount: false,
       // 1.1.0's two fields, until its pages are rebuilt: the due date, and where to resume.
       expiresAt: loan.due_at, openScreening: { resumableUntil: loan.due_at, position: 0 },
     });
@@ -166,7 +166,7 @@ describe('a link from opening to the tape coming due', () => {
   test('a second browser on the same link sees "out", like anyone, and cannot take over even once the first pauses', async () => {
     tv = browser(srv.base);
     await openTicket(tv, ticket);
-    const out = { state: 'out', tape: 'out', loanDays: null, startBy: null, dueBack: loan.due_at, loan: null, returned: null, inAccount: false, expiresAt: null, openScreening: null };
+    const out = { state: 'out', tape: 'out', loanDays: null, startBy: null, dueBack: loan.due_at, loan: null, returned: null, pickNote: null, inAccount: false, expiresAt: null, openScreening: null };
     const page = (await tv.get('/api/films/arrival')).data.access;
     assert.equal(page.canPlay, false);
     assert.deepEqual(page.ticket, out);
@@ -223,7 +223,7 @@ describe('a link from opening to the tape coming due', () => {
     assert.equal(page.data.access.canPlay, false);
     assert.deepEqual(page.data.access.ticket, {
       state: 'spent', tape: null, loanDays: null, startBy: null, dueBack: null, loan: null,
-      returned: { at: loan.due_at, how: 'due' }, inAccount: false, expiresAt: null, openScreening: null,
+      returned: { at: loan.due_at, how: 'due' }, pickNote: null, inAccount: false, expiresAt: null, openScreening: null,
     });
     assert.equal(loanRow().ended_at, null, 'reading the page writes nothing');
     const r = await viewer.post('/api/films/arrival/screenings');

@@ -165,7 +165,7 @@ export default function TicketDetail() {
             {t.expiresAt
               ? formatDateTime(t.expiresAt)
               : t.startBy && !t.firstPlayedAt
-                ? `If not started by ${formatDate(t.startBy)}`
+                ? `If not started by ${formatDate(t.effectiveStartBy ?? t.startBy)}`
                 : t.daysAfterFirstPlay
                   ? `${t.daysAfterFirstPlay} days after the first play`
                   : 'Never'}

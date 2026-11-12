@@ -145,6 +145,9 @@ export function fillShop(db, now = Date.now()) {
   T.solo = ticket(F.solo, { label: 'Sam', limit: 1, played: now - 3 * HOUR });
   hold(T.solo, S.a);
   SC.solo = play(T.solo, { session: S.a, started: now - 3 * HOUR, beat: now - 2 * HOUR, position: 1800 });
+  // Beside it, a link nobody has played whose start-by date passed half an hour ago,
+  // while that play was open: once upgraded it waits for the tape, and has that time back.
+  T.soloWaited = ticket(F.solo, { label: 'Waited', startBy: now - 30 * MIN });
 
   // ------------------ the same, on a link whose start-by date has passed since its first play
   // First played two days ago, in time, with the shop's 72 hours to come back; the
@@ -258,6 +261,14 @@ export function fillShop(db, now = Date.now()) {
   SC.metStartBy = play(T.metStartBy, { session: S.b, started: now - 5 * DAY });
   T.neverDays10 = ticket(F.done, { days: 10, startBy: now + 3 * DAY });
   T.neverPlain = ticket(F.done, {});
+
+  // --------------- watched to the end, then given back: a film of its own, so its counts are its own
+  // Past its days, and its only play was finished and given back afterwards. 1.x
+  // didn't count it; the upgrade still makes it the link's loan, and a given-back
+  // play isn't one finished.
+  F.finishedGivenBack = film('finished-given-back', 'Finished, Given Back');
+  T.finishedGivenBack = ticket(F.finishedGivenBack, { days: 2, played: now - 5 * DAY });
+  SC.finishedGivenBack = play(T.finishedGivenBack, { session: S.c, started: now - 5 * DAY, finished: now - 5 * DAY + 2 * HOUR, voided: now - 5 * DAY + 3 * HOUR });
 
   // --------------- past its days, with its time to come back still open (30 days of it)
   F.past = film('past', 'Past');

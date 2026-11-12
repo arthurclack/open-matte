@@ -164,8 +164,9 @@ beforeEach((t) => refuseShared(sharedPlays(`what was set up before "${t.fullName
 afterEach((t) => refuseShared(sharedPlays(t.fullName ?? t.name)));
 
 // No web build unless a test gives one (`webDist`, a folder with an index.html).
-export async function startServer({ mediaDir, dataDir = tempDir(), webDist, metadataOptions = { envKey: '' }, backupOptions = {}, mediaOptions, webauthn, limits }) {
-  const db = watchPlays(openDb(':memory:'));
+// `db`: a database of the test's own to start on, in place of a new one in memory.
+export async function startServer({ mediaDir, dataDir = tempDir(), webDist, metadataOptions = { envKey: '' }, backupOptions = {}, mediaOptions, webauthn, limits, db: given }) {
+  const db = watchPlays(given ?? openDb(':memory:'));
   const app = createApp({
     db,
     mediaDir,
