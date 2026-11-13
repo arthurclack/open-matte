@@ -1987,7 +1987,7 @@ had a tape. 1,093 unit tests became 1,106, all passing on Node 26. What changed:
   after the film's h1 in the page's order; the Ledger's table links at least 32px tall
   on a phone; `adminTicket`'s 1.x fields and the film page's `viewing` (slice 9's "Not
   done").
-- [ ] A rehearsal on a copy of the live shop's backup ([Checking a
+- [x] A rehearsal on a copy of the live shop's backup ([Checking a
   backup](deploying.md#checking-a-backup), `docs/deploying.md:313-349`): the preview's
   report read with you, then the upgrade, then a loan from Play to hand-back.
 - [ ] The tag: `CHANGELOG.md`'s heading "2.0.0 — Unreleased" dated in the same change
@@ -2142,6 +2142,25 @@ new, at 1280, 390 and 320. 1,116 unit tests became 1,117, all passing. What chan
 
 Not run: real Safari, or an iPhone (only Playwright's Chromium, Firefox and WebKit, and
 the installed Chrome); the preview under Docker on the server.
+
+Rehearsed on 13 Nov 2026, on the code committed as `1f75411`. A fresh backup of
+www.openmatte.dev, made in the app's container at 17:18 (schema 7, integrity ok, the
+same checksum on the server and on this Mac), was previewed and then upgraded in a
+throwaway folder. The preview: no tape out after the upgrade, so no play cut off and no
+link spent early; 4 links already spent, 2 that lend once more (Test Pattern's device
+checks), 3 of 9 never played; everything else as it was. The copy started on 2.0.0 at
+schema 8, with integrity ok and no foreign key problems. A new member made a passkey,
+was sent a link for a test reel, read "Pressing Play takes the tape out", pressed Play
+(200, "Out to Rehearsal") and handed it back with "Loved it" and a few words (200);
+Responses read "Responses, 1 unread", and the page showed no errors. The copy was then
+deleted, and the backup kept until 2.0.0 is live on both servers.
+
+It found one thing, mended since: pressing the Tapes tab while already on Tapes (from a
+member's "Send … a link") kept the page, and Out now still said no tape was out. The
+page loaded its loans, links, films and members once. It now reads them again on every
+visit (`web/src/admin/Tickets.jsx`, by the location's key), and journey 1 holds it: the
+back office, open on Tapes before Play, sees the tape out and back in by pressing the
+tab, with no reload. Without the fix that step fails.
 
 ## Tests
 

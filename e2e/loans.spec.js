@@ -8,7 +8,7 @@
 //   when it's back, never who has it.
 // Every browser: pressing Play takes the tape whether or not the browser can decode
 // the film.
-import { admin, cinemaName, expect, film, playButton, secondFilm, signedInPerson, test, unique } from './fixtures.js';
+import { admin, asAdmin, cinemaName, expect, film, playButton, secondFilm, signedInPerson, test, unique } from './fixtures.js';
 
 // Presses Play and waits until the server has answered.
 async function pressPlay(page) {
@@ -51,9 +51,31 @@ test('lend and return: the second browser sees it out with no Play, the first re
     }
   });
 
+  // The back office, open on Tapes before Play, as it would be on a desk: pressing the
+  // Tapes tab again shows the tape out without a reload, and back in after the return.
+  const office = await (async () => {
+    const context = await newContext();
+    await asAdmin(context);
+    return context.newPage();
+  })();
+  const outNowRow = office.locator('tr', { has: office.locator(`a[href="/admin/films/${film.id}"]`) }).filter({ has: office.getByRole('button', { name: /^Take the tape back/ }) });
+  const tapesTab = () => office.getByRole('navigation', { name: 'Back office' }).getByRole('link', { name: 'Tapes', exact: true }).click();
+  await test.step('the back office is open on Tapes, filtered, with the tape in', async () => {
+    await office.goto('/admin/tickets?kind=anyone');
+    await expect(office.getByRole('heading', { level: 2, name: /^Out now/ })).toBeVisible();
+    await expect(outNowRow).toHaveCount(0);
+  });
+
   await test.step('the first presses Play and takes the tape', async () => {
     expect((await pressPlay(page)).status()).toBe(200);
     await expect(counter(page)).toContainText("Taken out. It's yours until it's due back");
+  });
+
+  await test.step('pressing the Tapes tab again shows it out now, without reloading the page', async () => {
+    const loaded = office.waitForResponse((r) => new URL(r.url()).pathname === '/api/admin/loans');
+    await tapesTab();
+    await loaded;
+    await expect(outNowRow).toHaveCount(1);
   });
 
   await test.step('the second sees it out on loan, with the date it is back and no Play', async () => {
@@ -82,6 +104,13 @@ test('lend and return: the second browser sees it out with no Play, the first re
     await returnIt(page);
     await expect(counter(page)).toContainText("This link has done its job: it won't take the tape out again.");
     await expect(playButton(page)).toHaveCount(0);
+  });
+
+  await test.step('pressing the Tapes tab again shows it back in', async () => {
+    const loaded = office.waitForResponse((r) => new URL(r.url()).pathname === '/api/admin/loans');
+    await tapesTab();
+    await loaded;
+    await expect(outNowRow).toHaveCount(0);
   });
 
   await test.step('the second can now take it', async () => {

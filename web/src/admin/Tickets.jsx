@@ -1,5 +1,5 @@
 import { useContext, useId, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, formatAgo, formatDayTime, plural } from '../api.js';
 import { BusyButton, Line } from '../look/ui.jsx';
 import { LinkStateMark, OutNow } from './Loans.jsx';
@@ -40,10 +40,14 @@ export default function Tickets() {
   const person = params.get('person') || '';
   const kind = person ? '' : params.get('kind') || '';
   const query = person ? `?person=${encodeURIComponent(person)}` : kind ? `?kind=${encodeURIComponent(kind)}` : '';
-  const { data: tickets, error, reload } = useLoad(() => api.get(`/api/admin/tickets${query}`), [query]);
-  const loans = useLoad(() => api.get('/api/admin/loans?live=1'), []);
-  const films = useLoad(() => api.get('/api/admin/films'), []);
-  const people = useLoad(() => api.get('/api/admin/people'), []);
+  // Read again on every visit, not only when the page is first drawn: pressing the
+  // Tapes tab while already here (from a member's "Send Sam a link", say) keeps this
+  // page, and Out now, the links and the send form's warnings must be as they are now.
+  const { key: visit } = useLocation();
+  const { data: tickets, error, reload } = useLoad(() => api.get(`/api/admin/tickets${query}`), [query, visit]);
+  const loans = useLoad(() => api.get('/api/admin/loans?live=1'), [visit]);
+  const films = useLoad(() => api.get('/api/admin/films'), [visit]);
+  const people = useLoad(() => api.get('/api/admin/people'), [visit]);
   const [filmId, setFilmId] = useState('');
   const film = films.data?.find((f) => String(f.id) === String(filmId));
   const filtered = Boolean(person || kind);
