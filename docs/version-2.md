@@ -1990,7 +1990,7 @@ had a tape. 1,093 unit tests became 1,106, all passing on Node 26. What changed:
 - [x] A rehearsal on a copy of the live shop's backup ([Checking a
   backup](deploying.md#checking-a-backup), `docs/deploying.md:313-349`): the preview's
   report read with you, then the upgrade, then a loan from Play to hand-back.
-- [ ] The tag: `CHANGELOG.md`'s heading "2.0.0 — Unreleased" dated in the same change
+- [x] The tag: `CHANGELOG.md`'s heading "2.0.0 — Unreleased" dated in the same change
   that tags v2.0.0, so the changelog agrees with the tag `docs/deploying.md` checks out.
 - [ ] After the tag, both servers are upgraded by the same five steps, each from its
   own backup: the shop, and the demo. Each upgrade waits for your go-ahead.

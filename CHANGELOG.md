@@ -8,7 +8,7 @@ A release has an **Upgrading** note when updating to it takes more than copying 
 new code and rebuilding: a backup first, a setting to choose, or a migration you can't
 undo without a restore. Read it before you update.
 
-## 2.0.0 — Unreleased
+## 2.0.0 — 2026-11-13
 
 One tape, one borrower. Each film on the shelf is now one tape, and only one person can
 have it out at a time. You send a friend a link, and nothing happens to the tape until
