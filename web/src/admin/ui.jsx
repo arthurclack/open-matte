@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatClock, formatDateTime, plural } from '../api.js';
 import { Line } from '../look/ui.jsx';
+import { loanEventWords, requestError } from './loanWords.js';
 
 // signedOut: back to the sign-in. site: the shop's name and logo for the brand, and
 // setSite to change them there once Settings has saved new ones. facts: the films
@@ -23,7 +24,7 @@ export function useLoad(fn, deps) {
           setData(d);
           setError(null);
         })
-        .catch((err) => (err.status === 401 ? signedOut() : setError(err.message))),
+        .catch((err) => (err.status === 401 ? signedOut() : setError(requestError(err)))),
     [load, signedOut],
   );
   useEffect(() => {
@@ -32,7 +33,9 @@ export function useLoad(fn, deps) {
   return { data, setData, error, reload };
 }
 
-// Runs an admin action, reporting errors in place rather than throwing.
+// Runs an admin action, reporting errors in place rather than throwing: the server's
+// code, which the page puts in words, or one sentence when there was no reason to give
+// (loanWords.js requestError: no answer, or the server's own trouble).
 export function useAction() {
   const { signedOut } = useContext(AdminContext);
   const [busy, setBusy] = useState(false);
@@ -45,7 +48,7 @@ export function useAction() {
         return await fn();
       } catch (err) {
         if (err.status === 401) signedOut();
-        else setError(err.message);
+        else setError(requestError(err));
         return undefined;
       } finally {
         setBusy(false);
@@ -68,13 +71,21 @@ export function ErrorNote({ error }) {
   ) : null;
 }
 
-// Something just done ("Saved."), as a system line with the solid block.
-export function DoneNote({ children }) {
-  return children ? (
-    <Line kind="done" role="status">
-      {children}
-    </Line>
-  ) : null;
+// Something just done ("Saved."), as a system line with the solid block. The status
+// region is there from the start, empty until there is news, so a screen reader hears
+// news put into it (one inserted already filled may go unsaid). `focus`: the news also
+// takes the focus when it comes, for an action whose button has gone with it (taking a
+// tape back, giving a link, a response marked as read or deleted).
+export function DoneNote({ children, focus = false }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (focus && children) ref.current?.focus({ preventScroll: false });
+  }, [focus, children]);
+  return (
+    <div role="status" className="of-done" ref={ref} tabIndex={focus ? -1 : undefined}>
+      {children ? <Line kind="done">{children}</Line> : null}
+    </div>
+  );
 }
 
 // A state in words, with the interface's 8px block before it: solid for done or on,
@@ -138,20 +149,6 @@ export function MediaBadge({ status }) {
   const map = { ok: ['done', 'Media OK'], warning: ['warn', 'Media warnings'], error: ['bad', 'Media errors'], missing: ['bad', 'Folder missing'] };
   const [tone, label] = map[status] || ['off', status];
   return <Mark tone={tone}>{label}</Mark>;
-}
-
-// Where a tape is, as the back office sees it (the friend's side has its own words).
-export function TicketBadge({ ticket }) {
-  const t = ticket;
-  if (t.state === 'revoked') return <Mark tone="bad">Taken back</Mark>;
-  if (t.state === 'expired') return <Mark tone="off">Expired</Mark>;
-  if (t.state === 'used_up') return <Mark tone="off">Used up</Mark>;
-  if (t.state === 'unpublished') return <Mark tone="warn">Film off the shelf</Mark>;
-  if (t.state === 'unavailable') return <Mark tone="bad">Film unavailable</Mark>;
-  if (t.openScreening?.playingNow) return <Mark tone="info">Playing now</Mark>;
-  if (t.firstPlayedAt) return <Mark tone="done">Active</Mark>;
-  if (t.firstOpenedAt) return <Mark tone="info">Opened</Mark>;
-  return <Mark tone="off">Not opened yet</Mark>;
 }
 
 export function CopyButton({ text, label = 'Copy', className = 'ui-btn ui-btn--small' }) {
@@ -268,21 +265,16 @@ export function describeEvent(e) {
       return `You turned their card off: ${signedOutOf(d.signedOut)}`;
     case 'person-enabled':
       return 'You turned their card back on';
-    // Keeping, giving and releasing tapes: the event names the member whose card it went onto or left.
-    case 'ticket-kept':
-      return 'Kept a tape from a link on their card';
-    case 'ticket-given':
-      return d.from === 'person' ? "You gave them a tape that was someone else's" : 'You gave them a tape that was for anyone with the link';
-    case 'ticket-released':
-      return d.to === 'person' ? 'You gave their tape to someone else' : 'You let anyone with the link use their tape again';
     case 'sign-in-refused': {
       const key = d.device ? ` (the passkey added from ${d.device})` : '';
       return d.reason === 'disabled'
         ? `Sign-in refused: their card is turned off${key}`
         : `Sign-in refused: the passkey's counter went backwards, which can mean it was copied${key}`;
     }
+    // Links and loans, and keeping, giving and releasing a link (loanWords.js): the
+    // event names the member whose card it went onto or left.
     default:
-      return e.type;
+      return loanEventWords(e)?.text ?? e.type;
   }
 }
 

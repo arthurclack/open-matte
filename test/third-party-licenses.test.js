@@ -441,7 +441,8 @@ describe('the fonts', { skip }, () => {
     }
     assert.deepEqual(
       FONTS.map((f) => f.name),
-      ['Fraunces', 'Grape Nuts', 'Courier Prime', 'Libre Franklin', 'IBM Plex Mono', 'IBM Plex Mono SemiBold', 'VT323'],
+      // Doto: the till slip, the receipt printed when Play takes a tape out (version 2, slice 8b).
+      ['Fraunces', 'Grape Nuts', 'Courier Prime', 'Libre Franklin', 'IBM Plex Mono', 'IBM Plex Mono SemiBold', 'VT323', 'Doto'],
     );
     // Names an address can carry as they are.
     for (const f of FONTS) assert.match(f.file, /^[A-Za-z0-9.-]+$/);
@@ -455,7 +456,7 @@ describe('the fonts', { skip }, () => {
     const intro = text.slice(0, text.indexOf('The app also includes code'));
     assert.match(
       intro,
-      /\n\nThe app is set and printed in fonts made by others: Fraunces, Grape Nuts,\nCourier Prime, Libre Franklin, IBM Plex Mono and VT323, in fonts\/\. They are\nunder the SIL Open Font License, version 1\.1, not the GPL, and their licences\nare given in full at the end of this file\.\n\n$/,
+      /\n\nThe app is set and printed in fonts made by others: Fraunces, Grape Nuts,\nCourier Prime, Libre Franklin, IBM Plex Mono, VT323 and Doto, in fonts\/\. They\nare under the SIL Open Font License, version 1\.1, not the GPL, and their\nlicences are given in full at the end of this file\.\n\n$/,
     );
     for (const f of shippedFonts()) {
       const at = text.indexOf(`\n${f.name} (fonts/${f.file}), a font\nLicence: OFL-1.1\n`);

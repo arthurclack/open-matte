@@ -67,7 +67,9 @@ test('a passkey set up from a link signs in, keeps a ticket, and shows on the ac
     await expect(page.getByRole('heading', { level: 1, name: film.title })).toBeVisible();
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Keep it' }).click();
-    await expect(page.getByText("This tape is on your card, so it's on every device you sign in on.")).toBeVisible();
+    // Kept: the "For … only" strip under the title says it's on their card (question 11:
+    // the page no longer says "This tape is on your card", 1.1.0's words).
+    await expect(page.locator('.fl-for .ob-sr').first()).toHaveText(/^For /);
     await expect(page.getByRole('button', { name: 'Keep it' })).toBeHidden();
   });
 

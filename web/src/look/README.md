@@ -5,12 +5,11 @@ design, with a quiet early-80s computer for the app's own controls. This folder 
 look in one place: its tokens and fonts, the interface layer, the flat printed objects,
 the shop's video machine (the blue screen), and the words that depend on the settings.
 
-Stage 1 changes how the app looks and what it says, nothing else: no database change,
-no API or route change, no behaviour change. Today's tape rules stay exactly as they
-are (start-by dates, a number of plays, days after the first play, the window to come
-back, tapes for anyone or for one member, keeping a tape on your card). Version 2's
-one-tape loans ("Out on loan", the till slip, handing it back, "Return it now") are
-**not** built now.
+Stage 1 (1.1.0) changed how the app looks and what it says, nothing else: no
+database change, no API or route change, no behaviour change. Version 2's one-tape
+loans ("Out on loan", the till slip, handing it back, "Return it now") came after, on
+the `v2` branch: their states are under "Version 2's states" and "Version 2's front
+page and notices", below.
 
 The approved design is read-only, in the main checkout:
 `.claude/design/vhs/analogue/` (take 2: `index.html`, `notes.md`, `kit.css`, `kit.js`;
@@ -29,9 +28,9 @@ version 2's states; map them to today's (below) and leave out what only version 
 | `friend.css` | The friend's pages (`.fl-*`), and the player's older classes restyled under `.fl-page` | `main.jsx`, last |
 | `office.css` | The back office's pages (`.of-*`) | `admin/AdminApp.jsx`, so friends never download it |
 | `objects.jsx` | `Sleeve`, `PickCard`, `LabelTape`, `TapeStrip`, `Sticker`, `TypedLabel`, `ShopName`, `Paper`, `InkFilters` and the lettering (`Typed`, `Gun`, `Hand`, `Rub`) | |
-| `crt.jsx` | The machine: `CrtScreen`, `PlayTile`, `PlayScreen`, `OsdStrip`, `VcrMenu`, `ComingBack`, `PxPlay`, `PxPause` | |
+| `crt.jsx` | The machine: `CrtScreen`, `PlayTile`, `PlayScreen`, `OsdStrip`, `StopStrip`, `VcrMenu`, `ComingBack`, `PxPlay`, `PxPause`, `PxStop` | |
 | `ui.jsx` | `Line`, `Menu`, `MenuSep`, `TabRow`, `Tri` | |
-| `words.js` | The host's name, the sticker's deadline, plays left, the tape counter (no DOM: unit-tested) | |
+| `words.js` | The host's name, the sticker's deadline, the tape counter (no DOM: unit-tested) | |
 | `wear.js` | Seeded unevenness of printed things, the label tape's strips, the E-number (no DOM: unit-tested) | |
 | `paperCanvas.js` | Grain, tone, ink wear and gloss, drawn on `<canvas>` | |
 | `devicePixels.js` | `installDevicePixels()` (`main.jsx` calls it): the raster and scanlines in whole device pixels, set on `<body>` (`<html>`'s own style is Branding's preview) | |
@@ -39,7 +38,8 @@ version 2's states; map them to today's (below) and leave out what only version 
 
 Tests: `test/look.test.js` (words, wear, device pixels), `test/friend-words.test.js`
 (the friend's pages' words: `pages/tapeWords.js`), `test/office.test.js` (the status
-line's facts, the attention strip, and no old noun on a back office screen),
+line's facts, the attention strip, what the back office says about links and loans,
+`admin/loanWords.js`, and no old noun on a back office screen),
 `test/branding.test.js` (the theme, the old default background, every background
 allowed before still allowed, every accent refused before still refused),
 `test/admin-api.test.js` (the "Your name" setting, the old default front page message),
@@ -66,7 +66,8 @@ allowed before still allowed, every accent refused before still refused),
    `--ink-blue`, as approved in take 2: print on card, not a screen.)
 3. **Orange is only ever the next deadline.** The price-gun sticker (`Sticker`, or
    `LabelTape`'s `sticker`) shows the one deadline `words.js nextDeadline()` picks:
-   "Start by", "Due back" or "Come back by". Nothing else is orange.
+   "Start by", "Due back" or "Back" (version 2; 1.1.0 also had "Come back by"). Nothing
+   else is orange.
 4. **Lit (inverse) blocks are what is selected and the main action**: the current tab or
    section, an open menu's button, the item under the pointer or keyboard in a menu, a
    ticked box, the main button. Warm white with the room's colour for words (13.8:1).
@@ -101,12 +102,13 @@ and `forced-colors` are respected.
 | Libre Franklin (variable) | `--sans`, `--ui-read` | Headings, reading text, labels, help, errors, what you type |
 | Fraunces (variable) | `--shop-face` | The shop's own printing: its name, "Staff pick", "Membership card" |
 | Courier Prime | `--type` | Typed labels (a plain sleeve's, the card's typed lines) |
-| Grape Nuts | `--hand` | The one hand: the staff pick and its signature, the member's name on the card |
+| Grape Nuts | `--hand` | The one hand: the staff pick and its signature, a "Picked for you" note, the member's name on the card |
 | VT323 | `--osd-face` | The blue screen only, 20px and up |
+| Doto (variable; 900, `ROND` 100) | `--till` | The till slip only (version 2's receipt), with Courier Prime next for what Doto lacks |
 
 All are served from `web/public/fonts` (OFL 1.1, each with its licence beside it and in
 the generated licences file: `vite.config.js FONTS`), declared once, in `tokens.css`,
-with `font-display: swap`. Doto (version 2's till slip) is not shipped yet.
+with `font-display: swap`. A browser fetches Doto only when a receipt is on the page.
 
 ## The theme
 
@@ -166,14 +168,24 @@ film's slug, a tape's id), so the print is the same every time.
 - `<LabelTape lines={[...]} sticker={stickerText(...) | null} seed />`: black label-maker
   tape, one strip per line (`wear.js tapeLines` cuts them), with the sticker across the
   last strip's tail. Also for "For Sam only" (`forOnly(name)`), with no sticker.
-- `<Sticker label="Due back" value="Sun 8 Nov" seed />`: the orange price-gun sticker on
-  its own. Read as one line; on a narrow screen the gun's line goes under the words.
+- `<Sticker top? label="Due back" value="Sun 8 Nov" seed />`: the orange price-gun sticker on
+  its own. Read as one line; on a narrow screen the gun's line goes under the words. With
+  `top` ("Play takes it out.", "Out on loan.") it is two lines: that printed on the
+  label roll first, then the field and the gun's date (version 2's counter).
+- `<PickNote text={ticket.pickNote} site seed />` (version 2): "Picked for you", the
+  owner's note to whoever has a link, on a ruled sheet off the shop's notepad: the head
+  printed, the words and the owner's name in the hand. Apart from the staff pick card,
+  and only for a link with a note. A long one is written smaller (`pickSize`).
+- `<TillSlip lines={slipLines(...)} seed />` (version 2): the receipt, a strip torn off
+  the till roll on the cutter's teeth (`wear.js tillTeeth`), printed in Doto. A group
+  named "Your receipt", read line by line; `label={null}` for a strip read as plain
+  words in its place (the back office's Ledger prints lent and back in on it, `.of-till`).
 - `<TapeStrip text seed tail? />`, `<TypedLabel text seed />`: single pieces.
 - `<ShopName site={site} />`: the shop's name in its rub-down printing, or its logo
   (with the name beside it when `site.logoWithName`). The header, the back office's
   brand and Branding's preview all use it (`site.jsx SiteName` is the same thing).
 - `<Paper kind seed as? stuck? ...>`: the sheet under all of these (kinds: `sleeve`,
-  `kraft`, `pick`, `label`, `sticker`, `tape`), for a new printed thing.
+  `kraft`, `pick`, `label`, `sticker`, `tape`, `note`, `till`), for a new printed thing.
 - `Typed`, `Gun`, `Hand`, `Rub`: the lettering, each read as one piece of text by a
   screen reader. `inkVars(variant)` gives the custom properties that point a printed
   thing's lettering at the ink filters (0 to 2; none on a WebKit high-density screen,
@@ -188,16 +200,18 @@ film's slug, a tape's id), so the print is the same every time.
 - `<PlayScreen counter onDone hold={PLAY_SCREEN_MS} />`: the short PLAY screen in the
   picture's place as playback starts, 800 ms, then `onDone`. Under reduced motion it
   draws nothing and calls `onDone` at once. Show the picture only after `onDone`.
-- `<OsdStrip at="0:18" onResume left="47 h 12 min" aside? resumeLabel?>{<VcrMenu/>}</OsdStrip>`:
-  the paused strip under the picture: PAUSE, the lit "Resume at 0:18", "{left} to come
-  back" (or `aside` instead), and its children (the VCR menu).
+- `<OsdStrip at="0:18" onResume aside="Due back Sun 8 Nov" resumeLabel?>{<VcrMenu/>}</OsdStrip>`:
+  the paused strip under the picture: PAUSE, the lit "Resume at 0:18", the tape's due
+  date on the right (`aside`), and its children (the VCR menu).
+- `<StopStrip counter="0:00:40" />`: the end of the tape, under the picture: STOP and
+  where it stopped. The page puts its choices under it in plain type.
 - `<VcrMenu title? rows={[{ id, label, value, options: [{ value, label }], onChange }]} />`:
   audio, subtitles and picture as a VCR's vertical menu. Each row is a radio group (one
   tab stop; the arrows move and choose; Home and End).
 - `<ComingBack counter="0:18:04" at="0:18" onResume resumeLabel? />`: the telly when a
   paused tape is opened again.
 - `<CrtScreen as className>`: a piece of the blue screen, for anything else the machine
-  shows. `PxPlay`, `PxPause`: its ▶ and ❚❚ in whole pixels.
+  shows. `PxPlay`, `PxPause`, `PxStop`: its ▶, ❚❚ and ■ in whole pixels.
 
 ### The interface (`ui.jsx`)
 
@@ -263,12 +277,12 @@ over), `.badge`, and the player's `.theatre`, `.player-bar`, `.cue-style*`,
 | `pickedBy(site)`, `askHost(site)`, `noTapeYet(site)` | "Picked by Arthur", "ask Arthur", "No tape yet: ask Arthur" |
 | `shopName(site)` | The shop's name in a sentence, else "this video shop" |
 | `forOnly(name)` | "For Sam only" (on label tape, once that member is signed in) |
-| `nextDeadline(ticket, now?)` | `{ kind, key, at, withTime }` or null. Only for a tape in state `ok`; the soonest still to come of start-by (before the first play), due-back (`expiresAt`, days after the first play) and come-back (`openScreening.resumableUntil`). A tie goes to due-back. `withTime`: come-back always; start-by unless it is the end of a day here; due-back never, as the design has it, so **the page must give its exact time in words nearby** (today's "until Sun 8 Nov 19:40") |
-| `stickerText(deadline)` | `{ label, value }` for `Sticker`/`LabelTape`, in the browser's date format (`api.js formatDay`/`formatDayTime`) |
-| `playsLeft(ticket)` | "2 plays left" for a tape with a number of plays, else null |
+| `nextDeadline(ticket, now?)` | `{ kind, key, top, at, withTime }` or null. One clock: the time the tape is due back. With the tape `in` (state `ok`): the start-by date if one is still to come, else the date Play would make it due (now + `loanDays`) under `top` "Play takes it out."; `yours`: `dueBack`; `out` (with someone else): `dueBack` as "Back", under "Out on loan.". A film with broken files keeps its tape's date; spent, missed and taken back have none. `withTime`: a start-by unless it is the end of a day here; a due date never, as the design has it, so **the page must give its exact time in words nearby** ("It's yours until Sun 8 Nov 19:40") |
+| `stickerText(deadline)` | `{ top, label, value }` for `Sticker`/`LabelTape`, in the browser's date format (`api.js formatDay`/`formatDayTime`); `top` is the printed first line of a two-line sticker, or null |
+| `DEADLINE_KEYS`, `STICKER_TOPS` | "Start by", "Due back", "Back"; "Play takes it out.", "Out on loan." |
 | `tapeCounter(seconds)` | "0:18:04" |
 | `pickSize(text)` | null, "long" or "longer" (PickCard uses it) |
-| `endOfDay(ms)`, `DEADLINE_KEYS` | As used above |
+| `endOfDay(ms)` | As used above |
 
 `wear.js`: `tapeLines({ title, poster, e }, { cells, lastCells })` cuts the label tape's
 strips (at most two; the title shortened at a word). Pass `lastCells` small enough for
@@ -293,12 +307,13 @@ a sticker (the E-number then gets its own strip); 18 on a wide screen. `eNumber(
   (`site.tmdbCredit`), "Only share films you have the right to share.", "Powered by
   Open Matte" (`site.poweredBy`), Licences.
 - **The back office** (`admin/AdminApp.jsx`): the shop's name with "Back office" under
-  it, the sections (Films, Tapes, Members, Ledger, Status, Settings) as a lit column or,
+  it, the sections (Films, Tapes, Members, Responses with its unread count, Ledger,
+  Status, Settings) as a lit column or,
   under 800px, one scrolling row of tabs, View the shop and Sign out at the foot, the
   raster behind the work, and the sign-in page ("Sign in to the back office", "Back
   office password"). `AdminContext` gives `{ signedOut, site, setSite, facts,
   refreshFacts }`. At the foot of every screen, the status line (`.ui-status`): how
-  many films, how many on the shelf, and "Server well, checked 14:02" or what on the
+  many films, how many on the shelf, how many tapes out, and "Server well, checked 14:02" or what on the
   server needs looking at (`admin/facts.js`). The films are read on each screen; the
   booth's checks only when the last reading is a minute old (`refreshFacts()`), at once
   after a scan (`refreshFacts('now')`), and Status hands over its own reading
@@ -324,8 +339,14 @@ a sticker (the E-number then gets its own strip); 18 on a wide screen. `eNumber(
   transitions). The only movement is the Play tile's press (none under reduced motion)
   and the PLAY screen (skipped under reduced motion). Use `scrollBehavior()` for scrolls.
 - **Words** (UI text only; British spelling, plain, dry and kind; clarity beats jokes in
-  errors, setup, security and access): cinema → video shop ("Shop name"), ticket →
-  tape, issue → lend ("Lend a tape"), revoke → take the tape back, recommendation →
+  errors, setup, security and access): cinema → video shop ("Shop name"). Version 2
+  (`docs/version-2.md`, question 11, answer a): the tape is the film's one copy and what
+  is sent is a link. On a friend's pages what was sent is still "a tape" wherever that
+  doesn't claim the tape is out, and the pages for a tape that is out say "link" for the
+  link; the back office says "link" for links and "tape" for the copy. Issue → send a
+  link ("Send a link", never "lend": **Lent** is Play taking the tape out), revoke →
+  cancel the link, or take the tape back for a link that has it out; "On your card" is
+  the front page's section for what you have out; recommendation →
   staff pick, publish → put on the shelf / take off the shelf, screening → play, People
   → Members, Activity → Ledger, "Projection booth" → Status, account → membership card
   where it means the person's card (keep "passkey" and "sign in" plain), no "Admit one".
@@ -363,6 +384,12 @@ Report each string you cut or materially rewrote as
 
 ## Today's states in the look (stage 1)
 
+1.1.0's states, kept as history: version 2 has one clock, the due-back date, and no play
+limits. Its stickers are "Play takes it out" over "Due back" before Play, "Start by"
+for a start-by date still to come, "Due back" for a tape out with you, and "Back" for a
+tape out with someone else (`words.js nextDeadline`); "Come back by" and "2 plays left"
+are gone.
+
 | Today | In the look |
 |---|---|
 | A ticket and its `/t/` link | A tape; the link page stays at `/t/` |
@@ -378,25 +405,71 @@ Report each string you cut or materially rewrote as
 | A ticket for one person | "For Sam only" on label tape once signed in; before that, the anonymous version (the app already hides the name and the film) |
 | The owner's preview | The preview line under the header; Play doesn't use a play, as today |
 
+## Version 2's states (slice 7, the film page)
+
+One clock: the time the tape is due back. "Tape" is what was sent, except where the
+tape is out: there the link is "link" and "tape" is the film's one copy.
+
+| The tape | On the counter |
+|---|---|
+| In | Two-line sticker "Play takes it out. / Due back Sun 8 Nov" (now plus the link's days), or "Start by" when the link has a date; Play; "Pressing Play takes the tape out. It's yours for 3 days, until …" |
+| Out with someone else | Two-line sticker "Out on loan. / Back Fri 6 Nov"; "**Out on loan.** Due back by Fri 6 Nov 21:02." and nothing else: no Play, no start-by, no keep offer. The same for every viewer but the borrower |
+| Yours | Sticker "Due back"; the telly to resume; "It's yours until …"; Return it now, asked on the page; Hand it back for a member on their own link; the till slip folded under "Your receipt" (laid out in full just after Play) |
+| Yours, watched to the end | Play from the start; "**You've watched it to the end.** It's still yours until …"; Hand it back (lit) and Return it now |
+| Spent | "**Returned on …**" and "This link has done its job" for its borrower, or "This tape has gone back to the shop." when it was due; "This link has been used." for anyone else holding it |
+| Start-by missed | "This tape needed to be started by …" with the year |
+| Unavailable | "This film isn't available right now." and the tape's own news: still yours until, with Return it now; out on loan until; or nothing taken out |
+| Taken back | No such film, as a cancelled link ("Nothing on the shelf here"); the player said who took it back, and the page says it again under the heading |
+| The owner's preview | Who has it, since and until, "Only you see who has it"; a private window takes the tape |
+
+A link with a note from the owner shows it under the label tape, in every state:
+"Picked for you" (`PickNote`), apart from the staff pick card on the wall.
+
+## Version 2's front page and notices (slice 8)
+
+| Section | What it holds |
+|---|---|
+| On your card | Out with you on your own links: a row each, with the sleeve, the label tape and its "Due back" sticker, the telly (Resume, or Play from the start), "It's yours until …", Hand it back and Return it now (each opens the film's page and does it there), and the till slip |
+| Out to this browser | The same, for a tape this browser took out from a link anyone can use (signed in or not). No "Sign in to keep them": a tape that is out never moves to a card |
+| Picked for you | The other tapes on your card: sleeves face out, "A note from Arthur is with it" when there is one |
+| On this device / Your tapes | The other tapes this browser opened from links (signed in / signed out) |
+| On the shelf for members | In the shop, or out on loan with a "Back" sticker, never who; "No tape yet: ask Arthur" |
+
+Notices a link brings back (`tapeWords.js noticeFor`): a spent link ("That link has been
+used."), a cancelled one ("Arthur has cancelled that link.", whether or not its tape was
+taken back: the page can't tell), and the others as before. Opening a link that can't
+reach the shop says "Opening a link never takes the tape". Signing out names the tapes
+out to this browser that go back (`signOutWords`, from `/api/me`'s `browserLoans`).
+
+The player: the paused strip shows "Due back Sun 8 Nov" on its right; at the film's
+end, STOP under the picture and three choices (Hand it back, Return it now, Keep it until
+…). Handing it back is a view of the film page (`pages/HandBack.jsx`).
+
 ## Stage 1, done, and what's left
 
 Stage 1 (1.1.0) put every screen in the look, working exactly as before. The two
 builders' file ownership has ended: `web/src/look/*`, `styles.css`, `site.jsx` and
 the server are shared again, as the rest of the code is.
 
+The back office in version 2 (slice 9, `docs/version-2.md`): Films' Tape column (`.of-mark`
+words from `admin/loanWords.js tapeCell`); a film's tape panel (`.of-tape`: who, since,
+due back, now, and the "Due back" sticker, the panel's one printed accent) and the
+question before a tape is taken back, on the page (`.of-confirm`, `admin/Loans.jsx
+TakeBack`: the question takes the focus, Keep it out gives it back); Tapes with Out now
+above the links sent; a link's page with its loan, "Picked for you", "Due back after",
+and a link's note beside Give with "Take the note away" (`.of-msg`); Responses
+(`.of-resps`, `.of-resp`); the Ledger's lent and back in on the till roll (`.of-till`).
+
 Left for later, on purpose:
 
-- **Version 2's one-tape loans** ("Out on loan", the till slip and Doto, handing a
-  tape back, "Return it now", Responses, "Due back after", ink presets, a separate
-  "Send a link" page, an on-page "are you sure" for taking a tape back). Doto isn't
-  shipped.
+- **The back office's part of version 2** is built (slice 9, below), but for the
+  mock-up's ink presets and its separate "Send a link" page: the send form stays on a
+  film's page and on Tapes.
 - **The blank card on an invite link** (the mock shows the card with its name line
   empty while the passkey is made): it needs the membership number in the enrol
   options, an API change.
 - **The membership number on the Members list**: `server/routes/people.js summary()`
   doesn't send it (only a member's own page has it); another API change.
-- **The front page doesn't feature a paused tape on its telly**, as the mock's front
-  page does (there, it's version 2's tape out on loan).
 - The player keeps today's menus while it plays (Audio, Subtitles, Aa, Picture), where
   the mock has one "Audio, subtitles and picture" button: that would mean pausing to
   change the audio, a change in behaviour.

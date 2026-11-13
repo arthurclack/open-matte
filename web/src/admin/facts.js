@@ -13,7 +13,8 @@ export const backupLate = (n, now = Date.now()) => Boolean(n && now - n.at > 26 
 export const copyOld = (n, now = Date.now()) => Boolean(n && now - n.at > 2 * 24 * HOUR);
 
 // How many of the server's checks want a look: the media folder, each disk, the
-// backups, the off-server copy (when it is set up) and the clean-up. The status line
+// backups, the off-server copy (when it is set up), the clean-up and the check for
+// tapes that have come back. The status line
 // at the foot of every screen says "Server well" only when none does.
 export function serverTrouble(s, now = Date.now()) {
   if (!s) return 0;
@@ -25,6 +26,8 @@ export function serverTrouble(s, now = Date.now()) {
   const c = backups.copy;
   if (c?.configured && (c.error || !c.newest || copyOld(c.newest, now))) n++;
   if (retention.lastError) n++;
+  // Version 2: writing down which tapes have come back, every minute.
+  if (s.sweeper?.lastError) n++;
   return n;
 }
 
@@ -39,7 +42,7 @@ export function attentionLine(a, when) {
   }
   if (a.links.expired.length) out.push(`${plural(a.links.expired.length, 'link')} expired unused`);
   const n = a.tickets.length;
-  if (n) out.push(n === 1 ? "1 tape's start-by date is close" : `${n} tapes' start-by dates are close`);
+  if (n) out.push(n === 1 ? "1 link's start-by date is close" : `${n} links' start-by dates are close`);
   if (a.refusals.total) out.push(`${plural(a.refusals.total, 'media request')} refused since ${when(a.refusals.since)}`);
   return out;
 }

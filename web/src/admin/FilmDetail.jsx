@@ -6,8 +6,9 @@ import { Line, TabRow } from '../look/ui.jsx';
 import { pickedBy } from '../look/words.js';
 import FilmInfo from './FilmInfo.jsx';
 import { editedHere, fromTmdb } from './filmEdits.js';
+import { TapePanel, takenBackNote } from './Loans.jsx';
 import { IssueTicket, TicketTable } from './Tickets.jsx';
-import { AdminContext, Back, ErrorNote, Fact, Mark, MediaBadge, Table, useAction, useLoad } from './ui.jsx';
+import { AdminContext, Back, DoneNote, ErrorNote, Fact, Mark, MediaBadge, Table, useAction, useLoad } from './ui.jsx';
 
 const FIELDS = [
   ['title', 'Title'],
@@ -23,7 +24,7 @@ const ALL_FIELDS = [...FIELDS.map(([k]) => k), ...LONG_FIELDS];
 // The page's three parts, one at a time. The part shown is in the address's #, so a
 // reload, or a link to #details, opens on it.
 const TABS = [
-  ['tapes', 'Tapes'],
+  ['tapes', 'Tape and links'],
   ['details', 'Details'],
   ['media', 'Media'],
 ];
@@ -33,12 +34,20 @@ export default function FilmDetail() {
   const { data: film, setData, error } = useLoad(() => api.get(`/api/admin/films/${id}`), [id]);
   const tickets = useLoad(() => api.get(`/api/admin/tickets?film=${id}`), [id]);
   const { refreshFacts } = useContext(AdminContext);
-  // Counted again after lending a tape, without reloading the film (and its form).
-  const [viewing, setViewing] = useState(null);
+  // The tape and how it's been lent, read again after a link is sent or the tape is
+  // taken back, without reloading the film (and its form).
+  const [fresh, setFresh] = useState(null);
+  const [notice, setNotice] = useState(null);
   const action = useAction();
-  const { hash } = useLocation();
+  const { hash, state: navState, pathname } = useLocation();
   const navigate = useNavigate();
   const tab = TABS.some(([k]) => `#${k}` === hash) ? hash.slice(1) : 'tapes';
+  // Tapes' "Take the tape back" comes here to ask (its loan id in the history's state),
+  // once: the state is cleared, so Back and a reload don't ask again.
+  const [askFor] = useState(() => navState?.takeBack ?? null);
+  useEffect(() => {
+    if (navState?.takeBack) navigate({ pathname, hash }, { replace: true, state: null });
+  }, [navState, navigate, pathname, hash]);
 
   if (error) return <ErrorNote error={error} />;
   if (!film) return null;
@@ -49,6 +58,7 @@ export default function FilmDetail() {
     const r = await action.run(() => api.patch(`/api/admin/films/${film.id}`, { published }));
     if (r) {
       setData(r);
+      setFresh(null);
       tickets.reload();
       refreshFacts();
     }
@@ -56,10 +66,26 @@ export default function FilmDetail() {
 
   async function setMemberVisible(memberVisible) {
     const r = await action.run(() => api.patch(`/api/admin/films/${film.id}`, { memberVisible }));
-    if (r) setData(r);
+    if (r) {
+      setData(r);
+      setFresh(null);
+    }
   }
 
   const report = film.scanReport || { errors: [], warnings: [] };
+  const current = fresh && fresh.id === film.id ? fresh : film;
+  // In or out, beside On the shelf: off the shelf, only a tape that is out is said.
+  const tapeOut = Boolean(current.tape?.loan);
+  const tapeMark = (tapeOut || film.published) && <Mark tone={tapeOut ? 'info' : 'done'}>{tapeOut ? 'Tape out' : 'Tape in'}</Mark>;
+  const saved = (f) => {
+    setData(f);
+    setFresh(null);
+  };
+  const reread = () =>
+    api.get(`/api/admin/films/${id}`).then(
+      (f) => setFresh(f),
+      () => {},
+    );
   const choose = (k) => navigate({ hash: k === 'tapes' ? '' : `#${k}` }, { replace: true });
 
   return (
@@ -79,6 +105,7 @@ export default function FilmDetail() {
             </p>
             <div className="of-marks">
               {film.published ? <Mark tone="done">On the shelf</Mark> : <Mark tone="off">Off the shelf</Mark>}
+              {tapeMark}
               <MediaBadge status={film.mediaStatus} />
               {film.memberVisible && <Fact>{film.published ? 'Shown to members' : 'Shown to members once on the shelf'}</Fact>}
             </div>
@@ -131,29 +158,50 @@ export default function FilmDetail() {
       <div role="tabpanel" id={`film-${tab}`} aria-labelledby={`film-tab-${tab}`}>
         {tab === 'tapes' && (
           <>
-            {!film.published && <Line kind="info">Its tapes only open the film once it's on the shelf.</Line>}
-            <h2 className="of-h2">Lend a tape</h2>
+            {/* The take-back's news: its button and question have gone, so it takes the focus. */}
+            <DoneNote focus>{notice}</DoneNote>
+            <TapePanel
+              film={current}
+              askFirst={askFor != null && askFor === current.tape?.loan?.id}
+              onTaken={(r) => {
+                setNotice(takenBackNote(r, film.title));
+                reread();
+                tickets.reload();
+                // The status line's tapes out, at once.
+                refreshFacts('now');
+              }}
+            />
+            {current.tape?.loan && (
+              <Line kind="info">
+                Anyone else with a link sees <b>Out on loan</b> and the date it's due back, never who has it, and can't press Play.
+              </Line>
+            )}
+            <Line kind="info">Your previews never take the tape. Signed in to the back office, Play in your browser plays without a link, so it never counts as a loan.</Line>
+            <h2 className="of-h2">Send a link</h2>
+            {!film.published && <Line kind="info">Links only open the film once it's on the shelf. You can send them now and they'll work then.</Line>}
             <IssueTicket
-              film={film}
+              film={current}
+              links={tickets.data}
               onIssued={() => {
                 tickets.reload();
-                api.get(`/api/admin/films/${id}`).then((f) => setViewing(f.viewing), () => {});
+                reread();
               }}
             />
             {tickets.data && tickets.data.length > 0 && (
               <>
-                <h2 className="of-h2">Tapes lent</h2>
+                <h2 className="of-h2">Links sent for it</h2>
                 <TicketTable tickets={tickets.data} showFilm={false} />
               </>
             )}
-            <Viewing filmId={film.id} v={viewing ?? film.viewing} />
+            <Lending filmId={film.id} l={current.lending} />
             <h2 className="of-h2">Members</h2>
             <label className="ui-check of-w">
               <input type="checkbox" checked={film.memberVisible} onChange={(e) => setMemberVisible(e.target.checked)} disabled={action.busy} />
               <span>
                 <b>Show to members</b>
                 <small>
-                  Signed-in members see it on their front page and can read its page. Playing it still needs a tape.
+                  Signed-in members see it on their front page, whether its tape is in or out (never who has it), and can read its page. Borrowing it
+                  still needs a link.
                   {!film.published && " They'll see it once it's on the shelf."}
                 </small>
               </span>
@@ -162,12 +210,12 @@ export default function FilmDetail() {
         )}
         {tab === 'details' && (
           <>
-            <Details film={film} onSaved={setData} />
+            <Details film={film} onSaved={saved} />
             <section className="of-box" aria-labelledby="film-info">
               <h2 className="of-h2" id="film-info">
                 Film information
               </h2>
-              <FilmInfo film={film} onChange={setData} />
+              <FilmInfo film={film} onChange={saved} />
             </section>
           </>
         )}
@@ -210,7 +258,7 @@ function Tabs({ tab, onChoose, label, counts }) {
           tabIndex={tab === k ? 0 : -1}
           onClick={() => onChoose(k)}
           onKeyDown={onKey}
-          aria-label={counts[k] ? `${name}, ${plural(counts[k], 'tape')}` : undefined}
+          aria-label={counts[k] ? `${name}, ${plural(counts[k], 'link')}` : undefined}
         >
           {name}
           {counts[k] ? <span className="ui-tab__n">{counts[k]}</span> : null}
@@ -412,31 +460,34 @@ function Media({ film }) {
   );
 }
 
-// How the film's tapes have been used. The server counts it from the tapes and their
-// plays, so clearing old activity never changes it.
-function Viewing({ filmId, v }) {
-  if (!v?.issued) return null;
+// How the film has been lent, counted by the server from its links, loans and
+// responses, so clearing old activity never changes it. A link lends once, so it is
+// never lent more often than links were sent.
+function Lending({ filmId, l }) {
+  if (!l?.sent) return null;
   return (
     <>
       <h2 className="of-h2">How it's been lent</h2>
       <dl className="of-kv of-w">
-        <dt>Lent</dt>
+        <dt>Links sent</dt>
         <dd>
-          {plural(v.issued, 'tape')}
-          {v.revoked > 0 && <span className="of-faint">, {v.revoked} since taken back</span>}
+          {plural(l.sent, 'link')}
+          {l.cancelled > 0 && <span className="of-faint">, {l.cancelled} since cancelled</span>}
         </dd>
         <dt>Opened</dt>
-        <dd>{plural(v.opened, 'tape')}</dd>
-        <dt>Played</dt>
-        <dd>
-          {plural(v.played, 'tape')}
-          <span className="of-faint">
-            {' '}
-            · {plural(v.screenings, 'play')} started{v.voided > 0 && `, ${v.voided} given back`}
-          </span>
-        </dd>
+        <dd>{plural(l.opened, 'link')}</dd>
+        <dt>Lent</dt>
+        <dd>{plural(l.lent, 'time')}</dd>
         <dt>Finished</dt>
-        <dd>{plural(v.finished, 'tape')}</dd>
+        <dd>{plural(l.finished, 'time')}</dd>
+        {l.responses > 0 && (
+          <>
+            <dt>Responses</dt>
+            <dd>
+              <Link to="/admin/responses">{plural(l.responses, 'response')}</Link>
+            </dd>
+          </>
+        )}
       </dl>
       <p className="of-p of-gap-s">
         <Link to={`/admin/activity?film=${filmId}`}>This film's ledger</Link>

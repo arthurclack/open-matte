@@ -44,7 +44,7 @@ export default function Account() {
   }, [site?.cinemaName]);
 
   async function signOutHere() {
-    if (!confirmSignOut(me)) return;
+    if (!(await confirmSignOut(refresh))) return;
     setBusy(true);
     setError(null);
     try {
@@ -55,8 +55,7 @@ export default function Account() {
   }
 
   async function signOutEverywhere() {
-    const forgets = me?.linkTickets?.length ? ' This browser also forgets the tapes you opened from links here; the links still work.' : '';
-    if (!window.confirm(`Every browser signed in as you is signed out, this one included, and playback stops on them. Your passkeys still work.${forgets}`)) return;
+    if (!(await confirmSignOut(refresh, { everywhere: true }))) return;
     setBusy(true);
     setError(null);
     try {

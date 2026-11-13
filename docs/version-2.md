@@ -72,6 +72,7 @@ Yours. These are not reopened here.
 | 11 Nov 2026 | Question 8. You can move the due-back date of a tape that is out, earlier or later, not into the past (answer a). |
 | 12 Nov 2026 | Questions 16, 17, 13 and 7, answered as recommended. **16 (b):** taking a tape back from a browser where a member is signed in also cancels that member's never-lent links for the film (built with slices 2 and 3, `takeBackLoan`; listed in `alsoCancelled`). **17 (a):** a cancelled member link says so to anyone who opens it, as 1.x. **13 (b):** a signed-in friend can hand a tape back with a response at any time while they have it. **7: yes**, members see that a film on the members' shelf is out and when it is due back, never who has it. Questions 13, 16 and 17 left the table under To decide on 12 Nov 2026, with slice 4, and question 7 with slice 5, the same day. |
 | 12 Nov 2026 | Questions 10, 11 and 18, answered as recommended. **10 (a):** the line saying what you can see begins "{Host} can see when this link is opened, when the tape is taken out and played, …", signed in or not; the rest is word for word. **11 (a), and both tables as proposed:** on a friend's pages what you sent them is still "a tape" wherever that doesn't claim the tape is out; pages for a tape that is out say "link" for the link; the back office says "link" for links and "tape" for the film's copy. **18 (c):** the give and release buttons show a link's "Picked for you" note with "Take the note away" ticked, and the route takes `pickNote` in the same step; until then the route keeps the note. These leave "To decide" empty. |
+| 13 Nov 2026 | Questions 19, 20 and 21, answered as recommended. **19 (a):** a cancelled link's notice says "{Host} has cancelled that link." whether or not its tape was taken back; the borrower is told by the player and the film page. **20 (b):** one `BusyButton` (`aria-disabled` while busy, presses ignored) for every busy button in the app, 1.1.0's included, in one change in slice 10. **21 (a):** each browser writes dates and times in its own words. |
 
 "The mock-up" rows are things the mock-up added to the roadmap
 (`.claude/design/vhs/app/notes.md`, "What's new beyond the roadmap"). They were not
@@ -107,8 +108,8 @@ or a friend would notice.
 | A spent link opened in a browser that doesn't hold it shows a notice on the front page, makes no session and doesn't name the film. Its preview in a chat app shows the shop, not the film. | The link has done its job. It should tell a newcomer nothing. |
 | Responses: one of the four is required on the form ("Return it now" is the way to say nothing); only for a tape borrowed on a member's own link; kept until you delete one; the text never goes in the Ledger. Beyond the mock-up's plain list: the Responses tab counts the unread ones, and each can be marked as read. | A link anyone can use may have been forwarded. Events are deleted after a year; a friend's words shouldn't vanish with them. The unread count is one column (`read_at`); say so and it goes. |
 | A loan on a link anyone can use remembers the browser, not a name. If that browser was signed in, the back office shows the name while the session's row exists, and the device alone after the clean-up removes it (about a year). | Settled: the borrower there is the browser. The clean-up promises that ended sessions go (`server/retention.js:25-29`). A column for the name can be added later if you want it kept for good. |
-| The receipt shows first as plain lines (taken out, due back, out to you or to this browser). The till-slip print is a separate small piece (8b). | The slip needs a new paper kind, a new typeface and its licence entry. The facts don't. |
-| *Build.* The API keeps 1.1.0's `expiresAt` and `openScreening` beside the new fields until the friend's pages are rebuilt (slice 7). | Each server slice can be tried under 1.1.0's pages. |
+| The receipt shows first as plain lines (taken out, due back, out to you or to this browser). The till-slip print is a separate small piece (8b). Built with slice 8 on 12 Nov 2026: the Doto file was already on this computer. | The slip needs a new paper kind, a new typeface and its licence entry. The facts don't. |
+| *Build.* The API keeps 1.1.0's `expiresAt` and `openScreening` beside the new fields until the friend's pages are rebuilt (slice 7). Gone from the friend's answers with slice 7, on 12 Nov 2026. The back office's link keeps its own: slice 9 rebuilt its pages without them (bar `openScreening`), and left taking them out of the API, with the tests that read them, to slice 10. | Each server slice can be tried under 1.1.0's pages. |
 
 ### To decide
 
@@ -117,11 +118,11 @@ first slice that can't be finished without your answer. Questions 1, 3, 4 and 15
 slice 1 waited on, and questions 2, 5, 9, 12, 14, 6 and 8, which slices 2 and 3 waited
 on, were answered on 11 Nov 2026 and are under [Settled](#settled). Questions 13, 16,
 17 and 7 were answered on 12 Nov 2026 and are there too: 13, 16 and 17 left this table
-with slice 4, and 7 with slice 5. The others keep their numbers. What is still open is
-10 and 11, the words on the friend's pages, for slice 7, and 18, a note on a link that
-changes hands, for slice 9. Questions 12 to 15 came out of the plan's review, 16 and 17
-out of the review of slices 2 and 3, and 18 out of the review of slices 4 to 6.
-Mock-up files are cited from `.claude/design/vhs/app/`.
+with slice 4, and 7 with slice 5. Questions 10, 11 and 18 were answered on 12 Nov 2026
+as well. Questions 12 to 15 came out of the plan's review, 16 and 17 out of the review
+of slices 2 and 3, 18 out of the review of slices 4 to 6, and 19 to 21 out of the review
+of slices 7 to 9 (12 Nov 2026): none of them stops a slice, and the pages are built as
+we recommend. Mock-up files are cited from `.claude/design/vhs/app/`.
 
 | # | Question | Options | We recommend | Waits |
 |---|---|---|---|---|
@@ -169,10 +170,10 @@ by the same rule.
 | "Here's your tape: …" | the message you copy (`web/src/admin/Tickets.jsx:16`) | stays | "Here's your link: …" |
 | "A tape from {shop}." | a link's preview in a chat app (`server/page.js:140`) | stays | "A film from {shop}." |
 | "Your tapes" | the front page and the name menu (`web/src/pages/Home.jsx:44`, `web/src/site.jsx:189`) | stays, under "On your card" for what is out | "Your links" |
-| "{Host} has taken that tape back." | the notice for any cancelled link (`Home.jsx:12`) | only after a take-back. A link cancelled before it lent: "{Host} has cancelled that link." | the same split |
+| "{Host} has taken that tape back." | the notice for any cancelled link (`Home.jsx:12`) | only after a take-back. A link cancelled before it lent: "{Host} has cancelled that link." (Slice 8: opening a link can't tell the two apart, so both say "has cancelled that link"; see its "Built on" note.) | the same split |
 | "That tape has been kept on someone's membership card.", "This tape has been kept" | `Home.jsx:13`, `web/src/pages/Film.jsx:155` | stays | "That link has been kept…" |
 | "This tape is for one member", "This tape is for someone else" | `web/src/pages/TicketOpen.jsx:88`, `:111` | stays | "This link is for…" |
-| "It also forgets 1 tape you opened from a link here" | the sign-out confirmation (`site.jsx:155-156`) | stays, and names the tapes that go back (question 5) | "forgets 1 link you opened here" |
+| "It also forgets 1 tape you opened from a link here" | the sign-out confirmation (`site.jsx:155-156`) | stays ("Signing out also forgets…" since slice 8), and names the tapes that go back (question 5) | "forgets 1 link you opened here" |
 | "This tape is now playing on another device.", "This tape is no longer valid." | the player (`web/src/pages/tapeWords.js:101`, `:108`) | stays | stays: there it is the film's copy |
 
 ## The model
@@ -474,7 +475,7 @@ one choice, as today.
 | You cancel a link | if it has the tape, this is taking it back; otherwise today's revoke (`server/routes/admin.js:519-526`) | | `ticket-cancelled` |
 | You move the due date (question 8) | loan live, and the days sent differ from the link's own (the same value again moves nothing); refused if the new time has passed | `due_at`; a browser's session extended, and its cookie at the borrower's next Play or film page | `due-changed` |
 | Restore | refused (409 `lent-once`) if the link has a loan | today's restore | `ticket-restored` |
-| Give, release, Sign out browsers | refused (409 `tape-out`) while the link has the tape (question 2) | today's otherwise (`server/access.js:296-313`). A "Picked for you" note stays on the link, so its new holder reads it (question 18, open). | as today |
+| Give, release, Sign out browsers | refused (409 `tape-out`) while the link has the tape (question 2) | today's otherwise (`server/access.js:296-313`). A "Picked for you" note stays on the link unless the give or release names `pickNote` in the same step, as the back office's buttons do with "Take the note away" ticked (question 18, answer c; built with slice 9). | as today |
 | Keep (question 2) | view `in` only | today's keep (`server/access.js:271-289`) | `ticket-kept` |
 | The film's files break | | nothing ends; the clock runs. The borrower still sees the due date and can return it. | |
 | The film goes off the shelf | | nothing ends; the clock runs. The borrower sees no such film and can't return it. | |
@@ -689,7 +690,7 @@ line numbers in this section's tables are in `server/routes/viewer.js`.
 | `loan` | whenever `tape` is `yours`: `{ takenAt, position, finishedAt, toBrowser, canRespond }`. `canRespond`: the loan's member is the viewer and the loan is live, watched to the end or not (question 13, answer b). The return route refuses a response by the same rule. |
 | `returned` | `spent`, and only to the one who borrowed: `{ at, how }`. `how` is `returned`, or `due` for every other end (a card turned off, a link spent by the upgrade), so the page needs two lines and learns nothing else. |
 | `pickNote`, `inAccount` | this link's note or null; as today |
-| `expiresAt`, `openScreening` | until slice 7 only, when `yours`: `dueBack`, and `{ resumableUntil: dueBack, position }` |
+| `expiresAt`, `openScreening` | gone with slice 7 (12 Nov 2026). Until then, when `yours`: `dueBack`, and `{ resumableUntil: dueBack, position }`, for 1.1.0's pages |
 
 `screeningLimit`, `screeningsUsed`, `screeningsLeft`, `daysAfterFirstPlay` and
 `firstPlayedAt` go. `access` gains `tape: { out, borrower, takenAt, dueAt }` for your
@@ -699,7 +700,7 @@ above.
 
 | Route | Change |
 |---|---|
-| `POST /api/films/:slug/screenings` (Play, `:140-160`) | 200: `{ screeningId, resumed, took, position, masterUrl, takenAt, dueBack, toBrowser }`, and `resumableUntil` (equal to `dueBack`) until slice 7. When the loan is this browser's, the viewer cookie is sent again. 409: `out`, `spent`, `expired`, `unavailable`, `playing-elsewhere`, `no-ticket`. The state's name is the error code, as today (`:152`). |
+| `POST /api/films/:slug/screenings` (Play, `:140-160`) | 200: `{ screeningId, resumed, took, position, masterUrl, takenAt, dueBack, toBrowser }`. Until slice 7 also `resumableUntil` (equal to `dueBack`), for 1.1.0's pages; it went with them. When the loan is this browser's, the viewer cookie is sent again. 409: `out`, `spent`, `expired`, `unavailable`, `playing-elsewhere`, `no-ticket`. The state's name is the error code, as today (`:152`). |
 | `POST /api/films/:slug/return` (new) | Body `{ takenAt, response?, message? }`. `takenAt` is required and must be the live loan's, which the page has in `loan.takenAt`: a tab left open from an earlier loan can't hand back a later one, as the loan id guards a take-back. `response` one of `loved-it`, `still-thinking`, `not-for-me`, `lets-talk`; `message` up to 2,000 characters. 200 `{ returned: { at }, responded }`. Your own back office browser gets `nothing-to-return`: its page is a preview, which has no loan. 409 `nothing-to-return` (also for no such film, and for a `takenAt` that isn't the live loan's) or `cannot-respond` (nothing changes; told to the borrower of a browser's loan only, and anyone who isn't the borrower gets `nothing-to-return` with a response as without). A message is kept without the spaces around it, and one of nothing but spaces is no message. 400 for a message with no response, or no `takenAt`. 30 per 10 minutes through `limit()`, as keep (`:166`). |
 | `POST /api/screenings/:id/heartbeat` (`:176-189`) | New 409 codes `returned`, `due`, `taken-back`. 404 for every screening that isn't the viewer's own. |
 | `POST /api/tickets/open` | New 410 `ticket-spent`. |
@@ -712,14 +713,14 @@ Bare line numbers in this table are in `server/routes/admin.js`.
 
 | Route | Change |
 |---|---|
-| `GET /api/admin/films`, `/films/:id` | + `tape: { state: 'in' \| 'out' \| 'off', loan }` and `links: { live, waiting, total }`. `off` is a film off the shelf, whatever its tape; `loan` is the live loan in every state, as `/api/admin/loans` gives it, so a film taken off the shelf with its tape out still says who has it. `live` links are not cancelled and have the tape or could still take it; `waiting` are the live ones that haven't lent (the send form's warning); `total` is every link sent. The detail adds `lending: { sent, cancelled, opened, lent, finished, responses }`, counted from links, loans and responses, never from events, as `viewingOf` is (`server/routes/admin.js:105-121`). `tickets.active` (`:173-179`) stays until slice 9. |
+| `GET /api/admin/films`, `/films/:id` | + `tape: { state: 'in' \| 'out' \| 'off', loan }` and `links: { live, waiting, total }`. `off` is a film off the shelf, whatever its tape; `loan` is the live loan in every state, as `/api/admin/loans` gives it, so a film taken off the shelf with its tape out still says who has it. `live` links are not cancelled and have the tape or could still take it; `waiting` are the live ones that haven't lent (the send form's warning); `total` is every link sent. The detail adds `lending: { sent, cancelled, opened, lent, finished, responses }`, counted from links, loans and responses, never from events, as `viewingOf` is (`server/routes/admin.js:105-121`). `tickets.active` (`:173-179`) went with slice 9. |
 | `GET /api/admin/loans` (new) | `?live=1&film=&person=&ticket=`; answers `{ loans }`, newest first, and 400 for a filter that isn't one, by its value or by its name (`film[]=1`, `films=1`). `person` is the loan's own member. Each: `{ id, film, ticket: { id, label }, borrower: { kind: 'person', person } \| { kind: 'browser', device, signedInAs }, takenAt, dueAt, endedAt, endedHow, live, playingNow, position, finished, response, otherLinks }`. `person` and `signedInAs` are `{ id, name, disabled }`; `signedInAs` is there only while that browser's session row exists, and after the clean-up the device stands alone. `live` goes by the one test; for a loan that is over with no end written yet, `endedAt` and `endedHow` are what `closeStale` will write, because reading writes nothing. `response` is `{ id, kind, message, createdAt, readAt }` or null. `otherLinks`, on a live loan and empty otherwise, for the take-back confirmation (question 14): `{ id, label, kind: 'person' \| 'anyone', linkState, cancelledToo }`. `cancelledToo` ones are exactly what the take-back would list in `alsoCancelled`; the rest are links anyone can use that the borrower's browsers also hold and that could still lend, which stay. |
 | `POST /api/admin/loans/:id/take-back` (new) | Body `{ ticketId }`, which must match. 200 is `{ loan, ticket, alsoCancelled }`, the loan as the list gives it: the ids of a member's other links it cancelled: the loan's member, or for a browser's loan the member signed in on that browser (question 16, answer b; empty when nobody is). 409 `not-out`. |
 | `adminTicket` (`:351-405`) | + `loan` (the link's one loan, out or over, as `/api/admin/loans` gives it, or null), `loanDays` (the link's own, or null for the shop's default: sent back as it came it changes nothing), `pickNote`, `effectiveStartBy` and `startByPaused` (slice 6: the date the link goes by, null once it has been played or with no date, and whether the tape is out with someone else right now, so that its time stands still and that date moves with the clock; `startBy` stays the date as you set it, which a form sends back as it came), and `linkState`, the state table's back office column: `unopened`, `opened` (both `in`), `waiting`, `has` (`lent`), `done` (`spent`), `missed` (`expired`), `cancelled` (`revoked`), `off` (`unpublished`), `unavailable`. The 1.x fields stay until slice 9, in 1.x's words (from slice 2): `state` is `ok` for a link that is `in`, `waiting` or `lent` and `used_up` for one that is `spent`; `expiresAt` and `openScreening` are the loan's due time and playback while the link has the tape; `screeningsUsed` counts its plays. |
 | `POST /api/admin/tickets` (`:445-472`) | + `loanDays` (1 to 30, or null for the default) and `pickNote` (up to 2,000 characters; a longer one is a 400 and nothing is made, where `label` is cut to its 200). `screeningLimit` and `daysAfterFirstPlay` are accepted and ignored until slice 9, then refused; the same on `PATCH`, which 1.1.0's link page still sends them to. Logs `ticket-sent`, which is not "last activity" on a link: one nobody has touched still shows none. |
 | `PATCH /api/admin/tickets/:id` | + `pickNote`, `loanDays`. Only a save that names `pickNote` changes it (null, or nothing but spaces, takes the note away), and no event is logged for an edit. On a link that has the tape, a `loanDays` that differs from the link's own moves the due date (question 8); 409 `would-end-loan` if that has passed. The link's own value sent again, null included, changes nothing, so a form may send every field with each save. |
-| `…/revoke`, `/restore`, `/holder`, `/sign-out-browsers` | As in "What can happen to a tape". |
-| `POST /api/admin/screenings/:id/void` (`:543-548`) | Refuses a loan's screening from slice 3 (409 `tape-out`). Removed with its button, in slice 9. |
+| `…/revoke`, `/restore`, `/holder`, `/sign-out-browsers` | As in "What can happen to a tape". `/holder` takes `pickNote` (slice 9, question 18 c): null or spaces take the note away, text replaces it, left out it stays; written only when the link changes hands, in the same step. |
+| `POST /api/admin/screenings/:id/void` (`:543-548`) | Refused a loan's screening from slice 3 (409 `tape-out`). Removed with its button in slice 9: a 404, as any route that isn't there. |
 | `GET /api/admin/responses` (new) | `{ responses: [{ id, kind, message, createdAt, readAt, person, film, loan: { takenAt, dueAt, endedAt } }], unread }`, newest first; `person` is `{ id, name, disabled }` and `film` `{ id, slug, title }`, as on a link. `POST …/:id/read` answers `{ response, unread }`, and the first time it was read stands. `DELETE …/:id` answers `{ deleted, unread }`: the loan and its `returned` event stay as they were. Both are 404 for a response that isn't there. The `DELETE` is the API's first, and like every call that changes something it must be sent as JSON (`server/app.js:152-164`), so it carries an empty body, `{}`. |
 | `GET /api/admin/activity` | `kind=loans` (below). |
 | `GET /api/admin/booth` | + `attention.tapes: { out, next: { film, dueAt } }` (`next` null with nothing out; a tape past due isn't counted, written down or not) and the sweeper's last run, `server.sweeper: { lastRun: { at, closed }, lastError }`, since the server started. The start-by list uses the effective date and leaves out links that have lent (slice 6, as built): links that never lent whose date, as it now stands, is within three days either side of now, the soonest first, each `{ id, label, film, person, startBy, startByAsSet, startByPaused }`. Here `startBy` is the date the link goes by, which 1.1.0's Status page shows and marks "Passed" by; `startByAsSet` is the date on the link, earlier when time has been given back. A link that waits with three days or less left stays on the list for as long as the tape is out, its date moving with the clock (`startByPaused`). |
@@ -825,7 +826,10 @@ Eleven slices, 0 to 10. Slice 0 can start today, on `main`. 1 to 6 are the serve
 9 the pages, 10 the release. Each merges into a `v2` branch with every test green and
 the app usable (2 and 3 merge together, as slice 2 says): until slices 7 to 9, 1.1.0's
 pages keep working over the new server through the two kept fields, and say "This film
-isn't available right now" for a tape that is out. 2.0.0 is released once, after slice
+isn't available right now" for a tape that is out. (Slice 7 rebuilt the film page and
+the player, and the two fields went; the front page and the back office read neither.
+Slice 8 rebuilt the front page, the notices and the sign-out questions, and slice 9 the
+back office.) 2.0.0 is released once, after slice
 10: one backup, one migration, one point to go back to.
 
 Three working rules for the branch:
@@ -1446,6 +1450,7 @@ on Node 26, and the 64 journeys in the chromium project passed three runs in a r
   the tape came back, not who had it; written down there, and not changed.
 - **Left to you:** question 18, a "Picked for you" note on a link that changes hands.
 
+### 7. The friend's film page and player
 
 Reuses, from 1.1.0: `Counter` (`web/src/pages/Film.jsx:271-336`), `TitleTape` and
 `NarrowPage` (`web/src/pages/tape.jsx:51-73`), `Sticker` (`web/src/look/objects.jsx:297-306`),
@@ -1453,7 +1458,7 @@ Reuses, from 1.1.0: `Counter` (`web/src/pages/Film.jsx:271-336`), `TitleTape` an
 (`web/src/look/ui.jsx:22`), and the words in `web/src/pages/tapeWords.js` and
 `web/src/look/words.js`.
 
-- [ ] The counter's states. In: "Play takes it out" on a two-line sticker (`Sticker`
+- [x] The counter's states. In: "Play takes it out" on a two-line sticker (`Sticker`
   gains a line). Out: "Out on loan", "Back Fri 6 Nov" (a new key beside `DEADLINE_KEYS`,
   `web/src/look/words.js:43`), and the one sentence from "What a viewer sees", with no
   "your link still works", no start-by line and no keep offer. Yours: the `ComingBack`
@@ -1461,19 +1466,142 @@ Reuses, from 1.1.0: `Counter` (`web/src/pages/Film.jsx:271-336`), `TitleTape` an
   plain lines; paused, "Hand it back" as well (question 13, answer b). Then finished,
   spent, start-by missed, and unavailable in its three forms: yours (the due date and
   Return it now stay), out (the due date stays), in ("nothing has been taken out").
-- [ ] `clockLines`, `goneLine` and `nextDeadline` rewritten for one clock. `PLAY_ERRORS`
+- [x] `clockLines`, `goneLine` and `nextDeadline` rewritten for one clock. `PLAY_ERRORS`
   (`Film.jsx:23-33`) and `haltMessages` (`tapeWords.js:99`) learn the new codes.
-- [ ] The player: `aside="Due back Sun 8 Nov"` on the paused strip (the prop exists,
+- [x] The player: `aside="Due back Sun 8 Nov"` on the paused strip (the prop exists,
   `crt.jsx:85`), an `onEnded` up to the page (`web/src/Player.jsx:463` only clears the
   strip today), and the end's three choices.
-- [ ] Your preview says who has the tape. The line telling you to try a link in a
+- [x] Your preview says who has the tape. The line telling you to try a link in a
   private window (`Film.jsx:286`) says that doing so takes the tape. The two kept API
   fields go.
 
 **Done when** every state in the mock-up's friend table that isn't a "today" state is
 on the page at 1440, 390 and 320 pixels, with the out pages' words as this plan has
 them where the two differ, and `test/friend-words.test.js` and `test/look.test.js` are
-rewritten and pass. Waits on questions 10 and 11.
+rewritten and pass. Questions 10 and 11, which it waited on, were answered on 12 Nov
+2026.
+
+Built on 12 Nov 2026, not yet committed. 1,052 unit tests became 1,061, all passing on
+Node 26 (22 and 24 still wait for the draft pull request). What differs from the lines
+above, from the mock-up, or was left open by them:
+
+- **Where the words are.** `web/src/pages/tapeWords.js` has every sentence the counter,
+  the receipt, the end of the film and the owner's preview say (`clockLines`,
+  `goneLine`, `receiptLines`, `returnQuestion`, `RETURN_ERRORS`, `endWords`,
+  `previewLine`, `previewClock`), and `web/src/look/words.js` the sticker
+  (`nextDeadline`, `stickerText`, with `DEADLINE_KEYS` gaining `back` and a new
+  `STICKER_TOPS`). `test/friend-words.test.js` and `test/look.test.js` pin them. The
+  page, `web/src/pages/Film.jsx`, only lays them out.
+- **The sticker before Play.** "Play takes it out." over "Due back" and the date Play
+  would give now (now plus the link's days, read again each minute while the page is
+  open). A link with a start-by date to come shows that date on a one-line "Start by"
+  sticker instead, as the mock-up's Hedwig does, and the line says "for 3 days from
+  then": the due date isn't known until Play.
+- **The out page** says "**Out on loan.** Due back by Fri 6 Nov 21:02.": the plan's
+  sentence with the time, because the sticker gives only the day and the look's rule
+  is that the page then says the time in words. Nothing else, as "What a viewer sees"
+  has it. (Slice 7 added "This link is on your card, so it's on every device you sign in
+  on." for a member's own waiting link, and "This tape is on your card…" with the tape
+  in. Both went in the review of slices 7 to 9: question 11's table makes "On your card"
+  the front page's section for what you have out, and the "For Sam only" strip already
+  says the rest.)
+- **Yours.** The telly, "It's yours until … Pick up where you left off, on this device
+  or another." (a browser's tape: "Pick up where you left off."), then Hand it back
+  (for a member on their own link, `loan.canRespond`) and Return it now. Return it now
+  asks on the page ("**Return Test Pattern now?** It's back in the shop straight away,
+  and this link won't take it out again.", Return it / Keep it), with the focus on the
+  question and back on the button. Once returned the counter shows the spent state,
+  "**Returned on …** Thank you. It's back in the shop." and "This link has done its
+  job…", which takes the focus: the mock-up's narrow "Returned" page wasn't built,
+  since the page already says it. Right after Play takes the tape, "**Taken out.**"
+  stands where the clock line would (the mock-up's PLAY moment), until the first pause
+  or the end of the film (the player's `onPaused`); then the counter is the ordinary
+  one, "It's yours until …" with the receipt folded, as the mock-up's paused screen.
+- **The receipt** is plain lines folded under "Your receipt" (a `<details>`): taken out
+  when, out to the member's name or "this browser", due back when, and "Watch it as
+  often as you like until then." The till slip is 8b. (Slice 8 built it: the receipt is
+  now the slip, folded under the same line.)
+- **Watched to the end** (the server's 92%): "Play from the start", which starts at
+  0:00 whatever the position, "**You've watched it to the end.** It's still yours
+  until …, so you can watch it again, or hand it back now" (or "return it now" for a
+  browser), and Hand it back lit.
+- **Handing it back is built**, not a placeholder: `web/src/pages/HandBack.jsx`, a view
+  of the film page in the mock-up's words (one of four responses required, the
+  optional message, "Only Arthur sees this…", "Return it without a note", Not now),
+  its error, and "Handed back" with what was said. Slice 8 keeps it and adds the
+  "Picked for you" sheet; its journey (3) is slice 10's. "Handed back" says "{Host}
+  will see what you said in the back office", where the mock-up said "your note",
+  because the note is optional. "Return it without a note" lands on the film page's
+  spent state.
+- **Spent, for someone else holding the link** (question 12's second browser): "This
+  link has been used. The tape it lent is back in the shop." The mock-up had no such
+  page; these are the words of the notice for a spent link.
+- **Taken back** is "Nothing on the shelf here", as question 6 says. When the player on
+  that page was stopped by it, the page also says "{Host} has taken this tape back.",
+  which the player had just said to the same borrower.
+- **Signed out while it played.** A member's own tape keeps 1.1.0's page ("Sign in to
+  carry on watching…", with Sign in). A tape out to this browser from a link anyone can
+  use went back when it was signed out, and its link is spent (question 5), so the page
+  says "The tape went back to the shop when this browser was signed out, and the link
+  that took it out won't take it out again. If you'd like to watch it again, ask
+  Arthur.", with no Sign in (from the review of slices 7 to 9).
+- **Unavailable**, in its three forms: the warning, then "It's still yours until …,
+  and you can return it now." with Return it now (and Hand it back) for the borrower;
+  "It's out on loan, due back by …" for anyone else while it's out; "Nothing has been
+  taken out: the tape is still in, and your link still works." with it in. The sticker
+  keeps the tape's date when it is out or yours.
+- **The player.** The paused strip's right-hand line is "Due back Sun 8 Nov" (the
+  countdown to come back went, and `timeLeft` with it). At the video's end the bar
+  under the picture becomes STOP on a blue strip (`StopStrip`, new in `crt.jsx`;
+  square, as the paused strip is, where the mock-up drew it rounded) and the three
+  choices; `onEnded` tells the page, and playing or winding back brings the bar back.
+  Keep it until … closes the player; Return it now closes it and asks on the counter;
+  Hand it back closes it and opens the view. The owner's preview has no end panel:
+  there is no loan.
+- **The owner's preview** says "**Out to Sam Okafor** since …, due back …. Only you see
+  who has it: friends see “Out on loan”." (a browser: "Out to a browser (Safari on
+  iPhone, signed in as Jo)"), or "**In the shop.** Nobody has the tape out.", then
+  "Your own previews never take the tape, so Sam Okafor keeps it. To try a link as a
+  friend would, open it in a private window or another browser: pressing Play there
+  takes the tape out, as it would for a friend."
+- **Codes.** `PLAY_ERRORS` needed no new message: `out`, `spent`, `expired` and
+  `unavailable` are explained by the counter once the page reads itself again, as
+  slice 2 set up. `haltMessages` already had `returned`, `due` and `taken-back` from
+  slices 2 and 3, which are every code a progress report can add. New for the page:
+  `RETURN_ERRORS` (`nothing-to-return`, `cannot-respond`).
+- **The two kept fields went.** `expiresAt` and `openScreening` left `access.ticket`
+  (`server/films.js`) and `/api/me`, and `resumableUntil` left Play's answer
+  (`server/routes/viewer.js`). Nothing else read them: the front page now goes by
+  `tape` (below). The back office's link keeps its own 1.x fields until slice 9. Tests
+  that held them, rewritten to say they are gone: `test/journey.test.js`,
+  `test/film-page.test.js`, `test/never-who.test.js`, `test/loans.test.js`,
+  `test/migration.test.js`, `test/identity.test.js`, `test/people.test.js`,
+  `test/screenings.test.js`.
+- **Gone from the words**, with their tests, each with a comment saying why: `playsLeft`
+  (no play limits), the "Come back by" sticker and `timeLeft` (no window to come back),
+  `goneLine`'s "used all its plays", and `clockLines`' window in hours.
+- **The front page (slice 8's, built since)** was only kept working on the new shape: its lines say
+  "Out with you" and the due date (question 11's table), "Out on loan, back …" (one
+  line) or "In the shop", as the shelf for members does since the review of slices 7 to
+  9 (slice 7 said "Out on loan" over "Back …", and 1.1.0's "Ready to play"),
+  "Returned", "Gone back to the shop" or "Link used", and a sleeve's sticker never
+  shows the date Play would give. Its sections are slice 8.
+- **Journeys changed, because the plan intends it** (`e2e/shell.spec.js`): the counter
+  before and after Play says "Pressing Play takes the tape out. It's yours for 2 days,
+  until …" and "Taken out.", where it said "come back to it for 48 hours"; the
+  one-day link's words; and the spent link's journey presses Return it now and Return
+  it, where it asked the server itself. `e2e/fixtures.js`'s `playButton` also knows
+  "Play from the start": the test films are eight seconds long. With those, the chromium and webkit projects
+  ran twice: 107 journeys passed each time and 23 skipped, each for its own stated
+  reason (14 of them WebKit's, which has no virtual passkeys), and none failed.
+  Firefox and Chrome were not run as projects.
+- **Seen** at 1440, 390 and 320 pixels in Chrome, on a throwaway shop: in (with and
+  without a start-by, and for one member), taken out, out (and a member's waiting
+  link), yours (a browser's and a member's), the question, the paused strip, the end,
+  watched to the end, hand it back (and its error, and handed back), returned (a
+  browser's and a member's), spent for another browser, due, start-by missed,
+  unavailable in its three forms, taken back, and the owner's preview with the tape
+  out and in. No page error, and nothing past either side at any width.
 
 ### 8. The friend's front page, handing it back, and notices
 
@@ -1481,21 +1609,123 @@ Reuses `Facing` and the notices (`web/src/pages/Home.jsx:86-107`, `:10-16`), `Pi
 and `Hand` (`web/src/look/objects.jsx:275-292`), `confirmSignOut`
 (`web/src/site.jsx:146-158`), and the kit's fieldset, choice and textarea pieces.
 
-- [ ] The front page in sections: On your card (or "Out to this browser", without the
+- [x] The front page in sections: On your card (or "Out to this browser", without the
   mock-up's "Sign in to keep them on your membership card": question 2, answer a),
   Picked for you, your other links, On the shelf for members.
-- [ ] Hand it back, as a view inside the film page and not a new route: one response
+- [x] Hand it back, as a view inside the film page and not a new route: one response
   required, "Only {host} sees this", "Return it without a note". The "Picked for you"
   sheet in the counter, apart from the staff pick card.
-- [ ] Notices: a spent link (a new key), "Opening a link never takes the tape"
+- [x] Notices: a spent link (a new key), "Opening a link never takes the tape"
   (`web/src/pages/TicketOpen.jsx:149`), the sign-out confirmation naming the tapes that
   go back.
-- [ ] 8b, separable: the till slip as a printed thing (a paper kind, the Doto face, its
+- [x] 8b, separable: the till slip as a printed thing (a paper kind, the Doto face, its
   licence entry in `test/third-party-licenses.test.js`).
 
 **Done when** a member sees what they have out and when it's due on every device, a
 response handed back reaches the back office, and a spent link in a fresh browser shows
 only the notice.
+
+Built on 12 Nov 2026, not yet committed. 1,061 unit tests became 1,073, all passing on
+Node 26 (22 and 24 still wait for the draft pull request). No server code changed. What
+differs from the lines above, from the mock-up, or was left open by them:
+
+- **Where the words are.** `web/src/pages/tapeWords.js` has the sections and what each
+  holds (`shelfSections`, `sectionWords`), the lines under a sleeve on the members'
+  shelf (`memberShelfLines`), the notices a link brings back (`noticeFor`, moved out of
+  `Home.jsx`), the sign-out questions (`signOutWords`), "Opening a link never takes the
+  tape" (`UNREACHABLE`) and the till slip's lines (`slipLines`, in place of slice 7's
+  `receiptLines`). `test/friend-words.test.js` pins them.
+- **The sections.** Signed in, under "Your tapes": **On your card** (out with you on
+  your own links), **Out to this browser** (out to this browser on a link anyone can
+  use, signed in or not, question 2), **Picked for you** (the other tapes on your card,
+  "Tapes Arthur has sent you.", as the mock-up has it), **On this device** (the other
+  tapes this browser opened from links: "your other links"; the mock-up had no such
+  section) and **On the shelf for members**. Signed out: the shop's name, Out to this
+  browser, then its other tapes under "Your tapes", as 1.1.0 had them, or the welcome.
+  On this device's line is "Tapes you opened from a link in this browser." (its second
+  sentence, "They aren't on your card.", went in the review: question 11). An empty
+  section isn't shown. The page reads `/api/me` again each time it is arrived at. "On this device only", under a sleeve in 1.1.0 and slice
+  7, went: the section says it.
+- **A tape out with you** is a row, as the mock-up's: the sleeve, the film, its label
+  tape with the "Due back" sticker, the telly (Resume, or Play from the start once
+  watched to the end), "It's yours until …", Hand it back (a member on their own link)
+  and Return it now, and the till slip. The mock-up's buttons led straight to the
+  player and the question; here each opens the film's page and does it there (Resume
+  plays, Return it now asks on the counter, Hand it back opens the view), because the
+  player and the question are that page's. The address keeps no trace of it, so Back
+  doesn't do it again.
+- **Picked for you on the shelf** says "A note from Arthur is with it" under a tape
+  whose link has a note; the note itself is on the film's page. A tape in says "In the
+  shop" and one out with someone else "Out on loan, back Sun 15 Nov", as on the shelf
+  for members and in the mock-up (slice 8 said "Ready to play", and "Out on loan" over
+  "Back …"; the review made them one). Not the mock-up's "You can play it once it's
+  back", which "What a viewer sees" took off the out page (it is false for a second
+  browser on the link that lent).
+- **On the shelf for members** (question 7): "In the shop", or "Out on loan, back Sun 15
+  Nov" with a "Back" sticker, never who; then "No tape yet: ask Arthur". The line under
+  the heading says "…but you need a tape to play one", where the mock-up said "playing
+  one takes a tape": in version 2 "takes" means Play taking a tape out.
+- **"Picked for you" on the film page** is a sheet off the shop's notepad (a new paper
+  kind, `note`): "Picked for you" printed at its head, the note and the owner's name in
+  the hand, on ruled lines, under the label tape, in every state the page shows (the
+  link's own note, as `pickNote` is). The staff pick card stays on the wall. A long
+  note is written smaller, as a long staff pick is.
+- **Hand it back** is slice 7's view, unchanged, now also opened from the front page.
+  Its response reaches the back office: the slice's run sent one from the front page
+  and `/api/admin/responses` listed it, unread; `test/responses.test.js` holds the rules.
+  The Responses tab is slice 9's.
+- **A cancelled link's notice is not split.** Question 11's table wants "{Host} has
+  taken that tape back." only after a take-back and "{Host} has cancelled that link."
+  otherwise. Opening a cancelled link answers 410 `ticket-revoked` either way (the
+  revoke check comes first, `server/routes/viewer.js:50`), and a browser whose tape was
+  taken back no longer holds the link, so the API doesn't let the page tell them apart.
+  The notice now says "{Host} has cancelled that link. If that's a surprise, ask {host}."
+  in both cases, which is true of both, where 1.1.0's "has taken that tape back" claimed
+  a tape had been out. The borrower is still told by the player, and by the film page
+  when the player was stopped by it. To split it, the open route could answer a new
+  `ticket-taken-back` for a link anyone can use (it says that link lent, which a spent
+  link's `ticket-spent` already says to anyone) and for a member opening their own link,
+  but not for anyone else holding a copy of a member's link: to them it would say that
+  member had the tape. Not built; yours to say.
+- **Signing out** asks first when it does more than sign out, from `/api/me` read
+  again as you press it (`confirmSignOut`; slice 8 read the page's copy, which Play
+  didn't refresh, so straight after Play it said the link "still works": the review
+  found it) (`signOutWords`): "Sign out of this browser? Nosferatu is out to this browser, so it
+  goes back to the shop, and the link that took it out won't take it out again.", then,
+  for the other tapes it opened from links, "Signing out also forgets …; the links still
+  work". Sign out everywhere adds the same sentence for this browser, and "A tape taken
+  out from a link on another of them goes back to the shop too." The two lists are of
+  titles, as `/api/me` gives them: two films of one title would be counted as one.
+- **The spent link's notice** ("That link has been used. The tape it lent is back in
+  the shop…") was built with slices 2 and 3; its journey (6) passes.
+- **8b, the till slip, is built.** A Doto file was already on this computer, with its
+  OFL, in the design folder (`.claude/design/fonts/doto/`): it is served as
+  `web/public/fonts/Doto-Variable.ttf` (457 KB, as it came: no tool here could cut it
+  down without fetching one), declared in `tokens.css` (`--till`, Courier Prime next for
+  what Doto lacks), listed in `vite.config.js FONTS` and the licences file, and pinned
+  by `test/third-party-licenses.test.js`. A browser fetches it only when a receipt is on
+  the page. The slip (`TillSlip`, paper kind `till`, torn by `wear.js tillTeeth`) prints
+  the shop, when the tape was taken out, a dotted rule, the film and its E-number, to
+  whom, when it's due back, "Watch it as often as you like until then.", "Done early?
+  Return it from its page." and "Thank you", as the mock-up's. The date is the browser's
+  own date and time with the year ("12 Nov 2026, 21:46"), where the mock-up printed the
+  weekday too. On the front page it is laid out in full; on the film page it is folded
+  under "Your receipt" ("Printed when you pressed Play."), and in full just after Play
+  took the tape ("Printed just now, when Play took the tape."), as the mock-up's PLAY
+  moment, until the first pause. A date and its time are one unit on the slip (no-break
+  spaces): "Due back" may stand over them, never split them.
+- **Journeys.** None changed; none broke. The chromium and webkit projects ran twice:
+  107 passed and 23 skipped each time, each skip the journey's own stated one.
+- **Seen** at 1440, 390 and 320 pixels in Chrome, on a throwaway shop: the front page
+  signed in (with a tape on the card, Picked for you in and out, a link opened here and
+  the members' shelf in and out), the same with a tape out to this browser as well,
+  signed out with a tape out to this browser, nothing yet (signed in and out), Return it
+  now from the front page, Hand it back from the front page, "Picked for you" on the
+  film page, the receipt opened, the slip just after Play, and the notices (spent,
+  cancelled, can't reach the shop). No page error, and nothing past either side at any
+  width.
+- **Not built:** the mock-up's narrow "Returned" page (slice 7 left it out: the counter
+  says it); the back office's Responses tab (slice 9).
 
 ### 9. The back office
 
@@ -1505,32 +1735,257 @@ Reuses the Films table and `Mark tone="info"` for "out" (`web/src/admin/Films.js
 `TicketBadge` and `describeEvent` (`ui.jsx:144-155`, `:236-287`), and `attentionLine`
 (`web/src/admin/facts.js:33-45`).
 
-- [ ] Films: a Tape column in place of "Active tapes" (`Films.jsx:64`). A film's page:
+- [x] Films: a Tape column in place of "Active tapes" (`Films.jsx:64`). A film's page:
   the tape panel (who, since, due back, now), and taking the tape back with a
   confirmation on the page that says what the borrower will see, which of their other
   links for the film go with it, and which links anyone can use their browser also
   holds (question 14).
-- [ ] The send form: "Picked for you" with its hint, "Due back after", the warning when
+- [x] The send form: "Picked for you" with its hint, "Due back after", the warning when
   the film is out or has a link waiting. "Plays" and "Days after the first play" go.
   The link's edit form may send "Due back after" with every save: the days a link
   already has move nothing (slice 3's review). Changing them on a link that has the
   tape moves the date, so that field says so there.
-- [ ] Tapes: Out now, then the links. A link's page: its loan and states, no Give back.
+- [x] Tapes: Out now, then the links. A link's page: its loan and states, no Give back.
   While it has the tape, "Let anyone with the link use it", "Give it to someone else"
   and Sign out browsers are disabled, with a line saying why (question 2, answer a).
   Members: tapes out. A seventh section, Responses, with its unread count and "Mark as
   read" (`web/src/admin/AdminApp.jsx:116-135`).
-- [ ] The Ledger's rows and Loans filter; Status; Settings: "Due back after, for new
+- [x] The Ledger's rows and Loans filter; Status; Settings: "Due back after, for new
   links", and what "Sign out every friend and member" does to tapes that are out
   (`web/src/admin/Settings.jsx:180`).
 
 **Done when** every screen in the mock-up's back office table shows its version 2 parts,
 and `test/office.test.js`'s word scan passes on the new screens.
 
+Built on 12 Nov 2026, not yet committed. 1,073 unit tests became 1,093, all passing on
+Node 26 (22 and 24 still wait for the draft pull request). What differs from the lines
+above, from the mock-up, or was left open by them:
+
+- **Where the words are.** `web/src/admin/loanWords.js` has what the back office says
+  about links and loans, apart from React, as `facts.js` does for the booth: who has a
+  tape (`borrowerLines`, `tapeCell`, `loanNow`), a link's state (`LINK_STATES`,
+  `linkStateWords`, `linkStateNote`, `endedWords`, `startByWords`), the take-back's
+  question (`takeBackWords`), the send form's warnings and lines (`sendWarnings`,
+  `pickHint`, `readyLines`), the Ledger's rows for links and loans (`loanEventWords`),
+  the responses (`RESPONSE_WORDS`, `handedBackWhen`), and Status's and Settings' lines
+  (`tapesOutLine`, `sweeperText`, `signOutEveryoneWords`). `test/office.test.js` pins
+  them. The pieces are in `web/src/admin/Loans.jsx` (the tape panel, the take-back
+  question, a link's state, Out now) and the new `Responses.jsx`; `ui.jsx`'s
+  `TicketBadge` went, and `describeEvent` hands loan events to `loanEventWords`.
+- **Films.** Film, Tape, Media, Links, Scanned, as the mock-up's. The Tape column is
+  "In", "Out with Sam Okafor since Thu 12 Nov, due back Sun 15 Nov" (a browser's: your
+  note on the link and its device under it) or "Off the shelf", with whoever still has
+  the tape under it: the clock runs on. Links is `links.live`. 1.1.0's
+  `tickets: { total, active }` left `GET /api/admin/films` with its column.
+- **A film's page.** Its first tab is "Tape and links" (its count in links). The tape
+  panel says who has it (their page, or "a browser, from a link anyone can use" with
+  your note, its device and whom it is signed in as), when Play took it and on which
+  link, when it is due back, what they are doing now (playing, paused at, watched to
+  the end), with the orange "Due back" sticker; the film's heading gains "Tape out" or
+  "Tape in". **Take the tape back asks on the page**, as the friend's Return it now
+  does: the question takes the focus and Keep it out gives it back. It says the link
+  stops working, what the borrower's player and page will say ("{Host} has taken this
+  tape back.", and "Nothing on the shelf here" when no link anyone can use stays in
+  their browser; otherwise that their page shows it, with Play, straight away, which
+  the words follow as its box is ticked), lists the member's other links that go
+  with it (`cancelledToo`), and names the links anyone can use their browsers also
+  hold, which stay, each with a "Cancel … too" box: ticked ones are cancelled after
+  the take-back, one request each. A browser a member is signed in on adds that
+  member's own links (question 16). Once done: "Test Pattern is back in. You took it
+  back from Sam Okafor, and the link it was out on is cancelled, with 1 other link."
+  Tapes' "Take the tape back" opens the film's page with the question asked (the
+  history's state carries the loan, and is cleared, so Back doesn't ask again).
+  "How it's been lent" is `lending` (links sent and cancelled, opened, lent,
+  finished, and responses), in place of 1.1.0's `viewing`, which the API still sends.
+- **The send form** stays on the film's page (under "Send a link") and on Tapes, as
+  1.1.0 had it, where the mock-up drew a page of its own: the member's page still
+  sends you to Tapes with the member chosen. "Due back after (days)" starts at the
+  shop's days and is sent with every link, so a link's days are its own from the
+  start. It warns, and only warns: "{Film} is out. {Name} has it until …", "It already
+  has N links waiting for the tape", and "{Name} already has a link for this film.
+  This one waits…" (question 9). "Picked for you"'s hint names the member, or says
+  whoever has the link reads it. The button is "Send a link for anyone with the link"
+  or "Send a link to Jo only" (Q11's table; the mock-up's "Make the link"). Once made:
+  "N links ready." or "Link for Jo ready.", "Open Matte doesn't send it", "Sending it
+  doesn't take the tape…", and the start-by and days. Plays and "Days after the first
+  play" went, and **the API refuses them now** (400, on send and on save), as this plan
+  said it would from slice 9; the tests that still sent them were changed, each with a
+  comment.
+- **Tapes**: the two lines of the mock-up, "Send a link for", **Out now** (film, who has
+  it, since, due back, Take the tape back; the soonest due first) and **Links sent**
+  (for, film, state with how its tape came back under it, or for a link that hasn't
+  lent its start-by day, "standing still" while the tape is out with someone else, due
+  back after, last activity, Copy link). A link's state is `linkState` in words: Not opened yet,
+  Opened, Waiting: the tape is out, Has the tape, Done: the tape is back in, Start-by
+  missed, Cancelled (or Taken back), Film off the shelf, Film unavailable.
+- **A link's page.** While it has the tape: "This link has the tape" with Take the tape
+  back; Let anyone use it, Give and Sign out browsers are disabled, and a line says
+  why (`aria-describedby` on each). Otherwise "Cancel the link" (a browser `confirm`,
+  as 1.1.0's buttons ask), and "Restore the link" only for a link that never lent;
+  one that lent says it can't be. The facts: took the tape, due back, now (or back in,
+  and how), opened, start by (`effectiveStartBy`, "standing still while the tape is
+  out with someone else" when paused, and the date as set when they differ by a
+  minute or more), browsers, sent. The form: the label, **Picked for you**, **Due back
+  after** (empty for the shop's; on a link with the tape it says changing it moves the
+  due-back date, and the save says the new date), start by and the keep box (only
+  before it lends). "Plays during this loan", with no Give back.
+- **Question 18 (c), with a server change.** `POST /api/admin/tickets/:id/holder` takes
+  `pickNote` in the same step (`access.setTicketPerson`): null, or nothing but spaces,
+  takes the note away, text replaces it, left out it stays. It is written only when
+  the link changes hands, so a refused give (a note too long, a card turned off, the
+  tape out) or one that changes nothing leaves the note as it was. On the page, a link
+  with a note shows it in "Who can use it", with "Take the note away" ticked; the
+  `confirm` says whether the note goes. Tested in `test/picked.test.js` (two tests).
+- **Give back is gone, route and all.** `POST /api/admin/screenings/:id/void` and
+  `access.voidScreening` went, as the API table said; the route now answers 404 like
+  any other, and nothing writes `voided_at`. A 1.x play given back still shows "Given
+  back" in a link's plays. `test/loans.test.js`'s three checks of it say so.
+- **Members.** Name, member since, passkeys, **Tapes out** (each film and "due back …")
+  and **Links** (`liveLinks`), last signed in, status; 1.1.0's count of tapes went. A
+  member's page has "Send Sam a link", **Tapes** (their loans: out and due back, or back
+  in and how, and the response), "Links sent to Sam" and "Setup and recovery links"
+  (1.1.0's "Links", renamed beside the new ones). Turning a card off, Sign out
+  everywhere and taking back the keys say what happens to their tapes
+  (`cardOffWords`, `browsersTapesWords`): turning the card off also sends back a tape a
+  browser of theirs took out on a link anyone can use (slice 9 said links anyone can use
+  "aren't affected", 1.1.0's words, which question 5 made false).
+- **Responses**, the seventh section, between Members and Ledger as the mock-up has it.
+  Its tab counts the unread (`aria-label` "Responses, 2 unread"), read with the films
+  on every screen. Each response: the sleeve, the four words, the member and the film
+  (each a link), the message or "No message.", "Handed back …" and how early, "Not
+  read yet" with **Mark as read**, and **Delete** (a `confirm`, then `DELETE` with an
+  empty JSON body: `api.delete` in `web/src/api.js`).
+- **The Ledger.** The Loans filter was there from slice 3. Its new rows are in words:
+  "You sent a link, due back 3 days after Play, with a “Picked for you” note", "You
+  moved the due-back date from … to …", "You cancelled the link", "You restored the
+  link"; **lent and back in are printed on strips of the till roll** (`TillSlip`, which
+  gains `label` so a strip isn't named "Your receipt"), as the mock-up's: "Lent, due back
+  …", "Back in: returned early | handed back with a response | it was due | you took it
+  back | its browser was signed out | their card was turned off". A member's own link
+  with no label is "their link" in the Who column.
+- **Status.** "**3 tapes out.** The next due back is Nosferatu, Sat 14 Nov, 22:12." with a
+  link to Tapes; the start-by list is of links that haven't lent, says "Paused: the
+  tape is out with someone else" (`startByPaused`) and the date as set when it moved;
+  the server part gains **Tapes back in** (the sweeper's last run, and its error, which
+  the status line now counts as something to look at, `facts.js`). The status line
+  at the foot of every screen gains "N tapes out", as the mock-up's.
+- **Settings.** "Due back after, for new links (days)" was there from slice 2; its hint
+  now says the send form starts with it. "Sign out everyone" says links keep working,
+  a browser's tape goes back and its link won't take it out again, and a member's own
+  tape stays theirs; its question names the films that would go back, read from the
+  live loans when you press it. Keeping records says clearing never changes a link or
+  a loan.
+- **Words, by question 11's table**, in every back office file: link for what you
+  send, tape for the film's one copy; "Send a link", "N links ready", "How many
+  links", "Sent", "Lent" for Play taking the tape, "Take the tape back" only for a link
+  that has it and "Cancel the link" otherwise, "Links keep working". The copied
+  message still says "Here's your tape" (question 11, answer a). `test/office.test.js`
+  scans every `.jsx` file and `loanWords.js` for 1.x's words (now with lend), for 19
+  ways 1.1.0 called a link a tape or spoke of play limits and coming back, and for the
+  new screens' words.
+- **Not done, and why.** `adminTicket` still carries 1.x's `state`, `expiresAt`,
+  `openScreening`, `screeningsUsed`, `screeningsLeft`, `screeningLimit` and
+  `daysAfterFirstPlay`. The pages read only `openScreening` (which play is open, and on
+  which device); the rest are read by about 20 unit tests of slices 2 to 6, which
+  would have to be rewritten together. Slice 10 can take them out with the docs. The
+  film page's `viewing` stays beside `lending` for the same reason.
+- **Journeys changed, because the plan intends it**: `e2e/admin.spec.js` ("Send a link
+  for anyone with the link", "1 link ready."), `e2e/shell.spec.js` ("Send a link to …
+  only", and the link page's loan, due back in a day, where it read 1.x's Expires and
+  Can come back until) and `e2e/admin-messages.spec.js` (the card-off message says
+  "giving them a link"). Results under [Tests](#tests).
+- **Seen** at 1440, 390 and 320 pixels in Chrome, on a throwaway shop: Films (tapes in,
+  out to a member, out to a browser, off the shelf with its tape out), a film's page
+  with the tape out, the take-back question (with a link that goes with it and one
+  that stays), taken back, a film in, a film off the shelf with its tape out, the send
+  form with its three warnings, the link ready, Tapes, a link with the tape, a link
+  with a note (Take the note away), a link done, a link cancelled, Members, a member's
+  page, Responses, the Ledger and its Loans filter, Status and Settings. No page error,
+  and nothing past either side at any width.
+
+Slices 7, 8 and 9 were reviewed together on 12 Nov 2026, from four sides: the look
+against the mock-up (every state shot in Chromium at 1440, 390 and 320 and in WebKit at
+1440 and on two iPhones), the words against question 11 and the settled words (with a
+word changed at a time to see whether a test caught it), access (keyboard, focus,
+names, announcements), and what a friend and the owner see along whole journeys. No
+page error, nothing past either side, no text under 4.5:1, and no answer that said who
+had a tape. 1,093 unit tests became 1,106, all passing on Node 26. What changed:
+
+- **Signing out straight after Play named no tape.** The question was built from the
+  page's copy of `/api/me`, which Play didn't read again, so it said the link "still
+  works" while signing out sent the tape back and spent the link (question 5's promise).
+  Every sign-out now asks from `/api/me` read as it is pressed (`confirmSignOut`), and
+  Play reads it again too. A journey holds it (`e2e/shell.spec.js`).
+- **The front page could show a tape that was back.** Handed back with a response, "Go
+  to your tapes" still listed it on your card with Return it now; after Play, it was
+  still "in". Hand it back reads `/api/me` again, and the front page reads it on every
+  arrival. A journey holds it.
+- **The take-back question promised "Nothing on the shelf here"** when a link anyone
+  can use stayed in the borrower's browser, whose page then offers it with Play at once
+  (and said they could take it "once it's back"). It now says which, following the
+  boxes as they are ticked. A ticked link that can't be cancelled after the take-back
+  is named in the news, never reported as the take-back failing.
+- **Words.** The signed-out page no longer tells a browser whose tape went back to sign
+  in or open its link again (question 5). Turning a card off no longer says links anyone
+  can use "aren't affected"; taking back the keys says what happens to tapes, as Sign
+  out everywhere does. "On your card" is only the front page's section (question 11):
+  the film page's two "…is on your card" lines, and "They aren't on your card", went.
+  The back office said a note was "on their tape": it's "on their link". The front page
+  says "In the shop" and "Out on loan, back …" in Picked for you as on the shelf for
+  members. The preview banner says Play there "never takes a tape", as the mock-up. The
+  host mid-sentence on Hand it back is written as the shop writes it. Slice 9's curly
+  apostrophes are straight, as everywhere else. A failed request in the back office
+  says "Couldn't reach the server just now, or it had a problem. Try again in a
+  moment." rather than `server-error` or "Failed to fetch" (`requestError`, in
+  `useAction` and `useLoad`). The paused strip's 1.x `left` prop went.
+- **Tests that didn't hold the words.** No unit test read the friend's JSX: the settled
+  "Only Arthur sees this" could change and every test pass. Hand it back's, the
+  signed-out page's, "Nothing on the shelf here", "Taken out.", "No tapes yet." and the
+  preview banner are now `tapeWords.js` exports, pinned word for word, and every page
+  under `web/src/pages` is scanned for 1.x's nouns and clocks as the back office is.
+  The back office's scan skipped any run of text beside a `{…}` and only asked whether
+  a phrase was anywhere: it now reads round expressions (`test/shown.js`, shared by
+  both), knows "screened", and pins each screen's words in its own file. Every notice
+  and return error is pinned word for word.
+- **The look.** The till slip split "Sun 15 Nov," from "22:28" (no-break spaces now).
+  The PLAY moment, with the slip laid out, lasted as long as the player was open; it
+  ends at the first pause. A link that hasn't lent shows its start-by day under its
+  state in the link lists (the mock-up's Start by column). On a phone the tape panel's
+  sticker is at its foot, and at 480px and under the back office's shop name has a row
+  of its own, both as the mock-up; the lines under a sleeve are in the text face.
+- **Access.** At the film's end the bar under the picture went and the focus with it;
+  the end's heading now takes it when it was in the player (not from the counter).
+  "Keep it until …" and Hand it back's "Not now" give the focus to the counter's way on.
+  The back office's "Saved."-style news is a status region there from the start, and
+  takes the focus where the button pressed has gone (a take-back, a give, cancel and
+  restore, Mark as read, Delete); giving a link or letting anyone use it now says so.
+  Names start with the button's words ("Hand it back: Nosferatu", "Take the tape back:
+  The General", "Mark as read: Sam's response to …"). Hand it back's radios say they're
+  required and when one is missing; the Give it to list says why it's disabled.
+- **The server, one line.** Making a link anyone can use keepable (or not) with
+  `pickNote` took its note away, though it doesn't change hands; the note is now written
+  only when the link changes hands, as slice 9's note says (`test/picked.test.js`).
+- **Not changed, and why.** Busy buttons dropping the focus in Chromium is 1.1.0's
+  pattern everywhere: question 20. The date words' comma or "at" by engine: question
+  21. The cancelled-link notice: question 19. The front page's "No tapes yet." stays,
+  not the mock-up's "The shelf is empty.": the shelf for members can be on the same page.
+  The end's heading before the film's h1 in the page's order, and the Ledger's table
+  links under 32px on a phone (1.1.0's table layout), are left for slice 10's polish.
+- **Journeys changed, because the plan intends it**: `e2e/account.spec.js` and
+  `e2e/passkeys.spec.js` see a kept tape by its "For … only" strip, `e2e/shell.spec.js`
+  reads a straight apostrophe, and two journeys are new in `e2e/shell.spec.js`.
+  With those, all four projects (chromium, firefox, webkit and the installed Chrome)
+  ran three times in a row, the last two on the final code: 268 journeys, 220 passed
+  and 48 skipped each time, each skip the journey's own stated one, and none failed.
+
 ### 10. Journeys, docs, rehearsal, 2.0.0
 
 - [ ] The browser journeys below, in all four projects, twice running; the docs below,
   the changelog with its Upgrading note, the version.
+- [ ] Left by the review of slices 7 to 9: busy buttons (question 20); the end's heading
+  after the film's h1 in the page's order; the Ledger's table links at least 32px tall
+  on a phone; `adminTicket`'s 1.x fields and the film page's `viewing` (slice 9's "Not
+  done").
 - [ ] A rehearsal on a copy of the live shop's backup ([Checking a
   backup](deploying.md#checking-a-backup), `docs/deploying.md:313-349`): the preview's
   report read with you, then the upgrade, then a loan from Play to hand-back.
@@ -1696,6 +2151,7 @@ and its tape was out after the first Play. What changed:
   browser on a link anyone can use.
 - **A spent link** (journey 6) is new in `e2e/shell.spec.js`. There is no Return it
   now button until slice 7, so the page returns the tape by asking the server itself.
+  (Slice 7: it presses Return it now, and Return it on the page's question.)
 - **Journey 7.** `e2e/shell.spec.js`: "3 plays left" became the line that says how
   long the link lends for (`loanDays: 2`, "for 48 hours"), and the link "valid one day
   after its first play" became one that lends for a day. `e2e/account.spec.js`: the
@@ -1721,6 +2177,14 @@ not see that again at first, for two reasons, both mended since:
   64 each, one skipped, about a minute each, as before.
 
 Firefox, WebKit and Chrome have not been run.
+
+Slice 9 (12 Nov 2026) changed three journeys for its words, as its "Built on" note
+says (`e2e/admin.spec.js`, `e2e/shell.spec.js`, `e2e/admin-messages.spec.js`). The
+first run after the back office was rebuilt had the one-day link's step fail in both
+projects: it looked for a 24-hour clock where the journeys' browsers use a 12-hour one.
+With that mended, the chromium and webkit projects ran three times: 107 passed and 23
+skipped each time, each skip the journey's own stated one, none failed. Firefox and
+Chrome were not run as projects.
 
 ## Docs to update
 

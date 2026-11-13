@@ -39,6 +39,9 @@ export const KINDS = {
   label: { radius: 2.5, tilt: [-0.6, 0.6] },
   sticker: { radius: 2.5, tilt: [-3, -1.4] },
   tape: { radius: 1.2, tilt: [-1.1, 0.9] },
+  // A sheet off the shop's notepad ("Picked for you"), and a strip torn off the till roll.
+  note: { radius: 0.6, tilt: [0.3, 1] },
+  till: { radius: 0, tilt: [-1.4, 1.4] },
 };
 
 // ------------------------------------------------------------ the price gun
@@ -70,6 +73,22 @@ export function embossStrip(text, seed) {
   const [tl, bl] = cut();
   const [tr, br] = cut();
   return { letters, clip: `polygon(${tl}px 0, calc(100% - ${tr}px) 0, calc(100% - ${br}px) 100%, ${bl}px 100%)` };
+}
+
+// ------------------------------------------------------------ the till roll
+
+// A strip torn off the till roll on the cutter's teeth, top and bottom: `teeth` points
+// along each edge, every other one deeper, each a little off. -> a clip-path polygon.
+export function tillTeeth(seed, teeth = 44) {
+  const R = rng(`${seed}:teeth`);
+  const top = [];
+  const bottom = [];
+  for (let k = 0; k <= teeth; k++) {
+    const x = f2((k / teeth) * 100);
+    top.push(`${x}% ${f2((k % 2 ? 2.4 : 0.3) + R() * 0.8)}px`);
+    bottom.unshift(`${x}% calc(100% - ${f2((k % 2 ? 2.4 : 0.3) + R() * 0.8)}px)`);
+  }
+  return `polygon(${[...top, ...bottom].join(', ')})`;
 }
 
 // A PAL tape's length in minutes, printed on it: the shortest standard length that

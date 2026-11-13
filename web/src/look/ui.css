@@ -158,6 +158,12 @@
   .ui80 .ui-office__nav > .ui-tabs .ui-tab { width: auto; padding: 0 12px; }
   .ui80 .ui-office__main { padding-top: 20px; }
 }
+/* narrow phones: the shop's name on a row of its own, View the shop and Sign out under it
+   (the mock-up's office/notes.md), rather than squeezed beside them a word a line */
+@media (max-width: 480px) {
+  .ui80 .ui-office__nav > .ui-office__brand { grid-column: 1 / -1; grid-row: 1; }
+  .ui80 .ui-office__foot { grid-column: 1 / -1; grid-row: 2; margin-left: -8px; }
+}
 
 /* ---------- tabs: one row; on a phone it scrolls sideways, and each end fades over what is hidden past it ---------- */
 .ui80 .ui-tabs { position: relative; min-width: 0; }

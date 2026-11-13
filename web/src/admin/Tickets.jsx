@@ -1,55 +1,74 @@
-import { useId, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { api, formatAgo, formatDate, formatDayTime, plural } from '../api.js';
+import { useContext, useId, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { api, formatAgo, formatDayTime, plural } from '../api.js';
 import { Line } from '../look/ui.jsx';
+import { LinkStateMark, OutNow } from './Loans.jsx';
+import { loanDaysWords, pickHint, readyLines, sendWarnings } from './loanWords.js';
 import { CreatedLink, peopleError } from './People.jsx';
-import { CopyButton, ErrorNote, Head, LinkBox, Mark, Progress, Table, TicketBadge, dateInputToMs, useAction, useLoad } from './ui.jsx';
+import { AdminContext, CopyButton, ErrorNote, Head, LinkBox, Mark, Table, dateInputToMs, useAction, useLoad } from './ui.jsx';
 
-// Who can use a tape, in the words the back office uses everywhere.
+// Who can use a link, in the words the back office uses everywhere.
 export const ticketKind = (t) => {
   if (!t.person) return t.claimable ? 'Anyone with the link · can be kept' : 'Anyone with the link';
   return t.claimedAt ? `Only ${t.person.name} · kept from a link` : `Only ${t.person.name}, signed in`;
 };
 
-// What to send with a tape's link. A tape for one member needs their passkey.
+// What to send with a link. What a friend is sent is still "a tape" (question 11,
+// answer a): this message stays as 1.1.0 had it. A link for one member needs their passkey.
 export const ticketMessage = (t, title) =>
   t.person ? `You should watch ${title}. Here's your tape; you'll sign in with your passkey: ${t.link}` : `You should watch ${title}. Here's your tape: ${t.link}`;
+
+// A link's name in a list: your label, the member's name, or none.
+export const linkName = (t) => t.label || t.person?.name || 'Unnamed link';
 
 export function PersonDisabledBadge({ ticket }) {
   return ticket.person?.disabled ? <Mark tone="bad">Card turned off</Mark> : null;
 }
 
-// Lending answers with a code for these; everything else it says in words.
+// Sending answers with a code for these; everything else it says in words.
 const ISSUE_ERRORS = {
   'person-not-found': "That member isn't here any more. Reload the page and choose again.",
-  'person-disabled': 'Their card is turned off: turn it back on, on their page, before lending them a tape.',
+  'person-disabled': 'Their card is turned off: turn it back on, on their page, before sending them a link.',
 };
 const issueError = (e) => (e ? ISSUE_ERRORS[e] || e : null);
 
 export default function Tickets() {
   const [params, setParams] = useSearchParams();
-  // ?person=ID shows that member's tapes and starts the form with them chosen
-  // (the member's page's "Lend Sam a tape" comes here). ?kind=anyone|person.
+  const navigate = useNavigate();
+  // ?person=ID shows that member's links and starts the form with them chosen
+  // (the member's page's "Send Sam a link" comes here). ?kind=anyone|person.
   const person = params.get('person') || '';
   const kind = person ? '' : params.get('kind') || '';
   const query = person ? `?person=${encodeURIComponent(person)}` : kind ? `?kind=${encodeURIComponent(kind)}` : '';
   const { data: tickets, error, reload } = useLoad(() => api.get(`/api/admin/tickets${query}`), [query]);
+  const loans = useLoad(() => api.get('/api/admin/loans?live=1'), []);
   const films = useLoad(() => api.get('/api/admin/films'), []);
   const people = useLoad(() => api.get('/api/admin/people'), []);
   const [filmId, setFilmId] = useState('');
   const film = films.data?.find((f) => String(f.id) === String(filmId));
   const filtered = Boolean(person || kind);
   const pick = useId();
+  const out = loans.data?.loans;
 
   return (
     <>
-      <Head title="Tapes" />
-      <ErrorNote error={error} />
+      <Head
+        title="Tapes"
+        lede={
+          <>
+            Each film is one tape. Pressing Play on a link takes it out until it's due back. It comes back then, when they return it early, or when you
+            take it back.
+          </>
+        }
+      >
+        <p className="of-lede">Friends never see who has a tape: only you do.</p>
+      </Head>
+      <ErrorNote error={error || loans.error} />
 
       <div className="of-box">
         <div className="ui-field of-w">
           <label className="ui-field__label" htmlFor={pick}>
-            Lend a tape of
+            Send a link for
           </label>
           <select id={pick} className="ui-select" value={filmId} onChange={(e) => setFilmId(e.target.value)}>
             <option value="">Choose a film…</option>
@@ -61,11 +80,28 @@ export default function Tickets() {
             ))}
           </select>
         </div>
-        {film && <IssueTicket key={film.id} film={film} personId={person} onIssued={reload} bare />}
+        {film && (
+          <IssueTicket
+            key={film.id}
+            film={film}
+            personId={person}
+            onIssued={() => {
+              reload();
+              films.reload();
+            }}
+            bare
+          />
+        )}
       </div>
 
+      <h2 className="of-h2">
+        Out now {out && <span className="of-faint ui-n of-count">{out.length}</span>}
+      </h2>
+      {out && <OutNow loans={out} films={films.data ?? []} onTakeBack={(l) => navigate(`/admin/films/${l.film.id}`, { state: { takeBack: l.id } })} />}
+
+      <h2 className="of-h2">Links sent</h2>
       <TicketFilter kind={kind} person={person} people={people.data} onChange={setParams} />
-      {tickets && tickets.length === 0 && <p className="of-p of-dim">{filtered ? 'No tapes like that yet.' : 'No tapes yet.'}</p>}
+      {tickets && tickets.length === 0 && <p className="of-p of-dim">{filtered ? 'No links like that yet.' : 'No links sent yet.'}</p>}
       {tickets && tickets.length > 0 && <TicketTable tickets={tickets} showFilm />}
     </>
   );
@@ -102,8 +138,11 @@ function TicketFilter({ kind, person, people, onChange }) {
   );
 }
 
-// showKind: a faint line under For saying who can use it (not needed on a member's page).
+// Links in a list. showKind: a faint line under For saying who can use it (not needed
+// on a member's page). showFilm: the film's column (not on a film's own page), which
+// shows when each was sent instead.
 export function TicketTable({ tickets, showFilm, showKind = true }) {
+  const { site } = useContext(AdminContext);
   return (
     <Table
       head={
@@ -111,9 +150,8 @@ export function TicketTable({ tickets, showFilm, showKind = true }) {
           <th>For</th>
           {showFilm && <th>Film</th>}
           <th>State</th>
-          <th className="ui-n">Plays</th>
-          <th>Furthest</th>
-          <th>Last activity</th>
+          <th className="ui-n">Due back after</th>
+          {showFilm ? <th>Last activity</th> : <th>Sent</th>}
           <th>Link</th>
         </>
       }
@@ -121,28 +159,34 @@ export function TicketTable({ tickets, showFilm, showKind = true }) {
       {tickets.map((t) => (
         <tr key={t.id}>
           <td className="ui-title">
-            <Link to={`/admin/tickets/${t.id}`}>{t.label || t.person?.name || 'Unnamed tape'}</Link>
+            <Link to={`/admin/tickets/${t.id}`}>{linkName(t)}</Link>
             {showKind && <span className="of-kind">{ticketKind(t)}</span>}
           </td>
-          {showFilm && <td data-label="Film">{t.film?.title}</td>}
+          {showFilm && (
+            <td data-label="Film">
+              <Link to={`/admin/films/${t.film?.id}`}>{t.film?.title}</Link>
+            </td>
+          )}
           <td data-label="State">
             <span className="of-cell">
-              <TicketBadge ticket={t} />
+              <LinkStateMark ticket={t} />
               <PersonDisabledBadge ticket={t} />
             </span>
           </td>
-          <td className="ui-n" data-label="Plays">
-            {t.screeningsUsed}
-            {t.screeningLimit != null ? ` of ${t.screeningLimit}` : ' (no limit)'}
+          <td className="ui-n" data-label="Due back after">
+            {loanDaysWords(t.loanDays, site?.loanDays)}
           </td>
-          <td data-label="Furthest">
-            <Progress seconds={t.furthestSeconds} duration={t.durationSeconds} />
-          </td>
-          <td className="ui-when" data-label="Last activity">
-            {t.lastActivity ? formatAgo(t.lastActivity.at) : 'none'}
-          </td>
+          {showFilm ? (
+            <td className="ui-when" data-label="Last activity">
+              {t.lastActivity ? formatAgo(t.lastActivity.at) : 'none'}
+            </td>
+          ) : (
+            <td className="ui-when" data-label="Sent">
+              {formatDayTime(t.createdAt)}
+            </td>
+          )}
           <td className="of-td-btn" data-label="Link">
-            {t.state !== 'revoked' && <CopyButton text={t.link} label="Copy link" />}
+            {t.linkState !== 'cancelled' && t.linkState !== 'done' && <CopyButton text={t.link} label="Copy link" />}
           </td>
         </tr>
       ))}
@@ -150,18 +194,26 @@ export function TicketTable({ tickets, showFilm, showKind = true }) {
   );
 }
 
-// The form for lending tapes of one film, and the links it made. personId starts it
-// on "Only one member", with that member chosen, if their card is on.
-export function IssueTicket({ film, personId = '', onIssued, bare = false }) {
+// The form for sending links for one film, and the links it made. personId starts it
+// on "Only one member", with that member chosen, if their card is on. `film` as the
+// admin's films give it, with its tape: the form warns when the tape is out or the film
+// has links waiting for it, and when the member chosen already has one (question 9).
+// Sending a link never takes the tape: pressing Play does.
+// `links`: the film's links, when the page has them already (a film's page), so the
+// warnings follow its list; otherwise the form reads them itself.
+export function IssueTicket({ film, links: given = null, personId = '', onIssued, bare = false }) {
+  const { site } = useContext(AdminContext);
   const people = useLoad(() => api.get('/api/admin/people'), []);
-  const [form, setForm] = useState({ label: '', screeningLimit: '1', startBy: '', daysAfterFirstPlay: '', count: '1', claimable: false });
+  // The film's links, for who has one waiting.
+  const links = useLoad(() => (given ? Promise.resolve(given) : api.get(`/api/admin/tickets?film=${film.id}`)), [film.id, given]);
+  const [form, setForm] = useState({ label: '', startBy: '', loanDays: String(site?.loanDays ?? 3), pickNote: '', count: '1', claimable: false });
   const [who, setWho] = useState({ kind: personId ? 'person' : 'anyone', personId: personId ? String(personId) : '' });
-  const [issued, setIssued] = useState(null); // { tickets, person }
+  const [issued, setIssued] = useState(null); // { tickets, person, loanDays, startBy }
   const action = useAction();
   const id = useId();
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
-  // Members whose card is turned off can't be lent tapes, so they aren't offered.
+  // Members whose card is turned off can't be sent links, so they aren't offered.
   const enabled = people.data?.filter((p) => !p.disabled);
   const noPeople = enabled?.length === 0;
   const chosen = enabled?.find((p) => String(p.id) === who.personId) || null;
@@ -170,36 +222,47 @@ export function IssueTicket({ film, personId = '', onIssued, bare = false }) {
   const preselectFailed = Boolean(enabled && who.personId && !chosen);
   const forPerson = who.kind === 'person' && !noPeople && !preselectFailed;
   const count = forPerson ? 1 : Number(form.count) || 1;
+  // Links that haven't lent and could: waiting for the tape, or for Play.
+  const waiting = (links.data ?? []).filter((t) => ['unopened', 'opened', 'waiting'].includes(t.linkState));
+  const warnings = sendWarnings(film, { waiting, person: forPerson ? chosen : null });
 
   async function submit(e) {
     e.preventDefault();
     if (forPerson && !chosen) return;
+    const loanDays = form.loanDays === '' ? null : Number(form.loanDays);
+    const startBy = dateInputToMs(form.startBy);
     const r = await action.run(() =>
       api.post('/api/admin/tickets', {
         filmId: film.id,
         label: form.label,
-        screeningLimit: form.screeningLimit === '' ? null : Number(form.screeningLimit),
-        startBy: dateInputToMs(form.startBy),
-        daysAfterFirstPlay: form.daysAfterFirstPlay === '' ? null : Number(form.daysAfterFirstPlay),
+        startBy,
+        loanDays,
+        pickNote: form.pickNote,
         count,
         ...(forPerson ? { personId: chosen.id } : { claimable: form.claimable }),
       }),
     );
     if (r) {
-      setIssued({ tickets: r, person: forPerson ? chosen : null });
-      setForm({ ...form, label: '' });
+      setIssued({ tickets: r, person: forPerson ? chosen : null, loanDays: r[0]?.loanDays ?? loanDays, startBy });
+      setForm({ ...form, label: '', pickNote: '' });
       onIssued?.();
       people.reload();
+      links.reload();
     }
   }
 
   let buttonText;
-  if (!forPerson) buttonText = `Lend ${count > 1 ? `${count} tapes` : 'a tape'} for anyone with the link`;
-  else if (chosen) buttonText = `Lend a tape to ${chosen.name} only`;
+  if (!forPerson) buttonText = `Send ${count > 1 ? `${count} links` : 'a link'} for anyone with the link`;
+  else if (chosen) buttonText = `Send a link to ${chosen.name} only`;
   else buttonText = "Choose who it's for";
 
   const body = (
     <form onSubmit={submit}>
+      {warnings.map((w) => (
+        <Line key={w.text} kind={w.kind} lead={w.lead}>
+          {w.text}
+        </Line>
+      ))}
       <ErrorNote error={issueError(action.error)} />
       <fieldset className="ui-fieldset of-w">
         <legend>Who can use it?</legend>
@@ -207,7 +270,7 @@ export function IssueTicket({ film, personId = '', onIssued, bare = false }) {
           <input type="radio" name={`${id}-who`} checked={!forPerson} onChange={() => setWho({ ...who, kind: 'anyone' })} />
           <span>
             <b>Anyone with the link</b>
-            <small>Like a real tape: whoever has the link can use it, on any device, TVs included.</small>
+            <small>Whoever has the link can use it, on any device, TVs included. If they press Play and take the tape, the borrower is that browser.</small>
           </span>
         </label>
         {!forPerson && <KeepBox checked={form.claimable} onChange={(claimable) => setForm({ ...form, claimable })} />}
@@ -266,38 +329,44 @@ export function IssueTicket({ film, personId = '', onIssued, bare = false }) {
             )}
           </label>
           <input id={`${id}-label`} className="ui-input" value={form.label} onChange={set('label')} placeholder={forPerson ? '' : 'e.g. Sam'} maxLength={200} />
-          <p className="ui-field__hint">{forPerson ? 'Only you see this.' : "Only you see this. It's a label, not a check: whoever has the link can use the tape."}</p>
+          <p className="ui-field__hint">{forPerson ? 'Only you see this.' : "Only you see this. It's a label, not a check: whoever has the link can use it."}</p>
         </div>
         <div className="ui-field">
-          <label className="ui-field__label" htmlFor={`${id}-plays`}>
-            Plays
+          <label className="ui-field__label" htmlFor={`${id}-days`}>
+            Due back after (days)
           </label>
-          <input id={`${id}-plays`} className="ui-input ui-input--num" type="number" min="1" max="1000" value={form.screeningLimit} onChange={set('screeningLimit')} placeholder="No limit" />
-          <p className="ui-field__hint">Each press of Play uses one; pausing and coming back doesn't. Leave empty for no limit.</p>
+          <input id={`${id}-days`} className="ui-input ui-input--num" type="number" min="1" max="30" required value={form.loanDays} onChange={set('loanDays')} aria-describedby={`${id}-days-h`} />
+          <p className="ui-field__hint" id={`${id}-days-h`}>
+            Counted from when they press Play and take the tape. They can pause and come back until then, on one device at a time. From 1 to 30.
+          </p>
         </div>
         <div className="ui-field">
           <label className="ui-field__label" htmlFor={`${id}-start`}>
             Start by <small>(optional)</small>
           </label>
-          <input id={`${id}-start`} className="ui-input" type="date" value={form.startBy} onChange={set('startBy')} />
-          <p className="ui-field__hint">If they haven't pressed Play by the end of this day, the tape expires.</p>
-        </div>
-        <div className="ui-field">
-          <label className="ui-field__label" htmlFor={`${id}-days`}>
-            Days after the first play <small>(optional)</small>
-          </label>
-          <input id={`${id}-days`} className="ui-input ui-input--num" type="number" min="1" max="3650" value={form.daysAfterFirstPlay} onChange={set('daysAfterFirstPlay')} placeholder="No limit" />
-          <p className="ui-field__hint">Counted from when they first press Play, not when they open the link.</p>
+          <input id={`${id}-start`} className="ui-input" type="date" value={form.startBy} onChange={set('startBy')} aria-describedby={`${id}-start-h`} />
+          <p className="ui-field__hint" id={`${id}-start-h`}>
+            If they haven't taken the tape by the end of this day, the link stops working. These days don't count down while the tape is out with someone else.
+          </p>
         </div>
         {!forPerson && (
           <div className="ui-field">
             <label className="ui-field__label" htmlFor={`${id}-count`}>
-              How many tapes
+              How many links
             </label>
             <input id={`${id}-count`} className="ui-input ui-input--num" type="number" min="1" max="50" value={form.count} onChange={set('count')} />
-            <p className="ui-field__hint">Each gets its own link.</p>
+            <p className="ui-field__hint">Each gets its own link. A film is one tape: the first of them to press Play takes it.</p>
           </div>
         )}
+      </div>
+      <div className="ui-field of-w">
+        <label className="ui-field__label" htmlFor={`${id}-pick`}>
+          Picked for you <small>(optional)</small>
+        </label>
+        <textarea id={`${id}-pick`} className="ui-textarea" rows={3} maxLength={2000} value={form.pickNote} onChange={set('pickNote')} aria-describedby={`${id}-pick-h`} />
+        <p className="ui-field__hint" id={`${id}-pick-h`}>
+          {pickHint(forPerson ? chosen : null)}
+        </p>
       </div>
       <div className="ui-btns">
         <button className="ui-btn ui-btn--primary" disabled={action.busy || (forPerson && !chosen)}>
@@ -307,13 +376,16 @@ export function IssueTicket({ film, personId = '', onIssued, bare = false }) {
     </form>
   );
 
+  const ready = issued && readyLines(film, { days: issued.loanDays, startBy: issued.startBy });
   return (
     <>
       {bare ? body : <div className="of-box">{body}</div>}
-      {issued?.person && <IssuedForPerson key={issued.tickets[0].id} ticket={issued.tickets[0]} person={issued.person} film={film} onLinkCreated={people.reload} />}
+      {issued?.person && (
+        <IssuedForPerson key={issued.tickets[0].id} ticket={issued.tickets[0]} person={issued.person} film={film} ready={ready} onLinkCreated={people.reload} />
+      )}
       {issued && !issued.person && (
-        <Line kind="done" block role="status" className="of-ready" lead={`${plural(issued.tickets.length, 'tape')} ready.`}>
-          Send each link to the person it's for.
+        <Line kind="done" block role="status" className="of-ready" lead={`${plural(issued.tickets.length, 'link')} ready.`}>
+          Open Matte doesn't send {issued.tickets.length === 1 ? 'it' : 'them'}: copy each link into a message to the person it's for.
           {issued.tickets.map((t) => (
             <div key={t.id}>
               {t.label && <p className="of-ready__for">For {t.label}</p>}
@@ -321,31 +393,39 @@ export function IssueTicket({ film, personId = '', onIssued, bare = false }) {
             </div>
           ))}
           {film && !film.published && <p>The film is off the shelf: put it on the shelf before the links will open.</p>}
-          {issued.tickets[0]?.startBy && <p className="of-dim">Start by {formatDate(issued.tickets[0].startBy)}.</p>}
+          {ready.map((l) => (
+            <p key={l} className="of-dim">
+              {l}
+            </p>
+          ))}
         </Line>
       )}
     </>
   );
 }
 
-// "Let them keep it on their membership card", for a tape for anyone with the link.
+// "Let them keep it on their membership card", for a link anyone can use. Only before
+// Play, and while the tape is in (question 2): a tape never moves with its link.
 export function KeepBox({ checked, onChange, className = 'of-under' }) {
   return (
     <label className={`ui-check ${className}`}>
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <span>
         Let them keep it on their membership card
-        <small>A member can keep it, so it's on every device they sign in on. Whoever keeps it first takes it from everyone else with the link.</small>
+        <small>
+          A member can keep it, so it's on every device they sign in on, until it has taken the tape out. Whoever keeps it first takes it from everyone
+          else with the link.
+        </small>
       </span>
     </label>
   );
 }
 
-// A tape for one member. If they've never set up a passkey, the tape's link alone
-// would only show them a sign-in page, so offer a setup link that opens the film.
-// A setup link created here cancels any link already waiting, so the members list is
-// refreshed afterwards: the next tape lent then knows a link is out.
-function IssuedForPerson({ ticket: t, person, film, onLinkCreated }) {
+// A link for one member. If they've never set up a passkey, the link alone would only
+// show them a sign-in page, so offer a setup link that opens the film. A setup link
+// created here cancels any link already waiting, so the members list is refreshed
+// afterwards: the next link sent then knows a setup link is out.
+function IssuedForPerson({ ticket: t, person, film, ready, onLinkCreated }) {
   const name = person.name;
   const [created, setCreated] = useState(null); // the setup link, shown this once; 'done' once dismissed
   const action = useAction();
@@ -360,11 +440,15 @@ function IssuedForPerson({ ticket: t, person, film, onLinkCreated }) {
 
   return (
     <div className="of-ready">
-      <Line kind="done" block role="status" lead={`Tape for ${name} ready.`}>
-        It only works when {name} is signed in.
+      <Line kind="done" block role="status" lead={`Link for ${name} ready.`}>
+        It only works when {name} is signed in. Open Matte doesn't send it: copy it into a message to {name}.
         <LinkBox link={t.link} message={ticketMessage(t, film.title)} />
         {film && !film.published && <p>The film is off the shelf: put it on the shelf before the link will open.</p>}
-        {t.startBy && <p className="of-dim">Start by {formatDate(t.startBy)}.</p>}
+        {ready.map((l) => (
+          <p key={l} className="of-dim">
+            {l}
+          </p>
+        ))}
       </Line>
 
       {!person.setUp && (
@@ -385,7 +469,7 @@ function IssuedForPerson({ ticket: t, person, film, onLinkCreated }) {
             <Line kind="info">
               <p>
                 {name} hasn't set up a passkey yet, so this link would only ask them to sign in. Send a setup link instead: {name} creates a passkey with it,
-                then goes straight to {film.title}.{person.linkWaiting ? " The link that's waiting stops working." : ''}
+                then goes straight to {film.title}.{person.linkWaiting ? " The setup link that's waiting stops working." : ''}
               </p>
               <div className="ui-btns">
                 <button type="button" className="ui-btn" onClick={createSetupLink} disabled={action.busy}>

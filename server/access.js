@@ -97,6 +97,8 @@ export function createAccess(db, settings) {
       UPDATE tickets SET person_id = ?, claimed_at = ?, claimable = 0
       WHERE id = ? AND person_id IS NULL AND claimable = 1 AND revoked_at IS NULL`),
     setPerson: db.prepare('UPDATE tickets SET person_id = ?, claimed_at = NULL, claimable = ? WHERE id = ?'),
+    // "Picked for you" with it, when the admin changes the note in the same step.
+    setPickNote: db.prepare('UPDATE tickets SET pick_note = ? WHERE id = ?'),
     // Cancelling a link, and undoing that. Each changes a row once, so each is logged once.
     revoke: db.prepare('UPDATE tickets SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL'),
     restore: db.prepare('UPDATE tickets SET revoked_at = NULL WHERE id = ? AND revoked_at IS NOT NULL'),
@@ -242,7 +244,6 @@ export function createAccess(db, settings) {
     finish: db.prepare('UPDATE screenings SET finished_at = ? WHERE id = ? AND finished_at IS NULL'),
     // A tape that is returned or taken back is playing nowhere from that moment.
     stop: db.prepare('UPDATE screenings SET active_until = MIN(active_until, ?) WHERE id = ?'),
-    voidScreening: db.prepare('UPDATE screenings SET voided_at = ? WHERE id = ? AND voided_at IS NULL'),
     event: db.prepare(`
       INSERT INTO events (at, type, film_id, ticket_id, session_hash, screening_id, position, detail, person_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
@@ -1005,17 +1006,6 @@ export function createAccess(db, settings) {
     return { ticket: q.ticket.get(t.id), moved };
   }
 
-  // Giving a play back was 1.x's way to let a link play again. A loan's playback
-  // can't be given back: a link lends once, and the tape's own end says how it came
-  // back. A play from 1.x that no loan names still can, until the button goes.
-  function voidScreening(screeningId, now = Date.now()) {
-    const s = q.screening.get(screeningId);
-    if (!s) return { error: 'not-found' };
-    if (q.loanByScreening.get(s.id)) return { error: 'tape-out' };
-    q.voidScreening.run(now, s.id);
-    return { screening: q.screening.get(s.id) };
-  }
-
   // Why a loan that is no longer live ended, as its borrower's player is told.
   const endedCode = (loan) => (loan.ended_how === 'returned' || loan.ended_how === 'taken-back' ? loan.ended_how : 'due');
 
@@ -1101,7 +1091,12 @@ export function createAccess(db, settings) {
   // back on a release, unless they were signed out of it meanwhile. The caller
   // checks that the person exists and is enabled. Not while the link has the tape:
   // a tape never changes hands with its link, so the admin takes it back first.
-  function setTicketPerson(ticketId, personId, { claimable = false } = {}, now = Date.now()) {
+  // pickNote (question 18, answer c): the link's "Picked for you" note as it is to be
+  // once the link has changed hands, null to take it away, undefined to leave it as
+  // it is. It is written only when the link does change hands, in the same step, so a
+  // refused give or release leaves the note as it was, and the new holder never reads
+  // a note that was meant to go.
+  function setTicketPerson(ticketId, personId, { claimable = false, pickNote } = {}, now = Date.now()) {
     return tx(
       db,
       () => {
@@ -1113,6 +1108,9 @@ export function createAccess(db, settings) {
         closeStale(t.film_id, now);
         if (tapeOf(t, now)) return { error: 'tape-out' };
         q.setPerson.run(personId, keepable, t.id);
+        // Only when it changes hands: a link anyone can use made keepable, or no longer,
+        // is still for whoever has it, and keeps its note.
+        if (pickNote !== undefined && from !== personId) q.setPickNote.run(pickNote, t.id);
         const base = { filmId: t.film_id, ticketId: t.id };
         if (from != null && from !== personId) logEvent('ticket-released', { ...base, personId: from, detail: { to: personId == null ? 'anyone' : 'person' } }, now);
         if (personId != null && from !== personId) logEvent('ticket-given', { ...base, personId, detail: { from: from == null ? 'anyone' : 'person' } }, now);
@@ -1125,7 +1123,7 @@ export function createAccess(db, settings) {
   return {
     ticketStatus, effectiveStartBy, filmAccess, mayStream, startScreening, heartbeat, usableTickets, canKeep, keep, setTicketPerson, logEvent,
     endLoansOf, sweep, startSweeper, sweeperStatus,
-    returnTape, takeBack, cancelTicket, restoreTicket, forgetBrowsers, setLoanDays, voidScreening,
+    returnTape, takeBack, cancelTicket, restoreTicket, forgetBrowsers, setLoanDays,
     // For the admin alone: who has each tape.
     linkState, startByPaused, startByReader, adminLoans, filmTape, linkCounts, filmLending, tapesOut, tapeForPreview,
     // For a viewer: never who.

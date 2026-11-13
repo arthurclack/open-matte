@@ -4,6 +4,7 @@ import { api, formatAgo, formatDateTime, formatDayTime, formatMonthYear, plural 
 import { Line } from '../look/ui.jsx';
 import { groupNumber } from '../membershipCard.js';
 import { CreatedLink, PasskeysProblem, PersonBadge, peopleError } from './People.jsx';
+import { RESPONSE_WORDS, browsersTapesWords, cardOffWords, endedWords } from './loanWords.js';
 import { TicketTable } from './Tickets.jsx';
 import { Back, DoneNote, ErrorNote, Head, Mark, Table, describeEvent, linkLifetime, useAction, useLoad } from './ui.jsx';
 
@@ -57,7 +58,7 @@ export default function PersonDetail() {
     else reload();
     done?.(r);
     events.reload();
-    tickets.reload(); // turning a card off or on changes how their tapes show
+    tickets.reload(); // turning a card off or on changes how their links show
   }
 
   const createLink = (body) =>
@@ -75,7 +76,12 @@ export default function PersonDetail() {
   }
 
   function signOutEverywhere() {
-    if (!window.confirm(`Sign ${name} out of every browser? Playback stops on them. ${name}'s passkeys still work, so they can sign in again.`)) return;
+    if (
+      !window.confirm(
+        `Sign ${name} out of every browser? Playback stops on them. ${name}'s passkeys still work, so they can sign in again. ${browsersTapesWords(name)}`,
+      )
+    )
+      return;
     act(
       () => api.post(`/api/admin/people/${p.id}/sign-out`),
       (r) => setNotice(`Signed ${name} out of ${plural(r.signedOut, 'browser')}.`),
@@ -83,10 +89,7 @@ export default function PersonDetail() {
   }
 
   function disable() {
-    const text =
-      `Turn ${name}'s card off? ${name} is signed out everywhere and can't sign in, and tapes only for ${name} stop working from the next request. ` +
-      `Tapes for anyone with the link aren't affected. It doesn't remove passkeys: for a lost or stolen device, take back the keys instead (Help ${name} sign in again).`;
-    if (!window.confirm(text)) return;
+    if (!window.confirm(cardOffWords(name))) return;
     act(() => api.post(`/api/admin/people/${p.id}/disable`));
   }
 
@@ -134,7 +137,7 @@ export default function PersonDetail() {
               ))}
             {!p.disabled && (
               <Link className="ui-btn" to={`/admin/tickets?person=${p.id}`}>
-                Lend {name} a tape
+                Send {name} a link
               </Link>
             )}
             <button type="button" className="ui-btn" onClick={signOutEverywhere} disabled={action.busy || !p.browsers.length}>
@@ -316,11 +319,14 @@ export default function PersonDetail() {
       )}
 
       <h2 className="of-h2">Tapes</h2>
+      <PersonLoans person={p} />
+
+      <h2 className="of-h2">Links sent to {name}</h2>
       <ErrorNote error={tickets.error} />
       {tickets.data?.length > 0 && <TicketTable tickets={tickets.data} showFilm showKind={false} />}
-      {tickets.data?.length === 0 && <p className="of-p of-dim">No tapes only for {name} yet. Tapes for anyone with the link aren't listed here.</p>}
+      {tickets.data?.length === 0 && <p className="of-p of-dim">No links only for {name} yet. Links anyone can use aren't listed here.</p>}
 
-      <h2 className="of-h2">Links</h2>
+      <h2 className="of-h2">Setup and recovery links</h2>
       {p.links.length === 0 ? (
         <p className="of-p of-dim">No setup or recovery links yet.</p>
       ) : (
@@ -383,8 +389,8 @@ export default function PersonDetail() {
   );
 }
 
-// Each film they have a tape of their own for, newest first. The server works it out
-// from those tapes and their plays, so clearing old activity never changes it.
+// Each film they have a link of their own for, newest first. The server works it out
+// from those links and their plays, so clearing old activity never changes it.
 function FilmsWatched({ person: p }) {
   const when = (ms) => (ms ? formatDateTime(ms) : <span className="of-faint">Not yet</span>);
   return (
@@ -402,7 +408,7 @@ function FilmsWatched({ person: p }) {
         <tr key={v.film.id}>
           <td className="ui-title">
             <Link to={`/admin/films/${v.film.id}`}>{v.film.title}</Link>
-            {v.tickets > 1 && <span className="of-kind">{plural(v.tickets, 'tape')}</span>}
+            {v.tickets > 1 && <span className="of-kind">{plural(v.tickets, 'link')}</span>}
           </td>
           <td className="ui-when" data-label="Opened">
             {when(v.openedAt)}
@@ -420,6 +426,47 @@ function FilmsWatched({ person: p }) {
           <td className="ui-when" data-label="Finished">
             {when(v.finishedAt)}
           </td>
+        </tr>
+      ))}
+    </Table>
+  );
+}
+
+// The tapes they have borrowed on their own links, newest first: out now with its
+// due-back date, or back in and how. A tape taken on a link anyone can use while
+// signed in is a browser's, and is under Tapes, not here.
+function PersonLoans({ person: p }) {
+  if (!p.loans?.length) return <p className="of-p of-dim">No tapes borrowed on links for {p.name} yet.</p>;
+  return (
+    <Table
+      head={
+        <>
+          <th>Film</th>
+          <th>Took it</th>
+          <th>Due back, or back in</th>
+          <th>Response</th>
+        </>
+      }
+    >
+      {p.loans.map((l) => (
+        <tr key={l.id}>
+          <td className="ui-title">
+            <Link to={`/admin/films/${l.film.id}`}>{l.film.title}</Link>
+          </td>
+          <td className="ui-when" data-label="Took it">
+            {formatDateTime(l.takenAt)}
+          </td>
+          <td data-label="Due back, or back in">
+            {l.live ? (
+              <Mark tone="info">Out, due back {formatDayTime(l.dueAt)}</Mark>
+            ) : (
+              <span className="of-cell">
+                <Mark tone="off">Back in {formatDateTime(l.endedAt)}</Mark>
+                <small>{endedWords(l)}</small>
+              </span>
+            )}
+          </td>
+          <td data-label="Response">{l.response ? <Link to="/admin/responses">{RESPONSE_WORDS[l.response.kind]}</Link> : <span className="of-faint">–</span>}</td>
         </tr>
       ))}
     </Table>
@@ -498,7 +545,8 @@ function HelpSignInPanel({ person: p, busy, onCreate, onClose }) {
   function create() {
     if (reset && (keys || browsers)) {
       const what = [keys && `take back ${theirPasskeys(name, keys)}`, browsers && `sign ${name} out of ${plural(browsers, 'browser')}`].filter(Boolean).join(' and ');
-      if (!window.confirm(`This will ${what} straight away. Continue?`)) return;
+      // Signing their browsers out sends back a tape one took out on a link anyone can use.
+      if (!window.confirm(`This will ${what} straight away.${browsers ? ` ${browsersTapesWords(name)}` : ''} Continue?`)) return;
     }
     onCreate({ hours, reset });
   }

@@ -2,6 +2,7 @@ import { useContext, useEffect, useId, useState } from 'react';
 import { api, formatBytes, formatDateTime, plural } from '../api.js';
 import { Line } from '../look/ui.jsx';
 import { askHost, pickedBy } from '../look/words.js';
+import { signOutEveryoneWords } from './loanWords.js';
 import Branding from './Branding.jsx';
 import { AdminContext, DoneNote, ErrorNote, Head, Mark, TmdbCredit, clearedCounts, lastClearedText, useAction, useLoad } from './ui.jsx';
 
@@ -54,14 +55,18 @@ export default function Settings() {
       setData(r);
       setForm(mainForm(r));
       // The back office's brand shows the shop's name; a staff pick's hint, your name.
-      setSite((site) => ({ ...site, cinemaName: r.cinemaName, ownerName: r.ownerName }));
+      // The send form starts with the shop's days.
+      setSite((site) => ({ ...site, cinemaName: r.cinemaName, ownerName: r.ownerName, loanDays: r.loanDays }));
       setNotice('Saved.');
     }
   }
 
   async function expireAll() {
-    if (!window.confirm('Sign out every friend and member? They\'ll need to open their tape link or sign in again. Tapes and plays are not affected.')) return;
     setEveryoneNotice(null);
+    // Which tapes go back is asked at the moment of asking: a browser's tape goes back.
+    const out = await everyone.run(() => api.get('/api/admin/loans?live=1'));
+    if (!out) return;
+    if (!window.confirm(signOutEveryoneWords(out.loans))) return;
     const r = await everyone.run(() => api.post('/api/admin/sessions/expire-all'));
     // The server counts only browsers that were still signed in.
     if (r) setEveryoneNotice(r.expired ? `Signed out ${plural(r.expired, 'browser')}.` : 'No browsers were signed in.');
@@ -122,7 +127,7 @@ export default function Settings() {
             aria-describedby={field('welcome-h')}
           />
           <p className="ui-field__hint" id={field('welcome-h')}>
-            Shown to visitors who don't have a tape.
+            Shown to visitors who don't have a link.
           </p>
         </div>
         <div className="ui-field">
@@ -140,7 +145,8 @@ export default function Settings() {
             aria-describedby={field('loan-h')}
           />
           <p className="ui-field__hint" id={field('loan-h')}>
-            How many days a friend has a tape, counted from the moment they press Play. A tape that is already out keeps its date.
+            What “Send a link” starts with: how many days a friend has the tape, counted from the moment they press Play. A link already sent keeps
+            its own days, and a tape that is out keeps its date.
           </p>
         </div>
         <label className="ui-check">
@@ -177,7 +183,10 @@ export default function Settings() {
         </h2>
         <ErrorNote error={everyone.error} />
         <DoneNote>{everyoneNotice}</DoneNote>
-        <p className="of-p of-dim">Tapes keep working: people open their link or sign in again.</p>
+        <p className="of-p of-dim">
+          Links keep working: people open their link or sign in again. A tape out to a browser on a link anyone can use goes back to the shop, and that
+          link won't take it out again. A tape out to a member on their own link stays theirs.
+        </p>
         <div className="ui-btns">
           <button type="button" className="ui-btn ui-btn--danger" onClick={expireAll} disabled={everyone.busy}>
             Sign out every friend and member
@@ -423,7 +432,7 @@ function Backups() {
 
 const RETENTION = [
   ['retainProgressDays', 'Progress reports', 1, 365, 'Where a film had got to, every 5 minutes while playing.'],
-  ['retainEventsDays', 'Other events', 30, 3650, 'Opened, played, finished, sign-ins, links.'],
+  ['retainEventsDays', 'Other events', 30, 3650, 'Links sent, lent, back in, opened, played, finished, sign-ins.'],
   ['retainSessionsDays', 'Signed-out browsers', 1, 365, 'Counted from when they signed out or expired, and kept while any event still names them.'],
 ];
 const retentionForm = (s) => Object.fromEntries(RETENTION.map(([k]) => [k, String(s[k] ?? '')]));
@@ -467,7 +476,7 @@ function Retention({ settings, onSaved }) {
   }
 
   async function clearNow() {
-    if (!window.confirm(`Clear old records now? By the saved settings that's ${clearedCounts(p, 'signed-out browser')}. Tapes and plays don't change.`)) return;
+    if (!window.confirm(`Clear old records now? By the saved settings that's ${clearedCounts(p, 'signed-out browser')}. Links and loans don't change.`)) return;
     setNotice(null);
     const r = await action.run(() => api.post('/api/admin/retention/run'));
     if (r) {
@@ -479,8 +488,8 @@ function Retention({ settings, onSaved }) {
   return box(
     <>
       <p className="of-p of-dim">
-        Old activity is cleared every day, and a minute after the server starts. Clearing never changes a tape: its plays, limits, “finished”, resume
-        positions and deadlines are kept with it. Backups keep what they had until they expire.
+        Old activity is cleared every day, and a minute after the server starts. Clearing never changes a link or a loan: who had the tape, when it
+        went out and came back, “finished”, positions, due-back dates and responses are kept with them. Backups keep what they had until they expire.
       </p>
       <ErrorNote error={action.error} />
       <DoneNote>{notice}</DoneNote>

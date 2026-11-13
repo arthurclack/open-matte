@@ -161,7 +161,8 @@ describe('a milestone 1 database', () => {
     const mine = me.tickets[0].ticket;
     assert.deepEqual([mine.state, mine.tape, mine.loan.position, mine.loan.toBrowser], ['ok', 'yours', 42, true]);
     assert.equal(mine.dueBack, rows(db, 'screenings')[0].resumable_until);
-    assert.deepEqual([mine.openScreening.position, mine.openScreening.resumableUntil, mine.expiresAt], [42, mine.dueBack, mine.dueBack]);
+    // 1.1.0's expiresAt and openScreening went with slice 7, which rebuilt its pages.
+    assert.deepEqual([mine.expiresAt, mine.openScreening], [undefined, undefined]);
     for (const url of ['/media/arrival/hls/master.m3u8', '/media/arrival/hls/v_h264_720/index.m3u8', '/media/arrival/hls/v_h264_720/seg_0.m4s', '/media/arrival/subtitles/en.vtt']) {
       assert.equal((await get(url)).status, 200, url);
     }

@@ -136,7 +136,7 @@ export function adminRoutes(deps) {
   //   links    { live, waiting, total }: its links that have the tape or could still
   //            take it, those of them that haven't lent, and every link sent;
   //   lending  how it has been lent, counted from links, loans and responses.
-  // tickets.active is 1.1.0's, until its Films page is rebuilt.
+  // (1.1.0's tickets.active went with its Films page, in slice 9: Links is links.live.)
   function adminFilm(f, { viewing = true, now = Date.now(), tape = access.filmTape(f, now), links = access.linkCounts('film_id', { film: f.id }, now).get(f.id) } = {}) {
     const media = filmMedia(f);
     const artwork = filmArtwork(f);
@@ -189,19 +189,13 @@ export function adminRoutes(deps) {
   });
 
   router.get('/api/admin/films', (req, res) => {
-    const counts = new Map(
-      db.prepare('SELECT film_id, COUNT(*) AS total, SUM(revoked_at IS NULL) AS active FROM tickets GROUP BY film_id').all().map((r) => [r.film_id, r]),
-    );
     const films = db.prepare('SELECT * FROM films ORDER BY published DESC, sort_order, title COLLATE NOCASE').all();
     // Every tape that is out and every link, read once for the whole list.
     const now = Date.now();
     const out = new Map(access.adminLoans({ live: true }, now).map((l) => [l.film.id, l]));
     const links = access.linkCounts('film_id', {}, now);
     res.json(
-      films.map((f) => ({
-        ...adminFilm(f, { viewing: false, now, tape: access.filmTape(f, now, out.get(f.id) ?? null), links: links.get(f.id) ?? null }),
-        tickets: { total: counts.get(f.id)?.total ?? 0, active: counts.get(f.id)?.active ?? 0 },
-      })),
+      films.map((f) => adminFilm(f, { viewing: false, now, tape: access.filmTape(f, now, out.get(f.id) ?? null), links: links.get(f.id) ?? null })),
     );
   });
 
@@ -462,8 +456,15 @@ export function adminRoutes(deps) {
     };
   }
 
-  // screeningLimit and daysAfterFirstPlay, which 1.x's forms still send, are accepted
-  // and ignored: a link lends once, for its loan's days, and nothing reads the two.
+  // screeningLimit and daysAfterFirstPlay, 1.x's play limit and days after the first
+  // play, were accepted and ignored until the back office's pages were rebuilt (slice
+  // 9), and are refused since: a link lends once, for its loan's days (loanDays), and a
+  // request that asks for a limit is told so rather than given a link without one.
+  const RETIRED_FIELDS = ['screeningLimit', 'daysAfterFirstPlay'];
+  function noRetiredFields(b) {
+    const k = RETIRED_FIELDS.find((f) => f in b);
+    if (k) throw bad(`${k} went with version 2: a link lends once, for its days (loanDays)`);
+  }
   // pickNote is "Picked for you": a column of its own on the link, so saving it never
   // touches the film's staff pick (films.recommendation) or the link's label, and
   // saving either of those never touches it. Only a save that names it changes it.
@@ -507,8 +508,9 @@ export function adminRoutes(deps) {
 
   router.post('/api/admin/tickets', (req, res) => {
     const b = req.body || {};
+    noRetiredFields(b);
     const film = getFilm(b.filmId);
-    const count = optInt(b.count, 'Number of tapes', { min: 1, max: 50 }) ?? 1;
+    const count = optInt(b.count, 'Number of links', { min: 1, max: 50 }) ?? 1;
     const sets = [];
     const args = [];
     ticketFields({ label: b.label, startBy: b.startBy }, sets, args);
@@ -522,7 +524,7 @@ export function adminRoutes(deps) {
     // A ticket only one person can use, signed in with their passkey.
     if (b.personId != null) {
       const person = enabledPerson(b.personId);
-      if (count !== 1) throw bad('One tape at a time for a member');
+      if (count !== 1) throw bad('One link at a time for a member');
       sets.push('person_id = ?'), args.push(person.id);
     }
     claimableField(b, b.personId, sets, args);
@@ -564,8 +566,7 @@ export function adminRoutes(deps) {
   });
 
   // What access.js refuses is answered 409 with its code: tape-out (the link has the
-  // tape, so it can't be given, released or forgotten in its browsers, and its
-  // playback can't be given back), lent-once (a link that has lent can't be
+  // tape, so it can't be given, released or forgotten in its browsers), lent-once (a link that has lent can't be
   // restored), would-end-loan (a due date moved into the past) and not-out.
   const allowed = (r) => {
     if (r.error) throw bad(r.error, 409);
@@ -578,6 +579,7 @@ export function adminRoutes(deps) {
   router.patch('/api/admin/tickets/:id', (req, res) => {
     const t = getTicket(req.params.id);
     const b = req.body || {};
+    noRetiredFields(b);
     const sets = [];
     const args = [];
     ticketFields(b, sets, args);
@@ -600,13 +602,17 @@ export function adminRoutes(deps) {
   // Gives the ticket to one person ({ personId }), or lets anyone with the link use
   // it again ({ personId: null, claimable }). Browsers that opened the link lose it
   // to a person, and get it back on a release. Refused while the link has the tape.
+  // pickNote, when named, is the link's "Picked for you" note for its new holder
+  // (null, or nothing but spaces, takes it away), written in the same step and only
+  // if the link changes hands (question 18, answer c). Left out, the note stays.
   router.post('/api/admin/tickets/:id/holder', (req, res) => {
     const t = getTicket(req.params.id);
     const b = req.body || {};
     if (!('personId' in b)) throw bad('Say who gets it: personId, or null for anyone with the link');
+    const pickNote = 'pickNote' in b ? pickNoteOf(b.pickNote) : undefined;
     const personId = b.personId == null ? null : enabledPerson(b.personId).id;
     const claimable = 'claimable' in b ? bool(b.claimable, 'claimable') : false;
-    const r = allowed(access.setTicketPerson(t.id, personId, { claimable }));
+    const r = allowed(access.setTicketPerson(t.id, personId, { claimable, pickNote }));
     res.json(adminTicket(req, r.ticket));
   });
 
@@ -667,13 +673,9 @@ export function adminRoutes(deps) {
     });
   });
 
-  // Gives a 1.x play back. It stays in the history. A loan's playback is refused.
-  router.post('/api/admin/screenings/:id/void', (req, res) => {
-    const r = access.voidScreening(Number(req.params.id));
-    if (r.error === 'not-found') throw bad('Play not found', 404);
-    allowed(r);
-    res.json(adminTicket(req, getTicket(r.screening.ticket_id)));
-  });
+  // Giving a play back (1.x's POST /api/admin/screenings/:id/void) went with its
+  // button in version 2, slice 9: a link lends once, and a loan's own end says how
+  // its tape came back. The route is gone, so it answers 404 like any other.
 
   // ------------------------------------------------------------ responses
   // What borrowers said when handing a tape back, for the admin alone: nothing here

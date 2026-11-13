@@ -493,7 +493,7 @@ describe("two of the person's devices", () => {
   test('a limit of one with two Plays at once: one 200, one 409, one screening used', async () => {
     const slug = await ownFilm('limit-of-one');
     const sam = await member();
-    const t = await forPerson(sam.p, { screeningLimit: 1 }, slug);
+    const t = await forPerson(sam.p, {}, slug);
     const laptop = await sam.device();
     const rs = await Promise.all([sam.phone, laptop].map((b) => b.post(`/api/films/${slug}/screenings`)));
     assert.deepEqual(rs.map((r) => r.status).sort(), [200, 409], JSON.stringify(rs.map((r) => r.data)));
@@ -977,11 +977,13 @@ describe('after review', () => {
     await b.post('/api/tickets/open', { code: t.code });
     assert.equal((await b.post(`/api/films/${film.slug}/screenings`)).status, 200);
     const open = (await b.get('/api/me')).data.tickets[0].ticket;
-    assert.deepEqual([open.state, open.tape, open.openScreening.position, open.expiresAt], ['ok', 'yours', 0, open.dueBack]);
+    assert.deepEqual([open.state, open.tape, open.loan.position], ['ok', 'yours', 0]);
     assert.equal(open.dueBack, open.loan.takenAt + 24 * 3600e3);
     s.db.prepare('UPDATE loans SET taken_at = ?, due_at = ? WHERE ticket_id = ?').run(Date.now() - 1 - 24 * 3600e3, Date.now() - 1, t.id);
     const ticket = (await b.get('/api/me')).data.tickets[0].ticket;
     assert.equal(ticket.state, 'spent');
-    assert.deepEqual([ticket.tape, ticket.loan, ticket.dueBack, ticket.expiresAt, ticket.openScreening], [null, null, null, null, null]);
+    assert.deepEqual([ticket.tape, ticket.loan, ticket.dueBack], [null, null, null]);
+    // 1.1.0's expiresAt and openScreening went with its pages (slice 7).
+    assert.deepEqual([ticket.expiresAt, ticket.openScreening], [undefined, undefined]);
   });
 });

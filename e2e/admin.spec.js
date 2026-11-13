@@ -1,5 +1,5 @@
 // Admin smoke: signing in through the form with the run's password, Films, the
-// film, lending a tape from its page and finding it under Tapes, Status (with a
+// film, sending a link from its page and finding it under Tapes, Status (with a
 // media request it saw refused), and the Ledger filtered by the film and to
 // viewing. Nothing may throw, and nothing may log an error in
 // the console. Every browser.
@@ -7,7 +7,7 @@ import { CSP_MESSAGE, NO_SNAPSHOTS, admin, expect, film, filmFolders, secondFilm
 
 test.use(NO_SNAPSHOTS);
 
-test('the admin signs in, lends a tape from the film page, and reads Tapes, Status and the Ledger', async ({ page, newContext }, testInfo) => {
+test('the admin signs in, sends a link from the film page, and reads Tapes, Status and the Ledger', async ({ page, newContext }, testInfo) => {
   const consoleErrors = [];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
@@ -26,13 +26,13 @@ test('the admin signs in, lends a tape from the film page, and reads Tapes, Stat
 
   const label = unique('Smoke', testInfo);
   let link;
-  await test.step('Films, the film, and a tape lent from its page', async () => {
+  await test.step('Films, the film, and a link sent from its page', async () => {
     await page.getByRole('link', { name: new RegExp(film.title) }).click();
     await expect(page.getByRole('heading', { level: 1, name: film.title })).toBeVisible();
     await expect(page).toHaveURL((url) => url.pathname === `/admin/films/${film.id}`);
     await page.getByRole('textbox', { name: 'Who is it for?' }).fill(label);
-    await page.getByRole('button', { name: 'Lend a tape for anyone with the link' }).click();
-    const issued = page.locator('.ui-line--done').filter({ hasText: '1 tape ready.' });
+    await page.getByRole('button', { name: 'Send a link for anyone with the link' }).click();
+    const issued = page.locator('.ui-line--done').filter({ hasText: '1 link ready.' });
     await expect(issued).toBeVisible();
     await expect(issued).toContainText(`For ${label}`);
     await expect(issued.locator('code')).toHaveText(/^http:\/\/localhost:\d+\/t\/[a-z0-9]{13}$/);
@@ -52,7 +52,7 @@ test('the admin signs in, lends a tape from the film page, and reads Tapes, Stat
     expect(status).toBe(403);
   });
 
-  await test.step('the tape is under Tapes', async () => {
+  await test.step('the link is under Tapes, in Links sent', async () => {
     await page.getByRole('link', { name: 'Tapes', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Tapes' })).toBeVisible();
     const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: label }) });

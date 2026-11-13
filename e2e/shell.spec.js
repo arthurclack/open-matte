@@ -6,7 +6,9 @@
 // deploy, or a mangled link, shows a page rather than a blank one; the tab's title
 // follows the page. In the admin, a setup link that opens a film is worded as one, a
 // tape that is out can be come back to until it's due (as the film page said before
-// Play), and Sign out only looks done once the server has done it. Back after signing out is in back.spec.js. Every browser.
+// Play), and Sign out only looks done once the server has done it. Signing out just
+// after Play names the tape that goes back, and a tape handed back is gone from the
+// front page reached without a reload. Back after signing out is in back.spec.js. Every browser.
 import { NO_SNAPSHOTS, admin, cinemaName, expect, film, heartbeats, playButton, signInAsAdmin, signedInPerson, test, unique } from './fixtures.js';
 
 // The admin's sign-in puts the run's password in a form field, and trace snapshots
@@ -53,16 +55,20 @@ test('the name menu opens over the player, and Sign out there works', async ({ p
 });
 
 // (1.x: "3 plays left" before Play. Play limits are gone: a link lends its tape once,
-// for its days, and the counter says how long before Play is pressed.)
-test('after Play, the counter tells of the open play', async ({ page }, testInfo) => {
+// for its days, and the counter says how long before Play is pressed. Slice 7: one
+// clock, so the counter says Play takes the tape out, for the link's days, until a
+// date; and once Play has, that it has.)
+test('after Play, the counter tells of the tape just taken', async ({ page }, testInfo) => {
   const ticket = await admin.issueTicket({ label: unique('Panel', testInfo), loanDays: 2 });
   await page.goto(`/t/${ticket.code}`);
   const panel = page.locator('.fl-counter');
-  await expect(panel).toContainText('Once you press Play, you can pause and come back to it for 48 hours.');
+  await expect(panel).toContainText("Pressing Play takes the tape out. It's yours for 2 days, until");
+  await expect(panel.locator('.ob--sticker')).toContainText('Play takes it out.');
   await expect(panel).not.toContainText('plays left');
   expect((await pressPlay(page)).status()).toBe(200);
-  await expect(panel).toContainText('You can pick up where you left off until');
-  await expect(panel).not.toContainText('Once you press Play');
+  await expect(panel).toContainText("Taken out. It's yours until it's due back");
+  await expect(panel.getByRole('button', { name: 'Return it now' })).toBeVisible();
+  await expect(panel).not.toContainText('Pressing Play');
 });
 
 test('Play that fails for no reason the page knows says so', async ({ page }, testInfo) => {
@@ -154,18 +160,20 @@ test('a part of the app gone since a deploy: Play says to reload, and reloading 
   await expect(playButton(page)).toHaveAccessibleName(/^Resume/);
 });
 
-// Version 2: a link lends once. The Return it now button comes with the friend's new
-// film page (slice 7), so the tape is returned here as that button will: by the page
-// itself, asking the server. (docs/version-2.md, "Browser journeys", 6.)
+// Version 2: a link lends once. The tape goes back with Return it now, asked on the
+// page (slice 7). (docs/version-2.md, "Browser journeys", 6.)
 test('a spent link in a fresh browser shows the notice, and nothing of the film', async ({ page, newContext }, testInfo) => {
   const ticket = await admin.issueTicket({ label: unique('Spent', testInfo) });
   await page.goto(`/t/${ticket.code}`);
-  const { takenAt } = await (await pressPlay(page)).json();
-  const returned = await page.evaluate(
-    async ([slug, at]) => (await fetch(`/api/films/${slug}/return`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ takenAt: at }) })).status,
-    [film.slug, takenAt],
-  );
-  expect(returned).toBe(200);
+  expect((await pressPlay(page)).status()).toBe(200);
+  const panel = page.locator('.fl-counter');
+  await panel.getByRole('button', { name: 'Return it now' }).click();
+  await expect(panel.getByRole('group', { name: /^Return .+ now\?/ })).toBeVisible();
+  const returned = page.waitForResponse((r) => r.url().endsWith(`/api/films/${film.slug}/return`));
+  await panel.getByRole('button', { name: 'Return it', exact: true }).click();
+  expect((await returned).status()).toBe(200);
+  await expect(panel).toContainText('Returned on');
+  await expect(panel).toContainText("This link has done its job: it won't take the tape out again.");
 
   const fresh = await (await newContext()).newPage();
   await fresh.goto(`/t/${ticket.code}`);
@@ -180,6 +188,58 @@ test('a spent link in a fresh browser shows the notice, and nothing of the film'
   await expect(playButton(page)).toHaveCount(0);
 });
 
+// Question 5, and the review of slices 7 to 9: signing out just after Play, with no
+// reload, names the tape that goes back (the question is asked from /api/me read
+// again), and the front page reached without a reload shows it out to this browser.
+test('signing out just after Play names the tape that goes back, with no reload', async ({ page, context }, testInfo) => {
+  const name = unique('Joanna', testInfo);
+  const { cookie } = await signedInPerson(name);
+  await context.addCookies([cookie]);
+  // A link anyone can use: pressed by a signed-in member, the tape is this browser's.
+  const ticket = await admin.issueTicket({ label: unique('Anyone', testInfo) });
+  await page.goto(`/t/${ticket.code}`);
+  await expect(page.getByRole('heading', { level: 1, name: film.title })).toBeVisible();
+  expect((await pressPlay(page)).status()).toBe(200);
+  await expect(page.locator('.theatre video')).toBeVisible();
+
+  // The shop's name in the header goes to the front page without a reload.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.locator('header .site-home').click();
+  await expect(page.getByRole('heading', { level: 2, name: 'Out to this browser' })).toBeVisible();
+
+  const asked = new Promise((resolve) =>
+    page.once('dialog', async (dialog) => {
+      resolve(dialog.message());
+      await dialog.dismiss();
+    }),
+  );
+  await page.getByRole('button', { name, exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+  expect(await asked).toBe(`Sign out of this browser? ${film.title} is out to this browser, so it goes back to the shop, and the link that took it out won't take it out again.`);
+  // Not signed out: the question was dismissed.
+  await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+});
+
+// The review of slices 7 to 9: a tape handed back with a response is gone from the
+// front page reached from "Handed back" (a link, not a reload).
+test('a tape handed back with a response is no longer on your card on the front page', async ({ page, context }, testInfo) => {
+  await signedInWithTicket(context, testInfo);
+  await page.goto(`/${film.slug}`);
+  expect((await pressPlay(page)).status()).toBe(200);
+  await page.locator('.fl-counter').getByRole('button', { name: 'Hand it back' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Hand it back' })).toBeFocused();
+  await page.getByRole('radio', { name: 'Not for me' }).check();
+  const returned = page.waitForResponse((r) => r.url().endsWith(`/api/films/${film.slug}/return`));
+  await page.getByRole('button', { name: 'Hand it back', exact: true }).click();
+  expect((await returned).status()).toBe(200);
+  await expect(page.getByRole('heading', { level: 1, name: 'Handed back' })).toBeVisible();
+  await page.getByRole('link', { name: 'Go to your tapes' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Your tapes' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 3, name: film.title })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'On your card' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: `Return it now: ${film.title}` })).toHaveCount(0);
+});
+
 test('mangled links show the front page, or nothing showing, never a blank page', async ({ page }) => {
   await page.goto('/?notice=__proto__');
   await expect(page.getByRole('heading', { level: 1, name: cinemaName() })).toBeVisible();
@@ -192,7 +252,7 @@ test('mangled links show the front page, or nothing showing, never a blank page'
   await expect(page.getByRole('heading', { level: 1, name: 'Nothing on the shelf here' })).toBeVisible();
 });
 
-test("the admin: a setup link's message, an open screening's last chance to resume, and Sign out when the server never heard", async ({ page, newContext }, testInfo) => {
+test("the admin: a setup link's message, a loan's due-back date on its link's page, and Sign out when the server never heard", async ({ page, newContext }, testInfo) => {
   const name = unique('Noor', testInfo);
   await admin.newPerson(name);
   await page.goto('/admin');
@@ -203,7 +263,7 @@ test("the admin: a setup link's message, an open screening's last chance to resu
     await page.goto(`/admin/films/${film.id}`);
     await page.getByRole('radio', { name: /Only one member, signed in/ }).check();
     await page.getByRole('combobox', { name: 'Which member' }).selectOption({ label: name });
-    await page.getByRole('button', { name: `Lend a tape to ${name} only` }).click();
+    await page.getByRole('button', { name: `Send a link to ${name} only` }).click();
     await page.getByRole('button', { name: `Create a setup link that opens ${film.title}` }).click();
     // Inside the ticket's own notice, which has a Copy message of its own.
     const created = page.locator('.ui-line--done').filter({ hasText: `Setup link for ${name}:` }).last();
@@ -223,15 +283,17 @@ test("the admin: a setup link's message, an open screening's last chance to resu
     const guest = await (await newContext()).newPage();
     await guest.goto(`/t/${ticket.code}`);
     // Before Play, the friend is promised the link's own day, not the shop's three.
-    await expect(guest.locator('.fl-counter')).toContainText('you can pause and come back to it for 24 hours.');
+    await expect(guest.locator('.fl-counter')).toContainText("It's yours for 1 day, until");
     expect((await pressPlay(guest)).status()).toBe(200);
     await page.goto(`/admin/tickets/${ticket.id}`);
-    const expires = page.locator('dt:text-is("Expires") + dd');
-    // A date and time, now that it has been played.
-    await expect(expires).toHaveText(/\d:\d\d/);
-    const until = await expires.textContent();
-    await expect(page.locator('dt:text-is("Now") + dd')).toContainText(`they can come back to it until ${until}`);
-    await expect(page.locator('td[data-label="Can come back until"]')).toHaveText(until);
+    // (1.x's link page had "Expires" and "Can come back until". Version 2's, slice 9,
+    // has the loan: when Play took the tape, and when it's due back, a day later.)
+    const due = page.locator('dt:text-is("Due back") + dd');
+    // A date and time, on a 24-hour clock or a 12-hour one, as the browser's language has it.
+    await expect(due).toHaveText(/\d:\d\d(\s*[AP]M)? \(in 2[34] hours\)$/);
+    await expect(page.locator('dt:text-is("Took the tape") + dd')).toHaveText(/\d:\d\d(\s*[AP]M)?$/);
+    await expect(page.locator('dt:text-is("Now") + dd')).toContainText("can carry on until it's due back");
+    await expect(page.locator('.of-head .of-marks').first()).toContainText('Has the tape');
   });
 
   await test.step('Sign out with the connection gone: still signed in, and told so', async () => {

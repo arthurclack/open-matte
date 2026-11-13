@@ -53,7 +53,7 @@ test('a ticket opens, plays and is watched to the end with SQLite as strict as o
     await admin.post('/api/admin/scan');
     const filmId = (await admin.get('/api/admin/films')).data[0].id;
     assert.equal((await admin.patch(`/api/admin/films/${filmId}`, { published: true })).status, 200);
-    const ticket = (await admin.post('/api/admin/tickets', { filmId, label: 'Sam', screeningLimit: 1 })).data[0];
+    const ticket = (await admin.post('/api/admin/tickets', { filmId, label: 'Sam' })).data[0];
     const viewer = browser(srv.base);
     assert.equal((await viewer.post('/api/tickets/open', { code: ticket.code })).status, 200);
     const play = await viewer.post('/api/films/arrival/screenings');

@@ -1,11 +1,11 @@
 import Hls from 'hls.js';
 import { createRef, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { api, formatClock } from './api.js';
+import { api, formatClock, formatDay } from './api.js';
 import { StepIcon } from './icons.jsx';
-import { OsdStrip, VcrMenu } from './look/crt.jsx';
+import { OsdStrip, StopStrip, VcrMenu, tapeCounter } from './look/crt.jsx';
 import { useMediaSession } from './mediaSession.js';
 import { scrollBehavior } from './motion.js';
-import { haltMessages, timeLeft } from './pages/tapeWords.js';
+import { haltMessages } from './pages/tapeWords.js';
 import PlaybackHelp from './PlaybackHelp.jsx';
 import { codecName, scrub } from './playbackHelp.js';
 import { loadPrefs, savePrefs } from './playerPrefs.js';
@@ -92,9 +92,12 @@ function startPosition(position, duration) {
   return position;
 }
 
-// comeBackBy: when the window to come back to this play closes (the tape's, as the film
-// page has it), for the paused strip.
-export default function Player({ film, screening, onHalt, onReclaim, comeBackBy = screening.resumableUntil }) {
+// dueBack: when the tape is due back (as Play's answer and the film page have it), for
+// the paused strip; none in the owner's preview. At the film's end the bar under the
+// picture gives way to STOP and `end`, the page's own choices (none: the bar stays),
+// and onEnded tells the page: true at the end, false once it plays again. onPaused tells
+// it each time the viewer pauses (the paused strip shows).
+export default function Player({ film, screening, onHalt, onReclaim, dueBack = screening.dueBack ?? null, onEnded, onPaused, end = null }) {
   const { site } = useSite();
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
@@ -153,6 +156,13 @@ export default function Player({ film, screening, onHalt, onReclaim, comeBackBy 
   // end): the machine's strip under the picture, and where it stopped.
   const [paused, setPaused] = useState(false);
   const [pausedAt, setPausedAt] = useState(0);
+  // Played to its end here (the video's own end, not the server's 92%), and where.
+  const [ended, setEnded] = useState(false);
+  const [endedAt, setEndedAt] = useState(0);
+  const endedRef = useRef(onEnded);
+  endedRef.current = onEnded;
+  const pausedRef = useRef(onPaused);
+  pausedRef.current = onPaused;
 
   // The language being heard: the audio track's, or before the tracks are known (or with
   // the audio inside the picture's stream) the film's default audio. A forced track shows
@@ -447,20 +457,40 @@ export default function Player({ film, screening, onHalt, onReclaim, comeBackBy 
   useEffect(() => {
     const video = videoRef.current;
     let played = false;
+    let atEnd = false;
+    const unend = () => {
+      if (!atEnd) return;
+      atEnd = false;
+      setEnded(false);
+      endedRef.current?.(false);
+    };
     const onPlaying = () => {
       played = true;
       setPaused(false);
+      unend();
     };
-    const onPlay = () => setPaused(false);
+    const onPlay = () => {
+      setPaused(false);
+      unend();
+    };
     const onPause = () => {
       if (!played || video.ended) return;
       setPausedAt(video.currentTime);
       setPaused(true);
+      pausedRef.current?.();
     };
     const onSeeked = () => {
       if (video.paused) setPausedAt(video.currentTime);
+      // Wound back from the end: the bar comes back.
+      if (!video.ended) unend();
     };
-    const onEnded = () => setPaused(false);
+    const onEnded = () => {
+      setPaused(false);
+      atEnd = true;
+      setEndedAt(video.currentTime || video.duration || 0);
+      setEnded(true);
+      endedRef.current?.(true);
+    };
     video.addEventListener('playing', onPlaying);
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
@@ -670,24 +700,6 @@ export default function Player({ film, screening, onHalt, onReclaim, comeBackBy 
   const HALT = haltMessages(site);
   // The paused strip: only while the viewer has paused the film here, and it can carry on.
   const strip = paused && !halted;
-  // While it shows, the time left to come back is counted down: drawn again as each
-  // minute of it runs out.
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (!strip || !comeBackBy) return undefined;
-    let timer;
-    const wait = () => {
-      const rest = comeBackBy - Date.now();
-      if (rest <= 0) return;
-      timer = setTimeout(() => {
-        setTick((n) => n + 1);
-        wait();
-      }, (rest % 60000 || 60000) + 50);
-    };
-    wait();
-    return () => clearTimeout(timer);
-  }, [strip, comeBackBy]);
-
   // The audio, subtitles and picture, as the paused strip's VCR menu has them: the same
   // choices as the bar's menus, which they work through.
   const rows = [];
@@ -769,7 +781,11 @@ export default function Player({ film, screening, onHalt, onReclaim, comeBackBy 
       Playback help
     </button>
   );
-  const left = timeLeft(comeBackBy);
+  // The tape's one date, on the strip's right: when it's due back (the day; the page
+  // under the player gives the time).
+  const aside = dueBack ? `Due back ${formatDay(dueBack)}` : null;
+  // The end: STOP and the page's choices, while the page has some to offer.
+  const atEnd = ended && !halted && Boolean(end);
 
   return (
     <>
@@ -798,10 +814,17 @@ export default function Player({ film, screening, onHalt, onReclaim, comeBackBy 
           </div>
         )}
       </div>
-      {strip ? (
+      {atEnd ? (
+        <>
+          <div className="fl-bar fl-bar--osd fl-bar--stop">
+            <StopStrip counter={tapeCounter(endedAt)} />
+          </div>
+          {end}
+        </>
+      ) : strip ? (
         // Paused: the machine's strip under the picture, never over it.
         <div className="fl-bar fl-bar--osd">
-          <OsdStrip at={formatClock(pausedAt)} onResume={resume} resumeLabel={`Resume at ${formatClock(pausedAt)}`} left={left}>
+          <OsdStrip at={formatClock(pausedAt)} onResume={resume} resumeLabel={`Resume at ${formatClock(pausedAt)}`} aside={aside}>
             {rows.length > 0 && <VcrMenu rows={rows} />}
           </OsdStrip>
           <div className="fl-bar__ctl">

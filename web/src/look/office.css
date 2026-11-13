@@ -1,8 +1,8 @@
 /* =====================================================================
    look/office.css: the back office's pages (web/src/admin/*) on the
-   interface layer: Films and a film's page, Tapes and one tape, Members
-   and one member, the Ledger, Status and Settings, and the back office's
-   sign-in.
+   interface layer: Films and a film's page, Tapes and one link, Members
+   and one member, Responses, the Ledger, Status and Settings, and the back
+   office's sign-in.
 
    Loaded with the back office only (admin/AdminApp.jsx imports it, so
    friends never download it), after the shared stylesheets. Owned by the
@@ -17,6 +17,10 @@
      .of-progress how far playback got, in whole pixels
      .of-clock    the still 12:00 on the blue screen (Status, while nothing
                   is on the shelf)
+     .of-tape     a film's one tape, on its page (version 2), and .of-confirm,
+                  the question before it is taken back
+     .of-resp     a member's response, handing a tape back
+     .of-till     the Ledger's lent and back-in rows, on the till roll
    Printed things stay small accents with a meaning: sleeve thumbnails,
    the sleeve on a film's details, the shop's ledger heading on a strip of
    label tape, the membership card in Settings. Nothing here moves.
@@ -142,6 +146,11 @@
 /* [hidden] wins over the layer's display rules */
 .ui80 .ui-office [hidden] { display: none !important; }
 
+/* a button in a table's last column stays on one line */
+.ui80 .ui-table td.of-td-btn .ui-btn { white-space: nowrap; }
+/* a row of buttons above a table */
+.ui80 .of-btns-gap { margin-bottom: 16px; }
+
 /* ---------- the link and the message ---------- */
 .ui80 .of-linkbox { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 12px 0; }
 .ui80 .of-linkbox code { flex: 1 1 320px; min-width: 0; padding: 10px 12px; font: 400 14px/20px var(--ui-face); color: var(--ui-fg); background: var(--ui-sunk); border: 1px solid var(--ui-edge); overflow-wrap: anywhere; }
@@ -154,7 +163,58 @@
 .ui80 .of-progress__bar { display: block; width: 64px; height: 8px; border: 1px solid var(--ui-edge); background: var(--ui-sunk); }
 .ui80 .of-progress__bar > span { display: block; height: 100%; background: var(--ui-fg); }
 
+/* ---------- the film's one tape (version 2): one panel on its page ---------- */
+/* who has it, since when, due back when, now; the due-back sticker its one printed accent */
+.ui80 .of-tape { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 32px; align-items: start; border: 1px solid var(--ui-edge); background: var(--ui-bg); padding: 20px; margin: 0 0 16px; }
+.ui80 .of-tape > div { min-width: 0; }
+.ui80 .of-tape__state { font: 600 20px/28px var(--ui-read); margin: 0 0 4px; overflow-wrap: anywhere; }
+.ui80 .of-tape__state a { color: inherit; text-underline-offset: 4px; }
+.ui80 .of-tape .of-p { margin: 4px 0 0; }
+.ui80 .of-tape__sticker { justify-self: end; padding-top: 4px; }
+.ui80 .of-tape .of-kv { margin-top: 12px; }
+.ui80 .of-tape .ui-btns { margin-top: 16px; }
+@media (max-width: 640px) {
+  .ui80 .of-tape { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .ui80 .of-tape__sticker { justify-self: start; } /* at the panel's foot, under Take the tape back, as the mock-up's phone has it */
+}
+/* the question before a tape is taken back, on the page */
+.ui80 .of-confirm { margin: 16px 0 0; }
+.ui80 .of-confirm p { margin: 0; max-width: 66ch; }
+.ui80 .of-confirm p + p, .ui80 .of-confirm ul + p { margin-top: 8px; }
+.ui80 .of-confirm ul { margin: 6px 0 0; padding-left: 20px; max-width: 66ch; }
+.ui80 .of-confirm ul.of-plain { padding-left: 0; list-style: none; }
+.ui80 .of-confirm .ui-check { padding: 4px 0; }
+.ui80 .of-confirm .ui-btns { margin-top: 14px; }
+.ui80 .of-confirm > div > p[tabindex='-1']:focus { outline: none; }
+.ui80 .of-confirm > div > p[tabindex='-1']:focus-visible { outline: 2px solid var(--ui-fg); outline-offset: 3px; }
+/* a link's note beside the buttons that give it away (question 18) */
+.ui80 .of-msg { margin: 8px 0 12px; padding: 12px 14px; border-left: 3px solid var(--ui-edge); background: var(--ui-sunk); font: 400 15px/22px var(--ui-read); max-width: 70ch; overflow-wrap: anywhere; white-space: pre-line; }
+.ui80 .of-msg span { display: block; font: 500 13px/18px var(--ui-face); color: var(--ui-fg-2); margin-bottom: 4px; white-space: normal; }
+
+/* ---------- responses: what members said handing a tape back ---------- */
+.ui80 .of-resps { border-top: 1px solid var(--ui-rule); margin: 0; padding: 0; list-style: none; }
+.ui80 .of-resp { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 6px 16px; padding: 18px 0; border-bottom: 1px solid var(--ui-rule); }
+.ui80 .of-resp > div { min-width: 0; }
+.ui80 .of-resp__word { font: 600 18px/26px var(--ui-read); margin: 0; }
+.ui80 .of-resp__who { font: 400 14px/20px var(--ui-face); color: var(--ui-fg-2); margin: 2px 0 0; overflow-wrap: anywhere; }
+.ui80 .of-resp__who a { color: inherit; text-underline-offset: 3px; }
+.ui80 .of-resp__msg { margin: 10px 0 0; padding-left: 14px; border-left: 3px solid var(--ui-edge); font: 400 16px/24px var(--ui-read); max-width: 62ch; overflow-wrap: anywhere; white-space: pre-line; }
+.ui80 .of-resp__none { margin: 10px 0 0; font: 400 15px/22px var(--ui-read); color: var(--ui-fg-3); }
+.ui80 .of-resp__when { margin: 0; font: 400 14px/20px var(--ui-face); color: var(--ui-fg-2); text-align: right; }
+.ui80 .of-resp__when span { display: block; color: var(--ui-fg-3); }
+.ui80 .of-resp .ui-btns { margin-top: 12px; }
+.ui80 .of-resp .of-marks { margin: 0 0 4px; }
+@media (max-width: 640px) {
+  .ui80 .of-resp { grid-template-columns: 44px minmax(0, 1fr); }
+  .ui80 .of-resp__when { grid-column: 2; text-align: left; }
+}
+
 /* ---------- the ledger ---------- */
+/* lent and back in: a strip off the till roll (the receipt's paper, look/objects.css) */
+.ui80 .ob--till.of-till { width: max-content; max-width: 100%; display: inline-block; vertical-align: top; margin: -2px 0; }
+.ui80 .of-till .ob__ink { padding: 9px 14px 8px; }
+.ui80 .of-till .slip__l { font-size: 16px; line-height: 21px; }
+@media (max-width: 520px) { .ui80 .of-till .slip__l { font-size: 15px; line-height: 20px; } }
 /* its heading: the shop's ledger, on a strip of label tape */
 .ui80 .of-ledger-head { margin: 0 0 14px; }
 .ui80 .of-ledger-head .emb-line { font-size: 22px; line-height: 28px; }

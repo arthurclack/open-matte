@@ -69,6 +69,14 @@
   font-style: normal;
   font-display: swap;
 }
+/* the till slip's dot-matrix print (version 2): only the receipt asks for it */
+@font-face {
+  font-family: 'Doto';
+  src: url('/fonts/Doto-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   color-scheme: dark;
@@ -157,6 +165,8 @@
   /* ---------- faces ---------- */
   --sans: 'Libre Franklin', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --type: 'Courier Prime', 'Courier New', monospace;
+  /* the till's dot-matrix head; Courier Prime next, for what Doto lacks (ō, ½) */
+  --till: 'Doto', 'Courier Prime', 'Courier New', monospace;
   --osd-face: 'VT323', ui-monospace, monospace;
   --hand: 'Grape Nuts', 'Bradley Hand', 'Segoe Print', cursive;
   /* the shop's own printed lettering: a soft, heavy serif, as small-shop stationery was set c. 1984 */

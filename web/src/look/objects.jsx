@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import { drawGloss, drawGrain, drawTone, drawWear } from './paperCanvas.js';
-import { KINDS, embossStrip, gunWheels, handWords, hash, objectWear, rubDown, stickerShift, typedStrikes } from './wear.js';
+import { KINDS, embossStrip, gunWheels, handWords, hash, objectWear, rubDown, stickerShift, tillTeeth, typedStrikes } from './wear.js';
 import { hostName, pickSize } from './words.js';
 import './objects.css';
 
@@ -167,7 +167,7 @@ export function Rub({ text }) {
 // ------------------------------------------------------------ paper
 
 // What each stock is, for the ink that wears back to it.
-const STOCKS = { sleeve: '#e6e0d2', kraft: '#b39b78', pick: '#f3ecdf', label: '#eee7d7', sticker: '#f26b21', tape: '#262320' };
+const STOCKS = { sleeve: '#e6e0d2', kraft: '#b39b78', pick: '#f3ecdf', label: '#eee7d7', sticker: '#f26b21', tape: '#262320', note: '#f4efe2', till: '#f1eee7' };
 
 // A flat printed thing: a sheet of `kind` (sleeve, kraft, pick, label, sticker,
 // tape), cut and leaning as its seed says, with the stock's grain and tone, and ink
@@ -291,16 +291,79 @@ export function PickCard({ text, site, seed }) {
   );
 }
 
+// "Picked for you": the owner's own note to whoever has this link, on a sheet off the
+// shop's notepad: "Picked for you" printed at its head in the shop's face, the words
+// in their hand on the ruled lines, and their name under them. Apart from the staff
+// pick card, and looks it: the staff pick is the film's, for everyone; this is the
+// link's, for one person (or whoever has a link anyone can use). Only for a link with
+// a note. A long one is written smaller, as the staff pick is (pickSize).
+export function PickNote({ text, site, seed }) {
+  const by = hostName(site);
+  const head = `note${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  const size = pickSize(text);
+  return (
+    <Paper kind="note" seed={`note:${seed}`} as="figure" className={size ? `note--${size}` : ''} aria-labelledby={head}>
+      <p className="note__head pr" id={head}>
+        Picked for you
+      </p>
+      <blockquote className="note__text">
+        <Hand text={text} seed={`note:${seed}`} />
+      </blockquote>
+      <p className="note__by">
+        <Hand text={by} seed={`note:${seed}:by`} />
+      </p>
+    </Paper>
+  );
+}
+
+// The receipt: a strip torn off the till roll, printed by a dot-matrix head when Play
+// took the tape (Doto, with Courier Prime for what Doto lacks). `lines`: tapeWords.js
+// slipLines, { text, kind } each, where kind is 'rule', 'gap' or 'small'. Read as the
+// receipt it is: a group named "Your receipt", one line after another. `label`: the
+// group's name; null for a strip read as plain words in its place (the back office's
+// Ledger prints its lent and back-in rows on the same roll).
+export function TillSlip({ lines, seed, className = '', label = 'Your receipt' }) {
+  const clip = useMemo(() => tillTeeth(`till:${seed}`), [seed]);
+  if (!lines?.length) return null;
+  const named = label ? { role: 'group', 'aria-label': label } : {};
+  return (
+    <Paper kind="till" seed={`till:${seed}`} className={className} clip={clip} {...named}>
+      {lines.map((l, i) =>
+        l.kind === 'rule' ? (
+          <span key={i} className="slip__l slip__l--rule" aria-hidden="true" />
+        ) : (
+          <span key={i} className={`slip__l${l.kind ? ` slip__l--${l.kind}` : ''}`}>
+            <Typed text={l.text} seed={`till:${seed}:${i}`} min={0.9} />
+          </span>
+        ),
+      )}
+    </Paper>
+  );
+}
+
 // The orange price-gun sticker: ONLY for the next deadline (words.js nextDeadline and
 // stickerText give the words). "Due back" printed on the label roll, the date on the
-// gun's wheels. Read as one line: "Due back Sun 8 Nov".
-export function Sticker({ label, value, seed, className = '' }) {
+// gun's wheels. Read as one line: "Due back Sun 8 Nov". `top`: a line printed on the
+// roll first, where the date needs a word before it ("Play takes it out.", "Out on
+// loan."); the sticker is then two lines, so it stays stuck to the tape's tail at 320.
+export function Sticker({ top, label, value, seed, className = '' }) {
   const shift = useMemo(() => stickerShift(`sticker:${seed}`), [seed]);
-  return (
-    <Paper kind="sticker" seed={`sticker:${seed}`} as="span" className={className} style={{ '--sy': `${shift}px` }}>
+  const gun = (
+    <>
       <span className="stk__k pr">{label}</span> <span className="stk__v">
         <Gun text={value} seed={`sticker:${seed}`} />
       </span>
+    </>
+  );
+  return (
+    <Paper kind="sticker" seed={`sticker:${seed}`} as="span" className={[top && 'stk2', className].filter(Boolean).join(' ')} style={{ '--sy': `${shift}px` }}>
+      {top ? (
+        <>
+          <span className="stk__top pr">{top}</span> <span className="stk__row">{gun}</span>
+        </>
+      ) : (
+        gun
+      )}
     </Paper>
   );
 }
@@ -325,7 +388,7 @@ export function TapeStrip({ text, seed, tail = false }) {
 
 // The title on the counter: one or two strips of label tape (wear.js tapeLines cuts
 // them), with the sticker, if there is one, stuck across the last strip's tail.
-// sticker: { label, value } from words.js stickerText, or null.
+// sticker: { top, label, value } from words.js stickerText, or null.
 export function LabelTape({ lines, sticker, seed, className = '' }) {
   const strips = lines.filter(Boolean);
   const last = strips.length - 1;
@@ -337,10 +400,10 @@ export function LabelTape({ lines, sticker, seed, className = '' }) {
       {last >= 0 && (
         <span className="etape__end">
           <TapeStrip text={strips[last]} seed={`${seed}:${last}`} tail={Boolean(sticker)} />
-          {sticker && <Sticker label={sticker.label} value={sticker.value} seed={seed} />}
+          {sticker && <Sticker top={sticker.top} label={sticker.label} value={sticker.value} seed={seed} />}
         </span>
       )}
-      {last < 0 && sticker && <Sticker label={sticker.label} value={sticker.value} seed={seed} />}
+      {last < 0 && sticker && <Sticker top={sticker.top} label={sticker.label} value={sticker.value} seed={seed} />}
     </span>
   );
 }

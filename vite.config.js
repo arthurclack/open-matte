@@ -218,12 +218,13 @@ function licenceId(json) {
 // sentence "Used for ...".
 export const FONTS = [
   { name: 'Fraunces', file: 'Fraunces-Variable.ttf', licenceFile: 'Fraunces-OFL.txt', use: "the shop's own printing: its name, \"Staff pick\" and \"Membership card\"" },
-  { name: 'Grape Nuts', file: 'GrapeNuts-Regular.ttf', licenceFile: 'GrapeNuts-OFL.txt', use: "the one hand: the member's name, written on the back of the membership card, and the staff pick" },
+  { name: 'Grape Nuts', file: 'GrapeNuts-Regular.ttf', licenceFile: 'GrapeNuts-OFL.txt', use: "the one hand: the member's name, written on the back of the membership card, the staff pick and a \"Picked for you\" note" },
   { name: 'Courier Prime', file: 'CourierPrime-Regular.ttf', licenceFile: 'CourierPrime-OFL.txt', use: "typed labels: a plain sleeve's, and the month, year and number on the membership card" },
   { name: 'Libre Franklin', file: 'LibreFranklin-Variable.ttf', licenceFile: 'LibreFranklin-OFL.txt', use: 'headings, reading text, labels, help and errors' },
   { name: 'IBM Plex Mono', file: 'IBMPlexMono-Regular.ttf', licenceFile: 'IBMPlexMono-OFL.txt', use: "the machine's words: menus, tabs, buttons, table heads, dates, times and counts" },
   { name: 'IBM Plex Mono SemiBold', file: 'IBMPlexMono-SemiBold.ttf', licenceFile: 'IBMPlexMono-OFL.txt', use: "the machine's words where they are lit or stand out" },
   { name: 'VT323', file: 'VT323-Regular.ttf', licenceFile: 'VT323-OFL.txt', use: "the blue screen of the shop's video machine: Play, Pause and its menu" },
+  { name: 'Doto', file: 'Doto-Variable.ttf', licenceFile: 'Doto-OFL.txt', use: 'the till slip: the receipt printed when Play takes a tape out' },
 ];
 const FONTS_DIR = new URL('./web/public/fonts/', import.meta.url);
 

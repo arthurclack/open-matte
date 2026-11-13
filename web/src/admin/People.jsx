@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, formatAgo, formatDayTime, formatMonthYear } from '../api.js';
+import { api, formatAgo, formatDay, formatDayTime, formatMonthYear } from '../api.js';
 import { Line } from '../look/ui.jsx';
 import { ErrorNote, Head, LinkBox, Mark, Table, useAction, useLoad } from './ui.jsx';
 
@@ -9,7 +9,7 @@ const PEOPLE_ERRORS = {
   'name-taken': 'A member here already has that name (capitals are ignored). Add something to tell them apart.',
   'confirm-contact': "Tick the box to confirm you're replying on a contact you already know is theirs.",
   'bad-hours': 'Choose how long the link works.',
-  'bad-ticket': "That tape can't go with the link: it has to be a tape only for them, and not taken back.",
+  'bad-ticket': "That link can't go with the setup link: it has to be a link only for them, and not cancelled.",
   'person-disabled': "Turn their card back on first: a member whose card is off can't be sent a link.",
   'person-not-found': "That member isn't here any more. Reload the page.",
   'passkey-not-found': 'That passkey has already been removed.',
@@ -34,7 +34,7 @@ export function PasskeysProblem({ settings }) {
   if (!problem) return null;
   return (
     <Line kind="warn" lead="Passkeys aren't available.">
-      {problem} Until it's fixed, nobody can sign in or create a passkey, and no setup links can be made. Tapes for anyone with the link still work.
+      {problem} Until it's fixed, nobody can sign in or create a passkey, and no setup links can be made. Links anyone can use still work.
     </Line>
   );
 }
@@ -72,7 +72,7 @@ export default function People() {
     <>
       <Head
         title="Members"
-        lede="Members sign in here with a passkey. Nobody can sign up on their own: you make someone a membership card, then send them a setup link. Tapes for anyone with the link don't need any of this."
+        lede="Members sign in here with a passkey. Nobody can sign up on their own: you make someone a membership card, then send them a setup link. Links anyone can use don't need any of this."
       />
       <PasskeysProblem settings={settings.data} />
       <ErrorNote error={peopleError(error)} />
@@ -87,7 +87,8 @@ export default function People() {
               <th>Name</th>
               <th>Member since</th>
               <th className="ui-n">Passkeys</th>
-              <th className="ui-n">Tapes</th>
+              <th>Tapes out</th>
+              <th className="ui-n">Links</th>
               <th>Last signed in</th>
               <th>Status</th>
             </>
@@ -105,8 +106,22 @@ export default function People() {
               <td className="ui-n" data-label="Passkeys">
                 {p.passkeys || <span className="of-faint">None yet</span>}
               </td>
-              <td className="ui-n" data-label="Tapes">
-                {p.tickets ? <Link to={`/admin/tickets?person=${p.id}`}>{p.tickets}</Link> : <span className="of-faint">None</span>}
+              <td className="of-td-left" data-label="Tapes out">
+                {p.tapesOut?.length ? (
+                  <span className="of-cell">
+                    {p.tapesOut.map((o) => (
+                      <span key={o.film.id} className="of-cell">
+                        <Link to={`/admin/films/${o.film.id}`}>{o.film.title}</Link>
+                        <small>due back {formatDay(o.dueAt)}</small>
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="of-faint">None</span>
+                )}
+              </td>
+              <td className="ui-n" data-label="Links">
+                {p.liveLinks ? <Link to={`/admin/tickets?person=${p.id}`}>{p.liveLinks}</Link> : <span className="of-faint">None</span>}
               </td>
               <td className="ui-when" data-label="Last signed in">
                 {p.lastSignedInAt ? formatAgo(p.lastSignedInAt) : 'Never'}
@@ -119,6 +134,12 @@ export default function People() {
             </tr>
           ))}
         </Table>
+      )}
+      {people && people.length > 0 && (
+        <p className="of-foot">
+          Tapes out are the films each has out on a link for them alone. Links counts the ones that can still open a film for them. A tape taken on a link
+          anyone can use is a browser's, and is under Tapes.
+        </p>
       )}
     </>
   );

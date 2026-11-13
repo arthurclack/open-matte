@@ -50,7 +50,7 @@ function useCells(ref, redo) {
 // name on a strip of its own ("For Sam only"). `sticker`: words.js stickerText, or null.
 export function TitleTape({ film, sticker, forName, className = '' }) {
   const ref = useRef(null);
-  const { cells, lastCells } = useCells(ref, sticker ? `${sticker.label} ${sticker.value}` : '');
+  const { cells, lastCells } = useCells(ref, sticker ? `${sticker.top ?? ''} ${sticker.label} ${sticker.value}` : '');
   const lines = tapeLines({ title: film.title, poster: Boolean(film.posterUrl), e: eNumber(film.runtimeMinutes) }, { cells, lastCells: sticker ? lastCells : cells });
   const seed = `tape:${film.slug}`;
   return (

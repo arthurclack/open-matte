@@ -695,7 +695,7 @@ describe('signing in', () => {
     const after1 = await me(b);
     assert.deepEqual(after1.person, { name: p.name });
     assert.deepEqual(after1.tickets.map((t) => t.film.slug), ['arrival']);
-    assert.ok(after1.tickets[0].ticket.openScreening, 'the open screening came along');
+    assert.equal(after1.tickets[0].ticket.tape, 'yours', 'the tape this browser has out came along');
     // The loan is the browser's, and went with it to its new session. Signing in doesn't
     // make it the person's: it isn't on their card (docs/version-2.md, question 2).
     assert.deepEqual([loan().session_hash, loan().person_id, loan().ended_at], [sha256(b.jar.get('om_session')), null, null]);

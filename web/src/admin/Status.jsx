@@ -4,6 +4,7 @@ import { api, formatAgo, formatBytes, formatDateTime, formatDay, formatDayTime, 
 import { CrtScreen } from '../look/crt.jsx';
 import { Line } from '../look/ui.jsx';
 import { attentionLine, backupLate, copyOld, diskLow } from './facts.js';
+import { sweeperText, tapesOutLine } from './loanWords.js';
 import { AdminContext, ErrorNote, Head, Mark, Table, keptFor, lastClearedText, useLoad } from './ui.jsx';
 
 // Every value in the booth is worked out when it's asked for.
@@ -12,7 +13,7 @@ const loadBooth = () => api.get('/api/admin/booth');
 const errorText = (e) => (typeof e === 'string' ? e : e?.message);
 const sentence = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const linkName = (purpose) => (purpose === 'recovery' ? 'recovery link' : 'setup link');
-const ticketName = (t) => t.label || t.person?.name || 'Unnamed tape';
+const ticketName = (t) => t.label || t.person?.name || 'Unnamed link';
 
 // "14:02" today, "2 Nov, 14:02" before then.
 const when = (ms) => (new Date(ms).toDateString() === new Date().toDateString() ? formatTime(ms) : formatDateTime(ms));
@@ -53,7 +54,7 @@ export default function Status() {
     <>
       <Head
         title="Status"
-        lede="Each line says what was checked; nothing here tests a restore."
+        lede="What needs attention, and whether the server is well. Each line says what was checked; nothing here tests a restore. Reading this page records nothing."
         actions={
           <button type="button" className="ui-btn" onClick={refresh} disabled={busy}>
             {busy ? 'Checking…' : 'Refresh'}
@@ -99,7 +100,8 @@ function Unset() {
 }
 
 function Attention({ a }) {
-  const { links, tickets, refusals } = a;
+  const { links, tickets, refusals, tapes } = a;
+  const out = tapesOutLine(tapes);
   const reasons = Object.entries(refusals.byReason || {}).sort((x, y) => y[1] - x[1]);
   const linkRows = [...links.waiting.map((l) => ({ ...l, expired: false })), ...links.expired.map((l) => ({ ...l, expired: true }))];
   const waitingKind = links.waiting.every((l) => l.purpose === 'setup') ? 'setup link' : links.waiting.every((l) => l.purpose === 'recovery') ? 'recovery link' : 'setup or recovery link';
@@ -143,18 +145,29 @@ function Attention({ a }) {
         </Table>
       )}
 
+      <Line kind="info" lead={out.lead}>
+        {out.next && (
+          <>
+            The next due back is <Link to={`/admin/films/${out.next.film.id}`}>{out.next.film.title}</Link>, {formatDayTime(out.next.dueAt)}.{' '}
+          </>
+        )}
+        {out.text}{' '}
+        {tapes?.out > 0 && <Link to="/admin/tickets">Tapes</Link>}
+      </Line>
+
       <Line kind={tickets.length ? 'warn' : 'info'}>
         <p>
           {tickets.length
-            ? `${plural(tickets.length, 'tape')} never played, with a start-by date in the next 3 days or the last 3.`
-            : 'No tape that has never been played has a start-by date in the next 3 days or the last 3.'}
+            ? `${plural(tickets.length, 'link')} that ${tickets.length === 1 ? "hasn't" : "haven't"} lent, with a start-by date in the next 3 days or the last 3.`
+            : "No link that hasn't lent has a start-by date in the next 3 days or the last 3."}
         </p>
+        <p className="of-faint of-small">A date stands still while the tape is out with someone else, and moves on with the clock until it's back.</p>
       </Line>
       {tickets.length > 0 && (
         <Table
           head={
             <>
-              <th>Tape</th>
+              <th>Link</th>
               <th>Film</th>
               <th>For</th>
               <th>Start by</th>
@@ -172,8 +185,15 @@ function Attention({ a }) {
               <td data-label="For">{t.person ? <Link to={`/admin/people/${t.person.id}`}>{t.person.name}</Link> : <span className="of-dim">Anyone with the link</span>}</td>
               <td data-label="Start by">
                 <span className="of-cell">
-                  <time>{formatDay(t.startBy)}</time>
-                  {t.startBy < Date.now() ? <Mark tone="bad">Passed</Mark> : <small>{formatAgo(t.startBy)}</small>}
+                  <time>{t.startByPaused || formatDayTime(t.startByAsSet) !== formatDayTime(t.startBy) ? formatDayTime(t.startBy) : formatDay(t.startBy)}</time>
+                  {t.startByPaused ? (
+                    <Mark tone="info">Paused: the tape is out with someone else</Mark>
+                  ) : t.startBy < Date.now() ? (
+                    <Mark tone="bad">Passed</Mark>
+                  ) : (
+                    <small>{formatAgo(t.startBy)}</small>
+                  )}
+                  {t.startByAsSet != null && formatDayTime(t.startByAsSet) !== formatDayTime(t.startBy) && <small>Set as {formatDayTime(t.startByAsSet)}</small>}
                 </span>
               </td>
             </tr>
@@ -251,7 +271,7 @@ function Attention({ a }) {
 }
 
 function Server({ s }) {
-  const { media, disk, backups, retention, version } = s;
+  const { media, disk, backups, retention, version, sweeper } = s;
   return (
     <dl className="of-kv">
       <dt>Media folder</dt>
@@ -292,6 +312,16 @@ function Server({ s }) {
       <dt>Off-server copy</dt>
       <dd>
         <Copy c={backups.copy} />
+      </dd>
+
+      <dt>Tapes back in</dt>
+      <dd>
+        {sweeper?.lastError && (
+          <Line kind="bad" lead="Failed.">
+            The last check failed: {errorText(sweeper.lastError)}
+          </Line>
+        )}
+        <p>{sweeperText(sweeper)}</p>
       </dd>
 
       <dt>Clean-up</dt>

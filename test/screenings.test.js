@@ -75,8 +75,9 @@ describe('how long a tape is lent for', () => {
     assert.equal(first.dueBack, loanOf(first.screeningId).due_at);
     assert.equal(first.takenAt, loanOf(first.screeningId).taken_at);
     assert.ok(first.takenAt >= before && first.takenAt <= Date.now(), 'taken when Play was pressed');
-    // 1.1.0's page reads the due time under this name until it is rebuilt.
-    assert.equal(first.resumableUntil, first.dueBack);
+    // 1.1.0's page read the due time as resumableUntil; slice 7 rebuilt it, and the
+    // answer says it once.
+    assert.equal(first.resumableUntil, undefined);
     const again = await play(b);
     assert.deepEqual([again.resumed, again.took, again.screeningId], [true, false, first.screeningId]);
     assert.equal(again.dueBack, first.dueBack);

@@ -90,12 +90,50 @@ span.ob { display: inline-block; }
   .pick__head { font-size: 19px; margin-bottom: 6px; }
 }
 
+/* ---------- "Picked for you": a sheet off the shop's notepad (version 2) ---------- */
+/* the owner's own note to whoever has the link: ruled, "Picked for you" printed at its head, the
+   words in the hand on the lines. Apart from the staff pick card, and whiter, flatter, smaller */
+.ob--note { --stock: #f4efe2; --grain-o: 0.45; --hs: 23px; --lh: 32px; --contact: drop-shadow(0 0.75px 0.6px rgb(0 0 0 / 0.55)); width: min(100%, var(--w, 420px)); }
+.ob--note .ob__ink {
+  padding: 14px 20px 16px; color: var(--ink);
+  /* the notepad's rules, one under each line of the hand, from under the printed head */
+  background-image: repeating-linear-gradient(to bottom, transparent 0 calc(var(--lh) - 1px), rgb(120 110 96 / 0.28) calc(var(--lh) - 1px) var(--lh));
+  background-position: 0 44px; background-size: 100% calc(100% - 44px); background-repeat: no-repeat;
+}
+.note__head { margin: 0 0 6px; font: var(--shop-weight) 19px/24px var(--shop-face); font-variation-settings: var(--shop-vars); color: var(--ink-blue); }
+.note__text { margin: 0; font-size: var(--hs); line-height: var(--lh); color: var(--ink-pen); text-wrap: pretty; overflow-wrap: break-word; }
+.note__by { margin: 0; text-align: right; font-size: var(--hs); line-height: var(--lh); color: var(--ink-pen); }
+/* a long note is written smaller (words.js pickSize), on the same rules */
+.ob--note.note--long { --hs: 21px; }
+.ob--note.note--longer { --hs: 19px; }
+@media (max-width: 767px) {
+  .ob--note { --hs: 21px; --lh: 30px; }
+  .ob--note.note--long, .ob--note.note--longer { --hs: 19px; }
+  .ob--note .ob__ink { padding: 14px 16px 14px; }
+}
+
+/* ---------- the till slip: the receipt, torn off the till roll (version 2) ---------- */
+/* dot-matrix ribbon ink on thermal-white roll, the cutter's teeth top and bottom (wear.js tillTeeth) */
+.ob--till { --stock: #f1eee7; --grain-o: 0.6; --contact: drop-shadow(0 0.5px 0.4px rgb(0 0 0 / 0.45)); width: min(100%, var(--w, 288px)); }
+.ob--till .ob__ink { padding: 16px 18px 15px; color: #1c1729; }
+.slip__l { display: block; margin: 0; font: 900 17px/22px var(--till); font-variation-settings: 'ROND' 100; letter-spacing: 0.01em; overflow-wrap: anywhere; }
+/* the strikes are Typed's; the face is the till's, not the typewriter's */
+.ob--till .slip__l .typed { font-family: var(--till); font-weight: 900; }
+.slip__l + .slip__l { margin-top: 2px; }
+.slip__l--gap { margin-top: 10px !important; }
+.slip__l--small { font-size: 16px; line-height: 21px; }
+.slip__l--rule { margin: 8px 0 6px !important; height: 0; border-top: 2px dotted rgb(28 23 41 / 0.85); }
+
 /* ---------- the price-gun sticker: fluorescent orange, only for the next deadline ---------- */
 .ob--sticker { --stock: var(--stock-sticker); --grain-o: 0.55; width: fit-content; max-width: 100%; vertical-align: middle; position: relative; top: var(--sy, 0px); }
 /* where it can't be one line (a phone, a long date and time), the gun's line goes under the printed words */
 .ob--sticker .ob__ink { padding: 8px 11px 8px 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 7px; color: var(--ink); white-space: nowrap; }
 .stk__k { font: 600 13px/18px var(--sans); }
 .stk__v { font: 700 20px/24px var(--sans); font-variant-numeric: tabular-nums; }
+/* two lines: a line printed on the label roll first ("Play takes it out.", "Out on loan."), then the field and the gun's wheels */
+.ob--sticker.stk2 .ob__ink { flex-direction: column; align-items: flex-start; flex-wrap: nowrap; gap: 0; padding: 7px 11px 7px 10px; }
+.stk__top { display: block; font: 600 13px/16px var(--sans); }
+.stk__row { display: flex; align-items: baseline; gap: 0 7px; }
 
 /* ---------- black label-maker tape ---------- */
 /* embossed: black plastic, glossy, the letters stress-whitened where the wheel pressed them up.
@@ -185,6 +223,12 @@ span.ob { display: inline-block; }
   .osd--pause > .osd__left { grid-column: 1; grid-row: 2; justify-self: start; text-align: left; }
   .osd--pause > .osd__menu { grid-row: 3; }
 }
+
+/* the end of the tape: STOP and the counter on a short strip under the picture */
+.osd--stop { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 24px 10px; font-size: 26px; line-height: 1.1; }
+.osd--stop .osd__mode { font-size: 34px; }
+.osd--stop .osd__counter { font-variant-numeric: tabular-nums; }
+@container (max-width: 520px) { .osd--stop { padding: 10px 16px 8px; } }
 
 /* the VCR's menu: a vertical list, the item then its values */
 .osd-menu { display: grid; gap: 8px; font-size: 22px; line-height: 1; }

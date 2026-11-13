@@ -26,6 +26,9 @@ export const api = {
   get: (url) => request('GET', url),
   post: (url, body = {}, opts) => request('POST', url, body, opts),
   patch: (url, body = {}) => request('PATCH', url, body),
+  // Every call that changes something is sent as JSON (server/app.js), a DELETE too:
+  // with an empty body, {}.
+  delete: (url) => request('DELETE', url, {}),
   // A file as the whole body, labelled with its own type. The server goes by the bytes:
   // the type only gets the request past the rule that /api takes JSON. A file with no
   // type goes without a label, never with an empty one.

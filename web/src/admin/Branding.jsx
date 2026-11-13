@@ -88,9 +88,9 @@ export default function Branding({ settings, onSaved }) {
 
         <h3 className="of-h3">Link previews</h3>
         <p className="of-p of-dim">
-          Apps that preview links, like WhatsApp and iMessage, show a tape for anyone with its film's poster and title. Whoever fetches the preview (the
-          sender's phone, or for some apps their servers) learns which film was sent. A tape for one member, and every other link, shows the shop's name
-          and logo.
+          Apps that preview links, like WhatsApp and iMessage, show a link anyone can use with its film's poster and title. Whoever fetches the preview (the
+          sender's phone, or for some apps their servers) learns which film was sent. A link for one member, a link that has lent its tape, and every other link
+          show the shop's name and logo.
         </p>
       </section>
     </>

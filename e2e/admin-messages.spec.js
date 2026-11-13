@@ -39,7 +39,7 @@ test('the sign-in form says the password is wrong only when it is', async ({ pag
   }
 });
 
-test('giving a tape to someone whose card was turned off since the page opened says so in words', async ({ page, context, baseURL }, testInfo) => {
+test('giving a link to someone whose card was turned off since the page opened says so in words', async ({ page, context, baseURL }, testInfo) => {
   await asAdmin(context, baseURL);
   const person = await admin.newPerson(unique('Dana', testInfo));
   const ticket = await admin.issueTicket({ label: unique('Give', testInfo) });
@@ -49,7 +49,7 @@ test('giving a tape to someone whose card was turned off since the page opened s
   await admin.post(`/api/admin/people/${person.id}/disable`);
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Give', exact: true }).click();
-  await expect(page.locator('.ui-line--bad')).toHaveText('Their card is turned off: turn it back on, on their page, before giving them a tape.');
+  await expect(page.locator('.ui-line--bad')).toHaveText('Their card is turned off: turn it back on, on their page, before giving them a link.');
   await expect(page.getByText('Anyone with the link.', { exact: true })).toBeVisible();
 });
 

@@ -82,12 +82,50 @@
 .ui80 .fl-home > h1 + .fl-shelf, .ui80 .fl-home > .ui-line + .fl-shelf { margin-top: 32px; }
 .ui80 .fl-sec { margin-top: 48px; }
 .ui80 .fl-sec > h2 { font: 600 22px/28px var(--sans); margin: 0 0 20px; }
+/* what a section holds, under its heading */
+.ui80 .fl-sec > h2:has(+ .fl-sub) { margin-bottom: 4px; }
+.ui80 .fl-sub { margin: 0 0 20px; color: var(--text-2); font-size: 15px; line-height: 22px; max-width: 64ch; }
+/* whom to ask for a tape, under a film on the members' shelf */
+.ui80 .fl-facing p.fl-ask { color: var(--text); }
 @media (max-width: 767px) {
   .ui80 .fl-home { padding-top: 20px; padding-bottom: 48px; }
   .ui80 .fl-home > h1 { font-size: 28px; line-height: 32px; }
   .ui80 .fl-sec { margin-top: 36px; }
   .ui80 .fl-home > h1 + .fl-shelf, .ui80 .fl-home > .ui-line + .fl-shelf { margin-top: 24px; }
 }
+/* what you have out: one row each, as the film page's counter has it (sleeve, film, label
+   tape and sticker, the telly, until when and the buttons, the receipt) */
+.ui80 .fl-out { border-top: 1px solid var(--ui-rule); }
+.ui80 .fl-oc {
+  display: grid; grid-template-columns: 200px minmax(0, 1fr) 340px;
+  grid-template-areas: 'sleeve head telly' 'sleeve tape telly' 'sleeve body telly' 'sleeve slip telly';
+  grid-template-rows: auto auto auto 1fr; gap: 16px 40px; align-items: start; padding: 24px 0 28px; border-bottom: 1px solid var(--ui-rule);
+}
+.ui80 .fl-oc > * { min-width: 0; }
+.ui80 .fl-oc__sleeve { grid-area: sleeve; display: block; text-decoration: none; color: inherit; }
+.ui80 .fl-oc__sleeve > .ob { --w: 100%; }
+.ui80 .fl-oc__head { grid-area: head; }
+.ui80 .fl-oc__head h3 { font: 600 24px/30px var(--sans); margin: 0 0 4px; overflow-wrap: anywhere; letter-spacing: 0; }
+.ui80 .fl-oc__head h3 a { text-decoration: none; }
+@media (hover: hover) and (pointer: fine) { .ui80 .fl-oc__head h3 a:hover { text-decoration: underline; text-underline-offset: 3px; } }
+.ui80 .fl-oc__head p { margin: 0; color: var(--text-2); font-size: 15px; line-height: 22px; }
+.ui80 .fl-oc__tape { grid-area: tape; }
+.ui80 .fl-oc__telly { grid-area: telly; }
+.ui80 .fl-oc__telly .crt-play { width: 100%; }
+.ui80 .fl-oc__body { grid-area: body; display: grid; gap: 14px; justify-items: start; }
+.ui80 .fl-oc__body p { margin: 0; color: var(--text-2); max-width: 52ch; }
+.ui80 .fl-oc__body b { color: var(--text); font-weight: 600; }
+.ui80 .fl-oc__body .ui-btns { margin: 0; }
+.ui80 .fl-oc__slip { grid-area: slip; }
+@media (max-width: 1099px) {
+  .ui80 .fl-oc { grid-template-columns: 160px minmax(0, 1fr); grid-template-areas: 'sleeve head' 'sleeve tape' 'sleeve telly' 'sleeve body' 'sleeve slip'; }
+  .ui80 .fl-oc__telly { max-width: 360px; }
+}
+@media (max-width: 767px) {
+  .ui80 .fl-oc { grid-template-columns: 96px minmax(0, 1fr); grid-template-areas: 'sleeve head' 'tape tape' 'telly telly' 'body body' 'slip slip'; gap: 16px; padding: 16px 0 24px; }
+  .ui80 .fl-oc__head h3 { font-size: 20px; line-height: 26px; }
+}
+
 /* a shelf of sleeves, face out */
 .ui80 .fl-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 200px)); gap: 36px 40px; margin: 0; padding: 0; list-style: none; }
 .ui80 .fl-facing { min-width: 0; }
@@ -98,7 +136,8 @@
 .ui80 .fl-facing__t { font: 600 17px/22px var(--sans); margin: 14px 0 2px; overflow-wrap: anywhere; letter-spacing: 0; }
 .ui80 .fl-facing__t a { text-decoration: none; }
 @media (hover: hover) and (pointer: fine) { .ui80 .fl-facing__t a:hover { text-decoration: underline; text-underline-offset: 3px; } }
-.ui80 .fl-facing p { margin: 0; font: 400 14px/20px var(--ui-face); color: var(--text-2); font-variant-numeric: tabular-nums; }
+/* in the text face, as the mock-up's: the machine's face wraps a narrow column a word a line */
+.ui80 .fl-facing p { margin: 0; font: 400 14px/20px var(--sans); color: var(--text-2); font-variant-numeric: tabular-nums; }
 .ui80 .fl-facing p + p { margin-top: 2px; }
 @media (max-width: 767px) {
   .ui80 .fl-shelf { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 16px; }
@@ -121,6 +160,8 @@
 .ui80 .fl-sleeve { grid-area: sleeve; position: relative; z-index: 2; }
 .ui80 .fl-sleeve > .ob { --w: 260px; }
 .ui80 .fl-pickcell { grid-area: pick; margin: 44px 0 0 -20px; position: relative; z-index: 1; min-width: 0; }
+/* "Picked for you", on the counter under the label tape: the link's own note, apart from the staff pick on the wall */
+.ui80 .fl-counter .ob--note { margin: 4px 0 2px; }
 /* the card's words start clear of the sleeve lying over its edge */
 @media (min-width: 1100px) { .ui80 .fl-pickcell .ob--pick > .ob__body > .ob__sheet > .ob__ink { padding-left: 42px; } }
 .ui80 .fl-info { grid-area: info; min-width: 0; }
@@ -148,6 +189,30 @@
 .ui80 .fl-keepoffer p { margin: 0; max-width: 52ch; }
 .ui80 .fl-keepoffer .ui-line { margin: 0; }
 .ui80 .fl-keepoffer .ui-btns { margin: 0; }
+/* the counter's line where Play would be (out, spent, missed, broken): it takes the focus after a return */
+.ui80 .fl-gone { display: grid; gap: 12px; }
+.ui80 .fl-gone:focus { outline: none; }
+.ui80 .fl-gone .fl-clock { margin: 0; }
+.ui80 .fl-clock b { color: var(--text); font-weight: 600; }
+/* Return it now, asked on the page */
+.ui80 .fl-counter .fl-ask { margin: 0; }
+.ui80 .fl-ask p { margin: 0; max-width: 56ch; }
+.ui80 .fl-ask p:focus { outline: none; }
+.ui80 .fl-ask .ui-line { margin: 10px 0 0; }
+.ui80 .fl-counter .ui-btns { margin: 0; }
+.ui80 .fl-counter .fl-ask .ui-btns { margin-top: 12px; }
+/* the receipt: folded away under one quiet line, then its plain lines */
+.ui80 .fl-receipt { margin: 0; }
+.ui80 .fl-receipt > summary { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 2px; font: 500 15px/22px var(--ui-face); color: var(--text); cursor: pointer; list-style: none; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: rgb(233 223 201 / 0.5); touch-action: manipulation; }
+.ui80 .fl-receipt > summary::-webkit-details-marker { display: none; }
+.ui80 .fl-receipt > summary::before { content: ''; width: 0; height: 0; border-left: 6px solid currentColor; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+.ui80 .fl-receipt[open] > summary::before { border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid currentColor; border-bottom: 0; }
+@media (hover: hover) and (pointer: fine) { .ui80 .fl-receipt > summary:hover { text-decoration-color: currentColor; } }
+.ui80 .fl-receipt__in { margin: 10px 0 0; padding: 0 2px; }
+.ui80 .fl-receipt__in--fresh { margin: 0; }
+.ui80 .fl-receipt__cap { margin: 8px 0 0; font-size: 14px; line-height: 20px; color: var(--text-3); }
+@media (forced-colors: active) { .ui80 .fl-receipt > summary::before { forced-color-adjust: none; border-left-color: CanvasText; } .ui80 .fl-receipt[open] > summary::before { border-left-color: transparent; border-top-color: CanvasText; } }
+
 /* a button that reads as part of a sentence: "Sign in and keep it" */
 .ui80 .fl-linklike { display: inline; padding: 0; border: 0; background: none; color: var(--text); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgb(233 223 201 / 0.5); touch-action: manipulation; }
 @media (hover: hover) and (pointer: fine) { .ui80 .fl-linklike:hover { text-decoration-color: currentColor; } }
@@ -213,6 +278,13 @@
   .ui80 .fl-bar--osd .cue-style-panel { left: 16px; right: 16px; width: auto; }
 }
 
+/* the end of the film: STOP on its strip, then the choices in plain type */
+.ui80 .fl-bar--stop { padding-bottom: 0; }
+.ui80 .fl-end { padding: 20px 0 24px; }
+.ui80 .fl-end h2 { font: 600 24px/30px var(--sans); margin: 0 0 6px; }
+.ui80 .fl-end p { margin: 0 0 16px; color: var(--text-2); max-width: 60ch; }
+@media (max-width: 767px) { .ui80 .fl-end { padding: 16px 16px 20px; } }
+
 /* Playback help: plain words, the machine's face for the readings */
 .ui80 .fl-page .playback-help.fl-help { padding: 16px 0 24px; background: none; border-top: 1px solid var(--rule); border-bottom: 0; font-size: 15px; line-height: 22px; }
 .ui80 .fl-help h2 { font: 600 20px/28px var(--sans); margin: 0 0 6px; }
@@ -231,6 +303,26 @@
   .ui80 .fl-help dt { border-bottom: 0; padding-bottom: 0; }
   .ui80 .fl-help dd { padding-top: 2px; }
 }
+
+/* ---------- handing a tape back (pages/HandBack.jsx), a view of the film page ---------- */
+.ui80 .fl-filmline { display: flex; align-items: center; gap: 16px; margin: 0 0 24px; }
+.ui80 .fl-filmline .ob { flex: none; --w: 56px; }
+.ui80 .fl-filmline p { margin: 0; color: var(--text-2); font-size: 15px; line-height: 22px; min-width: 0; }
+.ui80 .fl-filmline b { display: block; color: var(--text); font-weight: 600; font-size: 17px; overflow-wrap: anywhere; }
+.ui80 .fl-handback h1:focus { outline: none; }
+.ui80 .fl-form { max-width: 560px; }
+.ui80 .fl-form .ui-fieldset { margin-bottom: 16px; }
+.ui80 .fl-form .ui-field__error { margin: 0 0 4px; }
+.ui80 .fl-form .ui-line { margin: 0 0 20px; }
+.ui80 .fl-form .ui-btns + .ui-btns { margin-top: 12px; }
+.ui80 .fl-only { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 20px; font: 600 16px/24px var(--sans); color: var(--text); max-width: 54ch; }
+.ui80 .fl-only svg { flex: none; width: 16px; height: 16px; margin-top: 4px; fill: currentColor; shape-rendering: crispEdges; }
+.ui80 .fl-sent { margin: 0 0 24px; padding: 16px 0; border-top: 1px solid var(--ui-rule); border-bottom: 1px solid var(--ui-rule); }
+.ui80 .fl-sent dt { font: 500 13px/18px var(--ui-face); color: var(--text-2); margin: 0 0 2px; }
+.ui80 .fl-sent dd { margin: 0 0 12px; overflow-wrap: anywhere; }
+.ui80 .fl-sent dd:last-child { margin-bottom: 0; }
+.ui80 .fl-sent blockquote { margin: 0; color: var(--text); white-space: pre-line; }
+@media (max-width: 767px) { .ui80 .fl-handback__go .ui-btn--big { width: 100%; } }
 
 /* ---------- the membership card's pages (Enroll.jsx done, Account.jsx) ---------- */
 .ui80 .fl-cardpage {

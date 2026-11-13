@@ -555,7 +555,7 @@ describe('the film, while its tape is out', () => {
       assert.deepEqual(page.ticket, {
         state: 'unavailable', tape: 'yours', loanDays: null, startBy: null, dueBack,
         loan: { takenAt, position: 33, finishedAt: null, toBrowser: false, canRespond: true },
-        returned: null, pickNote: null, inAccount: true, expiresAt: dueBack, openScreening: { resumableUntil: dueBack, position: 33 },
+        returned: null, pickNote: null, inAccount: true,
       });
       // On their card still, on another device too.
       const laptop = await sam.device();
@@ -1398,7 +1398,7 @@ describe('cancelling a link, and restoring one', () => {
 
 // ====================================================================== a link can't change hands with the tape
 describe('while a link has the tape it can’t change hands (question 2)', () => {
-  test('giving it to a member, letting anyone use it, Sign out browsers and giving its play back are refused; once the tape is back they go', async () => {
+  test('giving it to a member, letting anyone use it and Sign out browsers are refused; once the tape is back they go', async () => {
     const film = await ownFilm('guards');
     const sam = await member('Guard Sam');
     const jo = await member('Guard Jo');
@@ -1408,7 +1408,8 @@ describe('while a link has the tape it can’t change hands (question 2)', () =>
       assert.deepEqual(answer(await admin.post(`/api/admin/tickets/${ticket.id}/holder`, { personId: sam.p.id })), [409, { error: 'tape-out' }]);
       assert.deepEqual(answer(await admin.post(`/api/admin/tickets/${ticket.id}/holder`, { personId: null, claimable: true })), [409, { error: 'tape-out' }]);
       assert.deepEqual(answer(await admin.post(`/api/admin/tickets/${ticket.id}/sign-out-browsers`)), [409, { error: 'tape-out' }]);
-      assert.deepEqual(answer(await admin.post(`/api/admin/screenings/${screeningId}/void`)), [409, { error: 'tape-out' }]);
+      // Giving its play back went with slice 9 (below): there is no such route.
+      assert.deepEqual(answer(await admin.post(`/api/admin/screenings/${screeningId}/void`)), [404, { error: 'not-found' }]);
     };
     await refused();
     // With the film's files broken, or the film off the shelf, the link still has the tape.
@@ -1444,8 +1445,8 @@ describe('while a link has the tape it can’t change hands (question 2)', () =>
     assert.equal((await admin.post(`/api/admin/tickets/${ticket.id}/holder`, { personId: sam.p.id })).status, 200);
     assert.equal(ticketRow(ticket).person_id, sam.p.id);
     assert.equal(stateOf(ticket, Date.now()), 'spent', 'given or not, it has lent');
-    // Its playback still can't be given back: a link lends once.
-    assert.deepEqual(answer(await admin.post(`/api/admin/screenings/${screeningId}/void`)), [409, { error: 'tape-out' }]);
+    // Its playback still can't be given back: a link lends once, and the route is gone.
+    assert.deepEqual(answer(await admin.post(`/api/admin/screenings/${screeningId}/void`)), [404, { error: 'not-found' }]);
     assert.equal(screeningRow(screeningId).voided_at, null);
   });
 
@@ -1465,14 +1466,16 @@ describe('while a link has the tape it can’t change hands (question 2)', () =>
     assert.equal(access.setTicketPerson(ticket.id, sam.p.id, {}, due).changed, true);
   });
 
-  test('a play from 1.x that no loan names can still be given back', async () => {
+  // Slices 3 to 8 let a play from 1.x that no loan names be given back, until the
+  // button went. Slice 9 took the button and its route away (the plan's API table):
+  // a play from 1.x is now history like any other, and nothing writes voided_at.
+  test('Give back is gone: a play from 1.x that no loan names can no longer be given back', async () => {
     const film = await ownFilm('void-1x');
     const ticket = await issue(film);
     const id = Number(sql('INSERT INTO screenings (ticket_id, film_id, session_hash, started_at, resumable_until, last_heartbeat_at, active_until) VALUES (?, ?, ?, 1, 2, 1, 1)', ticket.id, film.id, 'gone').lastInsertRowid);
-    const r = await admin.post(`/api/admin/screenings/${id}/void`);
-    assert.equal(r.status, 200, JSON.stringify(r.data));
-    assert.ok(screeningRow(id).voided_at);
-    assert.equal((await admin.post('/api/admin/screenings/987654321/void')).status, 404);
+    assert.deepEqual(answer(await admin.post(`/api/admin/screenings/${id}/void`)), [404, { error: 'not-found' }]);
+    assert.equal(screeningRow(id).voided_at, null);
+    assert.deepEqual(answer(await admin.post('/api/admin/screenings/987654321/void')), [404, { error: 'not-found' }]);
   });
 });
 
@@ -1506,8 +1509,12 @@ describe('moving a due date (question 8)', () => {
     // Nothing: the shop's own days.
     assert.equal((await patch(ticket, { loanDays: null })).status, 200);
     assert.deepEqual([loanOf(ticket).due_at, ticketRow(ticket).loan_days], [loan.taken_at + 3 * DAY, null]);
-    // A save that doesn't mention the days leaves the date alone (1.1.0's link page sends none).
-    assert.equal((await patch(ticket, { label: 'Renamed', screeningLimit: 2, daysAfterFirstPlay: 9 })).status, 200);
+    // A save that doesn't mention the days leaves the date alone (1.1.0's link page sent
+    // none; since slice 9 its play limit and days after the first play are refused, and
+    // nothing in such a save is kept).
+    for (const old of [{ screeningLimit: 2 }, { daysAfterFirstPlay: 9 }]) assert.equal((await patch(ticket, { label: 'Not kept', ...old })).status, 400);
+    assert.equal(ticketRow(ticket).label === 'Not kept', false);
+    assert.equal((await patch(ticket, { label: 'Renamed' })).status, 200);
     assert.deepEqual([loanOf(ticket).due_at, ticketRow(ticket).label], [loan.taken_at + 3 * DAY, 'Renamed']);
     assert.equal(eventsOf(ticket, 'due-changed').length, 3);
     for (const bad of [0, 31, 1.5, 'soon', -1]) assert.equal((await patch(ticket, { loanDays: bad })).status, 400, String(bad));

@@ -352,7 +352,9 @@ test('after a refused attempt, Sign in and keep it says to open the link you wer
   await expect(page.getByRole('button', { name: /^Copy/ })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Sign in with a passkey' }).click();
-  await expect(page.getByText("This tape is on your card, so it's on every device you sign in on.")).toBeVisible();
+  // Kept: the "For … only" strip under the title says it's on their card (question 11:
+  // the page no longer says "This tape is on your card", 1.1.0's words).
+  await expect(page.locator('.fl-for .ob-sr').first()).toHaveText(/^For /);
   await expect(menu(page, name)).toBeVisible();
 });
 

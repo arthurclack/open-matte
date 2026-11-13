@@ -1,12 +1,14 @@
-// The shop's words that depend on its settings or a tape's limits, apart from React:
+// The shop's words that depend on its settings or a tape's loan, apart from React:
 // who the host is ("Picked by Arthur", "ask Arthur"), and which deadline the orange
 // sticker shows. No DOM here, so the tests can load it in Node (test/look.test.js).
 //
 // A tape is what the server calls a ticket: these read the ticket as /api/me and the
-// film page give it (startBy, expiresAt, firstPlayedAt, openScreening,
-// screeningLimit, screeningsLeft). Nothing here renames a field.
+// film page give it (state, tape, loanDays, startBy, dueBack). Nothing here renames a
+// field.
 
-import { formatDay, formatDayTime, plural } from '../api.js';
+import { formatDay, formatDayTime } from '../api.js';
+
+const DAY = 24 * 60 * 60 * 1000;
 
 // ------------------------------------------------------------ the host
 
@@ -39,8 +41,13 @@ export const pickSize = (text) => {
 
 // ------------------------------------------------------------ the next deadline
 
-// The words on the sticker for each kind of deadline.
-export const DEADLINE_KEYS = { 'start-by': 'Start by', 'due-back': 'Due back', 'come-back': 'Come back by' };
+// The words on the sticker for each kind of deadline: the field printed on the label
+// roll, before the gun's date. "Back" is for a tape that is out with someone else.
+export const DEADLINE_KEYS = { 'start-by': 'Start by', 'due-back': 'Due back', back: 'Back' };
+
+// The line printed first on a two-line sticker, where the date needs a word before it:
+// Play takes the tape out (and this is the date it would be due back), or it is out.
+export const STICKER_TOPS = { take: 'Play takes it out.', out: 'Out on loan.' };
 
 // Whether a moment is the last minute of a day here (23:59 or later): a date given on
 // its own means "by the end of that day", so only such a deadline may drop its time.
@@ -49,48 +56,40 @@ export const endOfDay = (ms) => {
   return d.getHours() === 23 && d.getMinutes() === 59;
 };
 
-// The one deadline the orange sticker shows, for a tape that can still be played
-// (ticket.state 'ok'): the soonest still to come of
-//   start-by   before the first play, the date to start by (ticket.startBy, which the
-//              server leaves out once it has been played);
-//   due-back   when the tape ends: so many days after the first play
-//              (ticket.expiresAt);
-//   come-back  while a play is paused, the end of the window to resume it
-//              (ticket.openScreening.resumableUntil, never later than expiresAt).
-// When the window to come back ends as the tape does, it's due back.
-// -> { kind, key, at, withTime } or null: null for a tape that has gone (expired, used
-// up, taken back, off the shelf, unavailable), which has no deadline to show.
-// withTime says whether the sticker gives the time as well as the day:
-//   come-back  always ("Come back by Sat 7 Nov 19:40"): it falls at any time of day;
-//   start-by   only when it isn't the end of a day here (the back office sets the end
-//              of a day where the owner is, which may be another time here);
-//   due-back   never, as the approved design has it ("Due back Sun 8 Nov"): the page
-//              gives its exact time in words beside it.
+// The one deadline the orange sticker shows. There is one clock: the time the tape is
+// due back. By the ticket's tape:
+//   in     before Play: the date to start by, if the link has one still to come
+//          (ticket.startBy); otherwise the date the tape would be due back if Play
+//          were pressed now (now + ticket.loanDays), under "Play takes it out.";
+//   yours  the date it is due back (ticket.dueBack);
+//   out    out with someone else: the date it is due back, under "Out on loan.",
+//          as "Back", never who has it.
+// A film whose files are broken keeps its tape's date (yours, out); with the tape in
+// there is nothing to play, so no date. Spent, missed or taken back: no sticker.
+// -> { kind, key, top, at, withTime } or null. withTime: whether the sticker gives the
+// time as well as the day: a start-by only when it isn't the end of a day here (the
+// back office sets the end of a day where the owner is, which may be another time
+// here, and slice 6 gives back time to the minute); a due date never, as the approved
+// design has it ("Due back Sun 8 Nov"): the page gives its exact time in words nearby.
 export function nextDeadline(ticket, now = Date.now()) {
-  if (!ticket || (ticket.state != null && ticket.state !== 'ok')) return null;
-  const all = [];
-  if (ticket.startBy && !ticket.firstPlayedAt) all.push({ kind: 'start-by', at: ticket.startBy });
-  if (ticket.expiresAt) all.push({ kind: 'due-back', at: ticket.expiresAt });
-  if (ticket.openScreening?.resumableUntil) all.push({ kind: 'come-back', at: ticket.openScreening.resumableUntil });
-  // Soonest first; on a tie, the order above (a stable sort), so due-back beats come-back.
-  const next = all.filter((d) => d.at > now).sort((a, b) => a.at - b.at)[0];
-  if (!next) return null;
-  const withTime = next.kind === 'come-back' || (next.kind === 'start-by' && !endOfDay(next.at));
-  return { ...next, key: DEADLINE_KEYS[next.kind], withTime };
+  const t = ticket;
+  if (!t) return null;
+  const at = (kind, ms, top = null) => (ms > now ? { kind, key: DEADLINE_KEYS[kind], top, at: ms, withTime: kind === 'start-by' && !endOfDay(ms) } : null);
+  if (t.tape === 'yours') return at('due-back', t.dueBack);
+  if (t.tape === 'out') return at('back', t.dueBack, STICKER_TOPS.out);
+  if (t.tape === 'in' && t.state === 'ok') {
+    if (t.startBy && t.startBy > now) return at('start-by', t.startBy);
+    if (t.loanDays) return at('due-back', now + t.loanDays * DAY, STICKER_TOPS.take);
+  }
+  return null;
 }
 
-// What the sticker says for a deadline: { label: 'Due back', value: 'Sun 8 Nov' }, the
-// props of <Sticker> (and LabelTape's sticker), in the browser's own way of writing
-// dates (api.js). Null for no deadline.
+// What the sticker says for a deadline: { top, label: 'Due back', value: 'Sun 8 Nov' },
+// the props of <Sticker> (and LabelTape's sticker), in the browser's own way of writing
+// dates (api.js). `top` is null for a one-line sticker. Null for no deadline.
 export function stickerText(deadline) {
   if (!deadline) return null;
-  return { label: deadline.key, value: deadline.withTime ? formatDayTime(deadline.at) : formatDay(deadline.at) };
-}
-
-// "2 plays left", beside Play, for a tape with a number of plays; null for one without.
-export function playsLeft(ticket) {
-  if (ticket?.screeningLimit == null || ticket.screeningsLeft == null) return null;
-  return `${plural(ticket.screeningsLeft, 'play')} left`;
+  return { top: deadline.top ?? null, label: deadline.key, value: deadline.withTime ? formatDayTime(deadline.at) : formatDay(deadline.at) };
 }
 
 // ------------------------------------------------------------ the machine

@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, formatDateTime } from '../api.js';
-import { TapeStrip } from '../look/objects.jsx';
+import { TapeStrip, TillSlip } from '../look/objects.jsx';
+import { loanEventWords } from './loanWords.js';
 import { ErrorNote, Mark, Table, describeEvent, isSecurityEvent, keptFor, useAction, useLoad } from './ui.jsx';
 
 // How many events each page (and each Show older) brings.
@@ -15,7 +16,8 @@ const KINDS = [
 
 // The filters live in the address (?film=&person=&ticket=&kind=&heartbeats=1), so a
 // filtered view can be linked to and survives a reload. A tape's page links here
-// with ?ticket=.
+// with ?ticket=. Loans are the links sent, cancelled and restored, and every time a
+// tape went out and came back (server/access.js LOAN_EVENTS).
 export default function Activity() {
   const [params, setParams] = useSearchParams();
   const film = params.get('film') || '';
@@ -55,7 +57,8 @@ export default function Activity() {
             <TapeStrip text="Ledger" seed="ledger" />
           </h1>
           <p className="of-lede">
-            This is what browsers reported, not proof anyone was watching.
+            Links sent, loans, plays and finishes, and members' sign-ins, passkeys and links, newest first. This is what browsers reported, not proof
+            anyone was watching.
             {s?.retainProgressDays && s?.retainEventsDays && (
               <>
                 {' '}
@@ -102,13 +105,13 @@ export default function Activity() {
   );
 }
 
-// The tape a view is filtered to, with a way to see every tape again.
+// The link a view is filtered to, with a way to see every link again.
 function TicketChip({ id, onRemove }) {
   const { data: t } = useLoad(() => api.get(`/api/admin/tickets/${encodeURIComponent(id)}`), [id]);
-  const name = t ? `${t.label || t.person?.name || 'Unnamed tape'} · ${t.film.title}` : `Tape ${id}`;
+  const name = t ? `${t.label || t.person?.name || 'Unnamed link'} · ${t.film.title}` : `Link ${id}`;
   return (
-    <button type="button" className="ui-btn ui-btn--small" aria-pressed="true" onClick={onRemove} title="Show every tape">
-      Tape: {name} <span aria-hidden="true">×</span>
+    <button type="button" className="ui-btn ui-btn--small" aria-pressed="true" onClick={onRemove} title="Show every link">
+      Link: {name} <span aria-hidden="true">×</span>
       <span className="visually-hidden">(remove)</span>
     </button>
   );
@@ -159,6 +162,9 @@ function Events({ query, filtered }) {
                     <b>Security.</b> {describeEvent(e)}
                   </Mark>
                 </span>
+              ) : loanEventWords(e)?.till ? (
+                // Lent and back in: printed on a strip off the till roll.
+                <TillSlip lines={[{ text: describeEvent(e) }]} seed={`ledger:${e.id}`} className="of-till" label={null} />
               ) : (
                 describeEvent(e)
               )}
@@ -181,9 +187,10 @@ function Events({ query, filtered }) {
   );
 }
 
-// The signed-in member when there is one, otherwise the tape's label.
+// The signed-in member when there is one, otherwise the link's label.
 function Who({ event: e }) {
-  const ticket = e.ticketId ? <Link to={`/admin/tickets/${e.ticketId}`}>{e.ticketLabel || 'Unnamed tape'}</Link> : null;
+  // A member's own link usually has no label of its own: "their link".
+  const ticket = e.ticketId ? <Link to={`/admin/tickets/${e.ticketId}`}>{e.ticketLabel || (e.personId ? 'their link' : 'Unnamed link')}</Link> : null;
   if (!e.personId) return ticket || '–';
   // One element, so the narrow-screen card layout keeps it together.
   return (

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, formatAgo, plural } from '../api.js';
 import { Sleeve } from '../look/objects.jsx';
 import { Line } from '../look/ui.jsx';
+import { tapeCell } from './loanWords.js';
 import { AdminContext, ErrorNote, Fact, Head, Mark, MediaBadge, Table, useAction, useLoad } from './ui.jsx';
 
 // The shelf: every film, on it or off it, its media and the scan. `children` comes
@@ -55,38 +56,52 @@ export default function Films({ children }) {
       )}
 
       {films && films.length > 0 && (
-        <Table
-          head={
-            <>
-              <th>Film</th>
-              <th>Shelf</th>
-              <th>Media</th>
-              <th className="ui-n">Active tapes</th>
-              <th className="of-desk-only">Scanned</th>
-            </>
-          }
-        >
-          {films.map((f) => (
-            <tr key={f.id}>
-              <td className="of-td-film">
-                <FilmCell film={f} />
-              </td>
-              <td data-label="Shelf">{f.published ? <Mark tone="done">On the shelf</Mark> : <Mark tone="off">Off the shelf</Mark>}</td>
-              <td data-label="Media">
-                <span className="of-cell">
-                  <MediaBadge status={f.mediaStatus} />
-                  <small className="of-phone-only">Scanned {formatAgo(f.scannedAt)}</small>
-                </span>
-              </td>
-              <td className="ui-n" data-label="Active tapes">
-                {f.tickets.active || <span className="of-faint">none</span>}
-              </td>
-              <td className="ui-when of-desk-only" data-label="Scanned">
-                {formatAgo(f.scannedAt)}
-              </td>
-            </tr>
-          ))}
-        </Table>
+        <>
+          <Table
+            head={
+              <>
+                <th>Film</th>
+                <th>Tape</th>
+                <th>Media</th>
+                <th className="ui-n">Links</th>
+                <th className="of-desk-only">Scanned</th>
+              </>
+            }
+          >
+            {films.map((f) => {
+              const tape = tapeCell(f.tape);
+              return (
+                <tr key={f.id}>
+                  <td className="of-td-film">
+                    <FilmCell film={f} />
+                  </td>
+                  <td className="of-td-left" data-label="Tape">
+                    <span className="of-cell">
+                      <Mark tone={tape.tone}>{tape.text}</Mark>
+                      {tape.sub && <small>{tape.sub}</small>}
+                    </span>
+                  </td>
+                  <td data-label="Media">
+                    <span className="of-cell">
+                      <MediaBadge status={f.mediaStatus} />
+                      <small className="of-phone-only">Scanned {formatAgo(f.scannedAt)}</small>
+                    </span>
+                  </td>
+                  <td className="ui-n" data-label="Links">
+                    {f.links?.live || <span className="of-faint">none</span>}
+                  </td>
+                  <td className="ui-when of-desk-only" data-label="Scanned">
+                    {formatAgo(f.scannedAt)}
+                  </td>
+                </tr>
+              );
+            })}
+          </Table>
+          <p className="of-foot">
+            On the shelf means friends with a link can open the film; In and Out are its one tape. Links counts the links that can still open each film.
+            Friends never see who has a tape out: they see “Out on loan” and the date it's due back.
+          </p>
+        </>
       )}
     </>
   );
@@ -175,7 +190,7 @@ function ScanReport({ report, onClose }) {
           {report.removed.map((r) => (
             <li key={r.slug}>
               <b>{r.title}</b> <span className="of-mono of-faint">/{r.slug}</span>: the folder is gone.
-              {r.published && ' Anyone with a tape for it sees it as unavailable.'}
+              {r.published && ' Anyone with a link for it sees it as unavailable.'}
             </li>
           ))}
           {report.skipped.map((s) => (

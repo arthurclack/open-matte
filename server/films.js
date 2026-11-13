@@ -94,8 +94,6 @@ export const masterUrl = (film) => {
 //              This link's own, in every state, and never another link's. Not the
 //              film's staff pick (film.recommendation), and not the link's label,
 //              which is the admin's alone and is never sent to a viewer.
-// expiresAt and openScreening are 1.1.0's, kept until its pages are rebuilt: the due
-// date, and the place to resume from, while the tape is this browser's.
 export function ticketForViewer(a) {
   if (!a?.ticket || !a.status) return null;
   const { ticket, status, view, tape } = a;
@@ -118,7 +116,5 @@ export function ticketForViewer(a) {
     pickNote: ticket.pick_note ?? null,
     // In the signed-in person's account, so on every device they sign in on.
     inAccount: ticket.person_id != null,
-    expiresAt: yours ? dueBack : null,
-    openScreening: yours ? { resumableUntil: dueBack, position } : null,
   };
 }

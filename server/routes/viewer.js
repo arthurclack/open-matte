@@ -192,8 +192,6 @@ export function viewerRoutes({ db, sessions, access, site, limit }) {
       takenAt: r.loan.taken_at,
       dueBack: r.loan.due_at,
       toBrowser,
-      // 1.1.0's, kept until its pages are rebuilt.
-      resumableUntil: r.loan.due_at,
     });
   });
 

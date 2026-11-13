@@ -9,7 +9,7 @@ import './objects.css';
 // over the film's picture: while the film plays, the player is plain and the
 // browser's own controls are as they were. See README.md.
 
-// The pixel marks the machine draws: ▶ and ❚❚, in whole pixels.
+// The pixel marks the machine draws: ▶, ❚❚ and ■, in whole pixels.
 export function PxPlay() {
   return (
     <svg className="px" viewBox="0 0 4 7" aria-hidden="true" focusable="false">
@@ -21,6 +21,14 @@ export function PxPause() {
   return (
     <svg className="px" viewBox="0 0 6 7" aria-hidden="true" focusable="false">
       <path d="M0 0h2v7H0zM4 0h2v7H4z" />
+    </svg>
+  );
+}
+
+export function PxStop() {
+  return (
+    <svg className="px" viewBox="0 0 6 7" aria-hidden="true" focusable="false">
+      <path d="M0 1h6v5H0z" />
     </svg>
   );
 }
@@ -79,10 +87,10 @@ export function PlayScreen({ counter = '0:00:00', onDone, hold = PLAY_SCREEN_MS 
 }
 
 // The paused strip UNDER the picture: PAUSE, the lit way back in ("Resume at 0:18"),
-// how long is left to come back, and (children) the VCR menu of audio, subtitles and
-// picture. `left` is the words for the time ("47 h 12 min"); `aside` replaces the
-// whole right-hand line if given.
-export function OsdStrip({ at, onResume, left, aside, children, resumeLabel }) {
+// the right-hand line, and (children) the VCR menu of audio, subtitles and picture.
+// `aside` is that line ("Due back Sun 8 Nov"). (1.x's `left`, "47 h 12 min to come
+// back", went with the window to come back.)
+export function OsdStrip({ at, onResume, aside, children, resumeLabel }) {
   return (
     <CrtScreen className="crt--strip">
       <div className="osd osd--pause">
@@ -99,7 +107,23 @@ export function OsdStrip({ at, onResume, left, aside, children, resumeLabel }) {
           )}
         </div>
         {children && <div className="osd__menu">{children}</div>}
-        {(aside || left) && <p className="osd__left">{aside ?? `${left} to come back`}</p>}
+        {aside && <p className="osd__left">{aside}</p>}
+      </div>
+    </CrtScreen>
+  );
+}
+
+// The end of the tape: STOP on a short strip UNDER the picture, and the tape counter
+// where it stopped. What to do next is the page's, in plain type under it.
+export function StopStrip({ counter }) {
+  return (
+    <CrtScreen className="crt--strip">
+      <div className="osd osd--stop">
+        <p className="osd__mode">
+          STOP
+          <PxStop />
+        </p>
+        <p className="osd__counter">{counter}</p>
       </div>
     </CrtScreen>
   );

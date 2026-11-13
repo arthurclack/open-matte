@@ -9,8 +9,10 @@ import FilmDetail from './FilmDetail.jsx';
 import Films from './Films.jsx';
 import People from './People.jsx';
 import PersonDetail from './PersonDetail.jsx';
+import Responses from './Responses.jsx';
 import Settings from './Settings.jsx';
 import { serverTrouble } from './facts.js';
+import { responsesTab } from './loanWords.js';
 import Status, { AttentionStrip } from './Status.jsx';
 import TicketDetail from './TicketDetail.jsx';
 import Tickets from './Tickets.jsx';
@@ -27,11 +29,12 @@ export default function AdminApp() {
   // The shop's name and logo, for the brand, as the server wrote them into the page.
   // A page that saves them (Settings) passes the new ones to setSite.
   const [site, setSite] = useState(embeddedSite);
-  // The films and the booth: the status line at the foot, the attention strip on Films
-  // and the still 12:00 on Status read them here. The films are read again on each
-  // screen; the booth's checks (the media folder, free space, the backup's copy) only
-  // when the last reading is a minute old, or when asked.
-  const [facts, setFacts] = useState({ films: null, booth: null });
+  // The films, the responses and the booth: the status line at the foot, the attention
+  // strip on Films, the Responses tab's unread count and the still 12:00 on Status read
+  // them here. The films and the responses are read again on each screen; the booth's
+  // checks (the media folder, free space, the backup's copy) only when the last reading
+  // is a minute old, or when asked.
+  const [facts, setFacts] = useState({ films: null, booth: null, responses: null });
   const boothAt = useRef(0);
   const { pathname } = useLocation();
   // A film's own page is part of Films, so Films stays lit there.
@@ -53,8 +56,9 @@ export default function AdminApp() {
   const signedOut = useCallback(() => setState('out'), []);
 
   // Each part on its own: a booth that can't be read leaves the films' counts showing.
-  // refreshFacts() reads the films, and the booth if its reading is a minute old;
-  // refreshFacts('now') reads both; refreshFacts(false) only the films; and
+  // refreshFacts() reads the films and the responses, and the booth if its reading is a
+  // minute old; refreshFacts('now') reads all three; refreshFacts(false) leaves the
+  // booth; and
   // refreshFacts(booth) takes a booth a page has just read itself (Status).
   const refreshFacts = useCallback(
     (booth) => {
@@ -72,6 +76,7 @@ export default function AdminApp() {
           },
         );
       read('/api/admin/films', 'films');
+      read('/api/admin/responses', 'responses');
       if (booth === 'now' || (booth !== false && Date.now() - boothAt.current >= BOOTH_FRESH_MS)) {
         boothAt.current = Date.now();
         read('/api/admin/booth', 'booth');
@@ -86,6 +91,8 @@ export default function AdminApp() {
   }, [state, pathname, onStatus, refreshFacts]);
 
   const ctx = useMemo(() => ({ signedOut, site, setSite, facts, refreshFacts }), [signedOut, site, facts, refreshFacts]);
+
+  const unread = facts.responses?.unread ?? 0;
 
   if (state === 'checking') return null;
   if (state === 'out') return <Login site={site} onSignedIn={() => setState('in')} />;
@@ -122,6 +129,10 @@ export default function AdminApp() {
             </NavLink>
             <NavLink to="/admin/people" className="ui-tab">
               Members
+            </NavLink>
+            <NavLink to="/admin/responses" className="ui-tab" aria-label={unread ? responsesTab(unread) : undefined}>
+              Responses
+              {unread ? <span className="ui-tab__n">{unread}</span> : null}
             </NavLink>
             <NavLink to="/admin/activity" className="ui-tab">
               Ledger
@@ -164,6 +175,7 @@ export default function AdminApp() {
               <Route path="tickets/:id" element={<TicketDetail />} />
               <Route path="people" element={<People />} />
               <Route path="people/:id" element={<PersonDetail />} />
+              <Route path="responses" element={<Responses />} />
               <Route path="activity" element={<Activity />} />
               <Route path="status" element={<Status />} />
               <Route path="settings" element={<Settings />} />
@@ -176,8 +188,8 @@ export default function AdminApp() {
   );
 }
 
-// The foot of every screen: how many films, how many on the shelf, and whether the
-// server is well, as the booth last said and when.
+// The foot of every screen: how many films, how many on the shelf, how many tapes out,
+// and whether the server is well, as the booth last said and when.
 function StatusLine({ facts: { films, booth } }) {
   if (!films && !booth) return null;
   const trouble = booth ? serverTrouble(booth.server) : 0;
@@ -192,6 +204,11 @@ function StatusLine({ facts: { films, booth } }) {
             <b>{films.filter((f) => f.published).length}</b> on the shelf
           </span>
         </>
+      )}
+      {booth?.attention?.tapes && (
+        <span>
+          <b>{booth.attention.tapes.out}</b> {booth.attention.tapes.out === 1 ? 'tape out' : 'tapes out'}
+        </span>
       )}
       {booth &&
         (trouble ? (

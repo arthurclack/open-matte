@@ -94,8 +94,16 @@ describe('a link from opening to the tape coming due', () => {
   const loanRow = () => srv.db.prepare('SELECT * FROM loans WHERE ticket_id = ?').get(ticket.id);
 
   test('opening the link shows the page without taking the tape', async () => {
-    // 1.x's play limit and days after the first play are still sent by its send form: accepted, and ignored.
-    ticket = await newTicket({ label: 'Sam', loanDays: 5, screeningLimit: 1, daysAfterFirstPlay: 3 });
+    // 1.x's play limit and days after the first play were accepted and ignored until the
+    // back office's send form was rebuilt (slice 9); since, they are refused and nothing is made.
+    const made = srv.db.prepare('SELECT COUNT(*) AS n FROM tickets').get().n;
+    for (const old of [{ screeningLimit: 1 }, { daysAfterFirstPlay: 3 }, { screeningLimit: null }]) {
+      const r = await admin.post('/api/admin/tickets', { filmId, label: 'Sam', loanDays: 5, ...old });
+      assert.equal(r.status, 400, JSON.stringify(old));
+      assert.match(r.data.error, /went with version 2: a link lends once/);
+    }
+    assert.equal(srv.db.prepare('SELECT COUNT(*) AS n FROM tickets').get().n, made);
+    ticket = await newTicket({ label: 'Sam', loanDays: 5 });
     assert.deepEqual([ticket.screeningLimit, ticket.daysAfterFirstPlay], [null, null]);
     viewer = browser(srv.base);
     await openTicket(viewer, ticket);
@@ -106,7 +114,7 @@ describe('a link from opening to the tape coming due', () => {
     assert.equal(page.data.access.canPlay, true);
     // One set of keys, in every state. The play limits and the days after the first play are gone.
     assert.deepEqual(page.data.access.ticket, {
-      state: 'ok', tape: 'in', loanDays: 5, startBy: null, dueBack: null, loan: null, returned: null, pickNote: null, inAccount: false, expiresAt: null, openScreening: null,
+      state: 'ok', tape: 'in', loanDays: 5, startBy: null, dueBack: null, loan: null, returned: null, pickNote: null, inAccount: false,
     });
     assert.equal(page.data.film.media.masterUrl, undefined, 'the playlist URL is only handed out on Play');
     assert.equal(loanRow(), undefined, 'opening takes nothing');
@@ -136,9 +144,9 @@ describe('a link from opening to the tape coming due', () => {
       state: 'ok', tape: 'yours', loanDays: null, startBy: null, dueBack: loan.due_at,
       loan: { takenAt: loan.taken_at, position: 0, finishedAt: null, toBrowser: true, canRespond: false },
       returned: null, pickNote: null, inAccount: false,
-      // 1.1.0's two fields, until its pages are rebuilt: the due date, and where to resume.
-      expiresAt: loan.due_at, openScreening: { resumableUntil: loan.due_at, position: 0 },
     });
+    // 1.1.0's two fields went with its pages (slice 7), and Play's resumableUntil with them.
+    assert.equal(r.data.resumableUntil, undefined);
 
     // The back office, still in 1.x's fields: one play, and the loan's due time as the expiry.
     const t = (await admin.get(`/api/admin/tickets/${ticket.id}`)).data;
@@ -166,7 +174,7 @@ describe('a link from opening to the tape coming due', () => {
   test('a second browser on the same link sees "out", like anyone, and cannot take over even once the first pauses', async () => {
     tv = browser(srv.base);
     await openTicket(tv, ticket);
-    const out = { state: 'out', tape: 'out', loanDays: null, startBy: null, dueBack: loan.due_at, loan: null, returned: null, pickNote: null, inAccount: false, expiresAt: null, openScreening: null };
+    const out = { state: 'out', tape: 'out', loanDays: null, startBy: null, dueBack: loan.due_at, loan: null, returned: null, pickNote: null, inAccount: false };
     const page = (await tv.get('/api/films/arrival')).data.access;
     assert.equal(page.canPlay, false);
     assert.deepEqual(page.ticket, out);
@@ -223,7 +231,7 @@ describe('a link from opening to the tape coming due', () => {
     assert.equal(page.data.access.canPlay, false);
     assert.deepEqual(page.data.access.ticket, {
       state: 'spent', tape: null, loanDays: null, startBy: null, dueBack: null, loan: null,
-      returned: { at: loan.due_at, how: 'due' }, pickNote: null, inAccount: false, expiresAt: null, openScreening: null,
+      returned: { at: loan.due_at, how: 'due' }, pickNote: null, inAccount: false,
     });
     assert.equal(loanRow().ended_at, null, 'reading the page writes nothing');
     const r = await viewer.post('/api/films/arrival/screenings');
@@ -279,7 +287,7 @@ describe('link rules', () => {
   // now: a link lends once, and while the tape is out Play is pressed as often as you like.
   test('a link lends once: as many plays as you like while it has the tape, none once the tape is back', async () => {
     const film = await ownFilm('lends-once');
-    const ticket = await newTicket({ filmId: film.id, screeningLimit: 2 });
+    const ticket = await newTicket({ filmId: film.id });
     const b = browser(srv.base);
     await openTicket(b, ticket, film.slug);
     const first = (await b.post(`/api/films/${film.slug}/screenings`)).data;

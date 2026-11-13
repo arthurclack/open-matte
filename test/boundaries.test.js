@@ -242,7 +242,7 @@ test('a film whose folder goes missing explains itself instead of breaking the p
 });
 
 test('a film whose rescan finds errors explains itself too, and starts no screening', async () => {
-  const { b, ticket, screeningId } = await watching('solaris', { screeningLimit: 2 });
+  const { b, ticket, screeningId } = await watching('solaris');
   fs.rmSync(path.join(mediaDir, 'solaris', 'hls', 'master.m3u8'));
   const scan = await admin.post('/api/admin/scan');
   assert.equal(scan.data.films.find((f) => f.slug === 'solaris').status, 'error', JSON.stringify(scan.data.films));

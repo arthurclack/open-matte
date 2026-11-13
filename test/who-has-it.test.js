@@ -109,7 +109,8 @@ describe('a film’s tape, its links and how it has been lent, for the owner', (
     const listed = await listedFilm(film);
     assert.deepEqual([listed.tape, listed.links], [one.tape, one.links]);
     assert.ok(!('lending' in listed) && !('viewing' in listed));
-    assert.deepEqual(listed.tickets, { total: 0, active: 0 }, '1.1.0’s count stays until its page is rebuilt');
+    // 1.1.0's count of active tapes went with its Films page (slice 9): Links is links.live.
+    assert.ok(!('tickets' in listed), '1.1.0’s count is gone');
 
     const off = await ok(admin.patch(`/api/admin/films/${film.id}`, { published: false }));
     assert.deepEqual(off.tape, { state: 'off', loan: null });

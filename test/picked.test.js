@@ -176,8 +176,9 @@ describe('editing a note, and the staff pick', () => {
     assert.deepEqual(others.map((o) => ticketRow(o).pick_note), ['Another link’s note.', null], 'nor any other link’s note');
 
     // Saving the link's other fields never touches the note: only a save that names it does.
-    // (The last is what 1.1.0's link page sends with every save.)
-    for (const patch of [{ label: 'For Sam, again' }, { startBy: startBy + HOUR }, { loanDays: 6 }, { label: 'For Sam', startBy, screeningLimit: 2, daysAfterFirstPlay: 3, claimable: false }]) {
+    // (The last is what the link page sends with every save since slice 9, the note
+    // aside; 1.1.0's sent a play limit and days after the first play, refused since.)
+    for (const patch of [{ label: 'For Sam, again' }, { startBy: startBy + HOUR }, { loanDays: 6 }, { label: 'For Sam', startBy, loanDays: 6, claimable: false }]) {
       const saved = await admin.patch(`/api/admin/tickets/${t.id}`, patch);
       assert.equal(saved.status, 200, JSON.stringify(saved.data));
       assert.equal(ticketRow(t).pick_note, 'The second note.', JSON.stringify(patch));
@@ -339,6 +340,78 @@ describe('what a friend reads', () => {
     assert.equal((await page(sam.phone, film)).access.ticket.pickNote, N2);
     assert.deepEqual(await raw(b2, 'GET', `/api/films/${film.slug}`), { status: 410, text: '{"error":"ticket-kept"}' });
     holdsNone(await everythingFor(b2, film, kept.code), [N2], 'the browser that lost the link');
+  });
+});
+
+// ====================================================================== changing hands
+// Question 18, answer (c), built with slice 9: the give and release buttons show the
+// link's note with "Take the note away" ticked, and POST …/holder takes pickNote in
+// the same step. Left out, the note stays, as before slice 9.
+describe('a link given to someone else, or let anyone use it (question 18)', () => {
+  const holder = (t, body) => admin.post(`/api/admin/tickets/${t.id}/holder`, body);
+
+  test('pickNote in the same step takes the note away or writes a new one for the new holder; left out, the note stays', async () => {
+    const film = await ownFilm('note-hands');
+    const sam = await member('Hands Sam');
+    const jo = await member('Hands Jo');
+    const FIRST = 'For whoever opened it first: the bit with the lighthouse.';
+    const t = await issue(film, { pickNote: FIRST, label: 'Hands label' });
+
+    // Given to Sam with the note taken away: Sam reads none, and the label stays.
+    let r = await holder(t, { personId: sam.p.id, pickNote: null });
+    assert.deepEqual([r.status, r.data.person.id, r.data.pickNote, r.data.label], [200, sam.p.id, null, 'Hands label']);
+    assert.equal((await page(await sam.device(), film)).access.ticket.pickNote, null);
+
+    // Given on to Jo with a new note: Jo reads it.
+    const FOR_JO = 'Jo, the lighthouse bit is twenty minutes in.';
+    r = await holder(t, { personId: jo.p.id, pickNote: `  ${FOR_JO}  ` });
+    assert.deepEqual([r.status, r.data.person.id, r.data.pickNote], [200, jo.p.id, FOR_JO]);
+    assert.equal((await page(await jo.device(), film)).access.ticket.pickNote, FOR_JO);
+
+    // Let anyone use it, saying nothing of the note: it stays (1.x's request, and slices 4 to 8).
+    r = await holder(t, { personId: null });
+    assert.deepEqual([r.status, r.data.person, r.data.pickNote], [200, null, FOR_JO]);
+    // Nothing but spaces is no note, as on send and edit.
+    r = await holder(t, { personId: sam.p.id, pickNote: ' \n ' });
+    assert.deepEqual([r.status, r.data.pickNote], [200, null]);
+
+    // No event holds a note's words.
+    const stored = JSON.stringify(srv.db.prepare('SELECT * FROM events WHERE ticket_id = ?').all(t.id));
+    holdsNone(stored, [FIRST, FOR_JO], 'the Ledger');
+  });
+
+  test('a refused give leaves the note as it was: a note too long, a card turned off, the tape out, or no change of hands', async () => {
+    const film = await ownFilm('note-hands-refused');
+    const sam = await member('Refused Sam');
+    const NOTE = 'Keep this note.';
+    const t = await issue(film, { pickNote: NOTE });
+    const unchanged = () => assert.deepEqual([ticketRow(t).pick_note, ticketRow(t).person_id], [NOTE, null]);
+
+    assert.equal((await holder(t, { personId: sam.p.id, pickNote: 'n'.repeat(2001) })).status, 400);
+    unchanged();
+    assert.equal((await holder(t, { personId: sam.p.id, pickNote: 9 })).status, 400);
+    unchanged();
+    assert.equal((await holder(t, { personId: 987654, pickNote: null })).status, 400);
+    unchanged();
+    // Already for anyone with the link: nothing changes hands, so the note stays.
+    assert.equal((await holder(t, { personId: null, pickNote: null })).status, 200);
+    unchanged();
+    // Still for anyone, but now keepable (or no longer): that isn't changing hands either,
+    // so the note stays (the review of slices 7 to 9 found it taken away here).
+    assert.equal((await holder(t, { personId: null, claimable: true, pickNote: null })).status, 200);
+    assert.equal(ticketRow(t).claimable, 1);
+    unchanged();
+    assert.equal((await holder(t, { personId: null, claimable: false, pickNote: null })).status, 200);
+    assert.equal(ticketRow(t).claimable, 0);
+    unchanged();
+
+    // While the link has the tape it can't change hands (question 2), and its note stays with it.
+    const b = await opened(t);
+    assert.equal((await b.post(`/api/films/${film.slug}/screenings`)).status, 200);
+    const out = await holder(t, { personId: sam.p.id, pickNote: null });
+    assert.deepEqual([out.status, out.data], [409, { error: 'tape-out' }]);
+    unchanged();
+    assert.equal((await page(b, film)).access.ticket.pickNote, NOTE);
   });
 });
 

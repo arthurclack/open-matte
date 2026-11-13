@@ -389,7 +389,7 @@ async function compare(expected) {
   return pages;
 }
 
-const OUT = (dueBack) => ({ state: 'out', tape: 'out', loanDays: null, startBy: null, dueBack, loan: null, returned: null, pickNote: null, expiresAt: null, openScreening: null });
+const OUT = (dueBack) => ({ state: 'out', tape: 'out', loanDays: null, startBy: null, dueBack, loan: null, returned: null, pickNote: null });
 
 describe('while a tape is out, everyone but its borrower gets the same answer', () => {
   test('at once: "out", the date it is due back, and every other key null, whichever link has it', async () => {
@@ -402,7 +402,7 @@ describe('while a tape is out, everyone but its borrower gets the same answer', 
     assert.deepEqual(page.ticket, {
       state: 'ok', tape: 'yours', loanDays: null, startBy: null, dueBack: loan.due_at,
       loan: { takenAt: loan.taken_at, position: 17, finishedAt: null, toBrowser: true, canRespond: false },
-      returned: null, pickNote: NOTES.lent, inAccount: false, expiresAt: loan.due_at, openScreening: { resumableUntil: loan.due_at, position: 17 },
+      returned: null, pickNote: NOTES.lent, inAccount: false,
     });
     // The tape is this browser's, on a link anyone can use: it can't be handed back
     // with a response, signed in or not, and only the borrower is told so. Nothing changes.
@@ -504,7 +504,7 @@ describe('when the owner moves the date, and when the tape comes back, only the 
       assert.ok(!same[what].body.includes(String(at)) && !same[what].body.includes('"returned":{'), `${what}: says when or how it came back`);
     }
     const spent = json(same['the film page']).access.ticket;
-    assert.deepEqual(spent, { state: 'spent', tape: null, loanDays: null, startBy: null, dueBack: null, loan: null, returned: null, pickNote: NOTES.lent, inAccount: false, expiresAt: null, openScreening: null });
+    assert.deepEqual(spent, { state: 'spent', tape: null, loanDays: null, startBy: null, dueBack: null, loan: null, returned: null, pickNote: NOTES.lent, inAccount: false });
     assert.deepEqual([same.Play.status, json(same.Play)], [409, { error: 'spent' }]);
     assert.deepEqual([json(same['keeping the link']), json(held['keeping the link'])], [{ error: 'sign-in-required' }, { error: 'cannot-keep' }], 'a link that has lent can’t be kept');
     // The other links: their own state, and nothing of the loan that was. Their
@@ -911,7 +911,7 @@ describe('a start-by date with the time the tape was out given back: how long it
     // Everything a browser can ask but Play, which would take the tape.
     const asked = [];
     for (const w of worlds) asked.push(await everyAnswer(w.asker, w.waiting.code, w.of, false));
-    const expected = { state: 'ok', tape: 'in', loanDays: 3, startBy: goesBy, dueBack: null, loan: null, returned: null, pickNote: NOTES.waiting, inAccount: false, expiresAt: null, openScreening: null };
+    const expected = { state: 'ok', tape: 'in', loanDays: 3, startBy: goesBy, dueBack: null, loan: null, returned: null, pickNote: NOTES.waiting, inAccount: false };
     for (const [i, w] of worlds.entries()) {
       for (const what of Object.keys(asked[i])) {
         assert.deepEqual(apartFromTheFilm(asked[i][what], w), apartFromTheFilm(asked[0][what], worlds[0]), `${what}: back from ${w.kind}, and back from ${worlds[0].kind}`);

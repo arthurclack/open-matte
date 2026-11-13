@@ -5,6 +5,7 @@ import { ErrorBoundary } from './ErrorBoundary.jsx';
 import { enrollLink } from './enrollLink.js';
 import { InkFilters, ShopName } from './look/objects.jsx';
 import { Line, Menu, MenuSep, Tri } from './look/ui.jsx';
+import { PREVIEW_BANNER, signOutWords } from './pages/tapeWords.js';
 
 const SiteContext = createContext(null);
 
@@ -27,7 +28,19 @@ export function SiteProvider({ children }) {
   const [embedded] = useState(embeddedSite);
   // Sign-in is never offered while the player is open: the film page says when it is.
   const [playerOpen, setPlayerOpen] = useState(false);
-  const refresh = useCallback(() => api.get('/api/me').then(setMe).catch(() => setMe({ site: null, person: null, tickets: [] })), []);
+  // Resolves to what it set, so a question asked from it (signing out) is asked from
+  // what the server says now, not from whenever the page last read it.
+  const refresh = useCallback(
+    () =>
+      api
+        .get('/api/me')
+        .catch(() => ({ site: null, person: null, tickets: [] }))
+        .then((m) => {
+          setMe(m);
+          return m;
+        }),
+    [],
+  );
   useEffect(() => {
     refresh();
   }, [refresh]);
@@ -68,8 +81,8 @@ export function SiteProvider({ children }) {
         {/* The back office's cookie bypasses every tape and member rule in this browser. */}
         {me?.admin && me?.person && (
           <div className="site-preview">
-            <Line kind="warn" wide lead="Preview." className="ui-w">
-              You're signed in to the back office here, so tape rules don't apply in this browser.
+            <Line kind="warn" wide lead={PREVIEW_BANNER.lead} className="ui-w">
+              {PREVIEW_BANNER.text}
             </Line>
           </div>
         )}
@@ -88,7 +101,7 @@ export function SiteProvider({ children }) {
                   Back office
                 </a>
               )}
-              {me?.person && <PersonMenu me={me} onSignOut={signOut} />}
+              {me?.person && <PersonMenu me={me} onSignOut={signOut} refresh={refresh} />}
               {me && !me.person && !playerOpen && offersSignIn(pathname) && (
                 <Link to={pathname === '/' ? '/signin' : `/signin?next=${encodeURIComponent(pathname)}`} className="ui-item">
                   Sign in
@@ -141,30 +154,26 @@ export function SiteName({ site }) {
 // page, and keeps its code out of any other address) don't get the header link.
 const offersSignIn = (pathname) => !/^\/(t\/|signin$|enroll$)/.test(pathname);
 
-// Signing out forgets the tapes this browser opened from links; the links still work.
-// True to go ahead.
-export function confirmSignOut(me) {
-  // Every link ticket this browser holds, even one hidden behind the person's own
-  // ticket for the same film.
-  const fromLinks = me?.linkTickets || [];
-  if (!fromLinks.length) return true;
-  const n = fromLinks.length;
-  const titles = fromLinks.join(', ');
-  const text =
-    n === 1
-      ? `Sign out of this browser? It also forgets 1 tape you opened from a link here (${titles}). The link still works if you open it again.`
-      : `Sign out of this browser? It also forgets ${n} tapes you opened from links here (${titles}). The links still work if you open them again.`;
-  return window.confirm(text);
+// Signing out sends back any tape out to this browser from a link, whose link won't
+// take it out again (question 5: /api/me's browserLoans names them), and forgets the
+// other tapes this browser opened from links, whose links still work (linkTickets:
+// every one it holds, even one hidden behind the person's own for the same film).
+// Asked first only then, from /api/me read afresh: a tape taken out since the page last
+// read it (Play doesn't reload the page) must be named. Resolves true to go ahead.
+// `everywhere`: Sign out everywhere, which is always asked.
+export async function confirmSignOut(refresh, { everywhere = false } = {}) {
+  const text = signOutWords(await refresh(), { everywhere });
+  return text ? window.confirm(text) : true;
 }
 
 // "Sam ▾": who is signed in here, their tapes and membership card, the back office on
 // a phone (it is in the bar on a wider screen), and a way out.
-function PersonMenu({ me, onSignOut }) {
+function PersonMenu({ me, onSignOut, refresh }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
   async function signOut() {
-    if (!confirmSignOut(me)) return;
+    if (!(await confirmSignOut(refresh))) return;
     setBusy(true);
     setError(null);
     try {

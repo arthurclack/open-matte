@@ -7,6 +7,7 @@ import { Line } from '../look/ui.jsx';
 import { hostName } from '../look/words.js';
 import { confirmSignOut, useSite } from '../site.jsx';
 import { NarrowPage } from './tape.jsx';
+import { UNREACHABLE } from './tapeWords.js';
 
 // /t/<code>: trade the tape's code for a session, then move to the film's
 // clean URL so the code leaves the address bar and this tab's Back and Forward.
@@ -69,7 +70,7 @@ export default function TicketOpen() {
 
   // Stay here: once signed out, the sign-in button takes over.
   async function signOutHere() {
-    if (!confirmSignOut(me)) return;
+    if (!(await confirmSignOut(refresh))) return;
     setBusy(true);
     setSignOutError(null);
     try {
@@ -145,8 +146,8 @@ export default function TicketOpen() {
     <NarrowPage>
       {view === 'unreachable' ? (
         <>
-          <Line kind="bad" lead="Couldn't reach the shop just now.">
-            Check your connection, then try again: your tape hasn't been used.
+          <Line kind="bad" lead={UNREACHABLE.lead}>
+            {UNREACHABLE.text}
           </Line>
           <div className="ui-btns">
             <button type="button" className="ui-btn ui-btn--primary" onClick={open}>

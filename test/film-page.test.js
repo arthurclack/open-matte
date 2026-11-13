@@ -55,11 +55,13 @@ describe('when the tape is due back: one date, wherever it is shown', () => {
     const r = (await admin.get(`/api/admin/tickets/${t.id}`)).data;
     return [r.expiresAt, r.openScreening.resumableUntil, ...r.screenings.map((s) => s.resumableUntil)];
   };
-  // The friend's film page and their front page: the date, and 1.1.0's two fields for it.
+  // The friend's film page and their front page: the date. (1.1.0's expiresAt and
+  // openScreening, which said it twice more, went with its pages in slice 7.)
   const friendSays = async (b, slug) => {
     const page = (await b.get(`/api/films/${slug}`)).data.access.ticket;
     const shelf = (await b.get('/api/me')).data.tickets.find((x) => x.film.slug === slug).ticket;
-    return [page, shelf].flatMap((t) => [t.dueBack, t.expiresAt, t.openScreening.resumableUntil]);
+    for (const t of [page, shelf]) assert.deepEqual([t.expiresAt, t.openScreening], [undefined, undefined]);
+    return [page.dueBack, shelf.dueBack];
   };
 
   test('a link sent with its own days: due that many days after Play, on the page, on Your tickets and in the admin', async () => {
@@ -67,26 +69,27 @@ describe('when the tape is due back: one date, wherever it is shown', () => {
     const b = await opened(t);
     const { takenAt, dueBack, resumableUntil } = await pressed(b);
     assert.equal(dueBack, takenAt + DAY);
-    assert.equal(resumableUntil, dueBack);
-    assert.deepEqual(await friendSays(b, 'arrival'), Array(6).fill(dueBack));
+    assert.equal(resumableUntil, undefined, 'Play says when it is due once: dueBack');
+    assert.deepEqual(await friendSays(b, 'arrival'), Array(2).fill(dueBack));
     assert.deepEqual(await adminSays(t), [dueBack, dueBack, dueBack]);
   });
 
   test('the date is the loan’s: with the shop’s days it is 3 days after Play, and if it is moved, every place says the new one', async () => {
     const film = await ownFilm('long-ticket');
-    // 1.x's "30 days after the first play" is still sent by its form, and is ignored.
-    const t = await ticket({ filmId: film.id, daysAfterFirstPlay: 30 });
+    // (1.x's "30 days after the first play" was sent here, ignored by the server until
+    // slice 9 and refused since: test/journey.test.js.)
+    const t = await ticket({ filmId: film.id });
     const b = await opened(t);
     const { screeningId: id, takenAt, dueBack } = await pressed(b, film.slug);
     assert.equal(dueBack, takenAt + 3 * DAY);
-    assert.deepEqual(await friendSays(b, film.slug), Array(6).fill(dueBack));
+    assert.deepEqual(await friendSays(b, film.slug), Array(2).fill(dueBack));
     assert.deepEqual(await adminSays(t), [dueBack, dueBack, dueBack]);
 
     // What Play wrote on the screening is never read again: the loan says when it's due.
     const later = dueBack + DAY;
     srv.db.prepare('UPDATE loans SET due_at = ? WHERE screening_id = ?').run(later, id);
     assert.equal(srv.db.prepare('SELECT resumable_until FROM screenings WHERE id = ?').get(id).resumable_until, dueBack);
-    assert.deepEqual(await friendSays(b, film.slug), Array(6).fill(later));
+    assert.deepEqual(await friendSays(b, film.slug), Array(2).fill(later));
     assert.deepEqual(await adminSays(t), [later, later, later]);
     assert.equal((await pressed(b, film.slug)).dueBack, later);
   });

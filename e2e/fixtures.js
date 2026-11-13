@@ -533,9 +533,10 @@ export const media = {
   remembered: (page) => page.evaluate(() => JSON.parse(localStorage.getItem('openMatte.player') ?? 'null')),
 };
 
-// The film page's Play button, or Resume once a screening is open (Resume at 42:17).
-// Named by its words alone: its icon is hidden from screen readers.
-export const playButton = (page) => page.getByRole('button', { name: /^(Play|Resume( at [\d:]+)?)$/ });
+// The film page's Play button, or Resume once the tape is yours (Resume at 42:17), or
+// Play from the start once it has been watched to the end (the test films are eight
+// seconds long). Named by its words alone: its icon is hidden from screen readers.
+export const playButton = (page) => page.getByRole('button', { name: /^(Play|Play from the start|Resume( at [\d:]+)?)$/ });
 
 // The language the film is heard in: the player fetches the chosen audio rendition
 // (a folder such as a_fr_1), watched from `since` on (mark() gives the place). Safari's
