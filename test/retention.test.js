@@ -126,8 +126,7 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
       assert.equal(r.status, 200);
       const a = r.data;
       out[what] = {
-        ...omit(a, ['browsers', 'waitingBrowsers', 'browserList', 'lastActivity', 'openScreening', 'screenings']),
-        openScreening: a.openScreening && omit(a.openScreening, ['device']),
+        ...omit(a, ['browsers', 'waitingBrowsers', 'browserList', 'lastActivity', 'screenings']),
         screenings: a.screenings.map((s) => omit(s, ['device'])),
       };
     }
@@ -279,12 +278,14 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
 
   test('links in every state, with old events and ended browsers everywhere', async () => {
     const state = Object.fromEntries(await Promise.all(Object.entries(t).map(async ([what, { id }]) => [what, (await admin.get(`/api/admin/tickets/${id}`)).data])));
-    // As the back office still says it, in 1.x's words: 'used_up' is a link that has lent.
+    // As the back office says it: linkState. (Until slice 10 it also said 1.x's state,
+    // where 'used_up' was a link that has lent: done here; 'expired' is missed, 'revoked'
+    // cancelled, and 'ok' each of unopened, opened and has.)
     const expected = {
-      spent: 'used_up', out: 'ok', due: 'used_up', 'start-by-passed': 'expired', 'start-by-pending': 'ok', finished: 'ok',
-      returned: 'used_up', 'taken-back': 'revoked', revoked: 'revoked', 'never-opened': 'ok', kept: 'ok', 'for-sam': 'ok', 'held-by-ended': 'used_up', 'old-browser': 'ok',
+      spent: 'done', out: 'has', due: 'done', 'start-by-passed': 'missed', 'start-by-pending': 'opened', finished: 'has',
+      returned: 'done', 'taken-back': 'cancelled', revoked: 'cancelled', 'never-opened': 'unopened', kept: 'has', 'for-sam': 'has', 'held-by-ended': 'done', 'old-browser': 'opened',
     };
-    assert.deepEqual(Object.fromEntries(Object.entries(state).map(([what, a]) => [what, a.state])), expected);
+    assert.deepEqual(Object.fromEntries(Object.entries(state).map(([what, a]) => [what, a.linkState])), expected);
     // And as access.js reads them, in version 2's.
     const now = Object.fromEntries(Object.entries(ticketStates()).map(([what, at]) => [what, at.now.state]));
     assert.deepEqual(now, {
@@ -292,7 +293,8 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
       returned: 'spent', 'taken-back': 'revoked', revoked: 'revoked', 'never-opened': 'in', kept: 'lent', 'for-sam': 'lent', 'held-by-ended': 'spent', 'old-browser': 'in',
     });
     assert.equal(state.finished.finished, true);
-    assert.equal(state.out.openScreening.resumableUntil, loanOf('out').due_at);
+    // The loan's due date (1.x said it as openScreening.resumableUntil).
+    assert.deepEqual([state.out.loan.live, state.out.loan.dueAt], [true, loanOf('out').due_at]);
     assert.equal(state.kept.person.id, sam.p.id);
     assert.ok(state.kept.claimedAt);
     assert.equal(state['for-sam'].person.id, sam.p.id);
@@ -300,7 +302,8 @@ describe('the rule: deleting anything never changes what a viewer can do', () =>
     assert.deepEqual([loanOf('spent').ended_how, loanOf('spent').ended_at], ['due', loanOf('spent').due_at]);
     assert.deepEqual([loanOf('due').ended_at, loanOf('held-by-ended').ended_at], [null, null], 'back by the clock, with no end written');
     assert.deepEqual([loanOf('returned').ended_how, loanOf('taken-back').ended_how], ['returned', 'taken-back']);
-    assert.equal(state['held-by-ended'].openScreening, null);
+    // Its loan is over, by the clock (1.x said there was no openScreening).
+    assert.equal(state['held-by-ended'].loan.live, false);
     const old = srv.db.prepare('SELECT COUNT(*) AS n FROM events WHERE at < ?').get(NOW - 300 * DAY).n;
     assert.equal(old, srv.db.prepare('SELECT COUNT(*) AS n FROM events').get().n, 'every event is old');
     assert.ok(srv.db.prepare("SELECT COUNT(*) AS n FROM events WHERE type = 'heartbeat'").get().n > 0, 'progress reports among them');

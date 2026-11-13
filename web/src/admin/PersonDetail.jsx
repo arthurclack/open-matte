@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, formatAgo, formatDateTime, formatDayTime, formatMonthYear, plural } from '../api.js';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { groupNumber } from '../membershipCard.js';
 import { CreatedLink, PasskeysProblem, PersonBadge, peopleError } from './People.jsx';
 import { RESPONSE_WORDS, browsersTapesWords, cardOffWords, endedWords } from './loanWords.js';
@@ -127,30 +127,30 @@ export default function PersonDetail() {
           <>
             {!p.disabled &&
               (p.setUp ? (
-                <button type="button" className="ui-btn ui-btn--primary" onClick={() => setPanel(panel === 'help' ? null : 'help')} disabled={action.busy}>
+                <BusyButton type="button" className="ui-btn ui-btn--primary" onClick={() => setPanel(panel === 'help' ? null : 'help')} busy={action.busy}>
                   Help {name} sign in again
-                </button>
+                </BusyButton>
               ) : (
-                <button type="button" className="ui-btn ui-btn--primary" onClick={() => setPanel(panel === 'setup' ? null : 'setup')} disabled={action.busy}>
+                <BusyButton type="button" className="ui-btn ui-btn--primary" onClick={() => setPanel(panel === 'setup' ? null : 'setup')} busy={action.busy}>
                   Create a setup link
-                </button>
+                </BusyButton>
               ))}
             {!p.disabled && (
               <Link className="ui-btn" to={`/admin/tickets?person=${p.id}`}>
                 Send {name} a link
               </Link>
             )}
-            <button type="button" className="ui-btn" onClick={signOutEverywhere} disabled={action.busy || !p.browsers.length}>
+            <BusyButton type="button" className="ui-btn" onClick={signOutEverywhere} busy={action.busy} disabled={!p.browsers.length}>
               Sign out everywhere
-            </button>
+            </BusyButton>
             {p.disabled ? (
-              <button type="button" className="ui-btn" onClick={enable} disabled={action.busy}>
+              <BusyButton type="button" className="ui-btn" onClick={enable} busy={action.busy}>
                 Turn the card back on
-              </button>
+              </BusyButton>
             ) : (
-              <button type="button" className="ui-btn ui-btn--danger" onClick={disable} disabled={action.busy}>
+              <BusyButton type="button" className="ui-btn ui-btn--danger" onClick={disable} busy={action.busy}>
                 Turn the card off
-              </button>
+              </BusyButton>
             )}
           </>
         }
@@ -190,9 +190,9 @@ export default function PersonDetail() {
           )}
           , works until {formatDayTime(p.linkWaiting.expiresAt)}.
           <div className="ui-btns">
-            <button type="button" className="ui-btn ui-btn--small" onClick={cancelLink} disabled={action.busy}>
+            <BusyButton type="button" className="ui-btn ui-btn--small" onClick={cancelLink} busy={action.busy}>
               Cancel it
-            </button>
+            </BusyButton>
           </div>
         </Line>
       )}
@@ -233,9 +233,9 @@ export default function PersonDetail() {
             <p className="ui-field__hint">Only you see this.</p>
           </div>
           <div className="ui-btns">
-            <button className="ui-btn ui-btn--primary" disabled={action.busy || !form.name.trim()}>
+            <BusyButton className="ui-btn ui-btn--primary" busy={action.busy} disabled={!form.name.trim()}>
               Save changes
-            </button>
+            </BusyButton>
           </div>
         </form>
       </div>
@@ -271,9 +271,9 @@ export default function PersonDetail() {
                 {k.lastUsedAt ? formatAgo(k.lastUsedAt) : 'Never'}
               </td>
               <td className="of-td-btn">
-                <button type="button" className="ui-btn ui-btn--small ui-btn--danger" onClick={() => removePasskey(k)} disabled={action.busy}>
+                <BusyButton type="button" className="ui-btn ui-btn--small ui-btn--danger" onClick={() => removePasskey(k)} busy={action.busy}>
                   Remove
-                </button>
+                </BusyButton>
               </td>
             </tr>
           ))}
@@ -513,9 +513,9 @@ function SetupLinkPanel({ person: p, busy, onCreate, onClose }) {
       </div>
       {p.linkWaiting && <p className="of-p of-dim">The link that's waiting stops working.</p>}
       <div className="ui-btns">
-        <button type="button" className="ui-btn ui-btn--primary" onClick={() => onCreate(hours)} disabled={busy}>
+        <BusyButton type="button" className="ui-btn ui-btn--primary" onClick={() => onCreate(hours)} busy={busy}>
           Create link
-        </button>
+        </BusyButton>
         <button type="button" className="ui-btn ui-btn--quiet" onClick={onClose}>
           Cancel
         </button>
@@ -599,9 +599,9 @@ function HelpSignInPanel({ person: p, busy, onCreate, onClose }) {
 
       {p.linkWaiting && <p className="of-p of-dim">The link that's waiting stops working.</p>}
       <div className="ui-btns">
-        <button type="button" className={reset ? 'ui-btn ui-btn--danger' : 'ui-btn ui-btn--primary'} onClick={create} disabled={busy || !confirmed}>
+        <BusyButton type="button" className={reset ? 'ui-btn ui-btn--danger' : 'ui-btn ui-btn--primary'} onClick={create} busy={busy} disabled={!confirmed}>
           {reset ? 'Take back the keys and create a recovery link' : 'Create a recovery link'}
-        </button>
+        </BusyButton>
         <button type="button" className="ui-btn ui-btn--quiet" onClick={onClose}>
           Cancel
         </button>

@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { prefersReducedMotion } from '../motion.js';
+import { busyProps } from './busy.js';
+import { useBusyNews } from './ui.jsx';
 import './objects.css';
 
 // The shop's video machine: the only blue on the page, and only ever the machine's
@@ -45,10 +47,13 @@ export function CrtScreen({ as: Tag = 'div', className = '', children, ...rest }
 
 // The Play tile: a piece of the screen it turns into, PLAY lit and the tape counter
 // (0:00:00) beside it. A real button. `label` names it for a screen reader when the
-// words on it aren't enough ("Resume at 0:18"); `mode` is what it shows lit.
-export function PlayTile({ onClick, disabled = false, counter = '0:00:00', label = 'Play', mode = 'PLAY', className = '' }) {
+// words on it aren't enough ("Resume at 0:18"); `mode` is what it shows lit. `busy`:
+// Play's request is under way, as a BusyButton (look/ui.jsx); `disabled`: it can't
+// play at all.
+export function PlayTile({ onClick, busy = false, disabled = false, counter = '0:00:00', label = 'Play', mode = 'PLAY', className = '' }) {
+  const pressed = useBusyNews(busy && !disabled);
   return (
-    <CrtScreen as="button" type="button" className={`crt-play${className ? ` ${className}` : ''}`} onClick={onClick} disabled={disabled} aria-label={label}>
+    <CrtScreen as="button" type="button" className={`crt-play${className ? ` ${className}` : ''}`} {...busyProps({ busy, disabled, onClick: pressed(onClick) })} aria-label={label}>
       <span className="crt-play__in" aria-hidden="true">
         <span className="crt-play__mode osd-inv">
           {mode}
@@ -189,8 +194,10 @@ function VcrRow({ row, id }) {
 }
 
 // Coming back to a paused tape: the telly at the counter, PAUSE and where it stopped,
-// and the lit way back in.
-export function ComingBack({ counter, at, onResume, resumeLabel }) {
+// and the lit way back in. `busy`: Play's request is under way, as a BusyButton (it
+// was never drawn as disabled, and isn't now).
+export function ComingBack({ counter, at, onResume, resumeLabel, busy = false }) {
+  const pressed = useBusyNews(busy);
   return (
     <div className="crt-telly">
       <CrtScreen className="crt--tube">
@@ -203,7 +210,7 @@ export function ComingBack({ counter, at, onResume, resumeLabel }) {
             <span className="crt-telly__ctr">{counter}</span>
           </div>
           <div className="crt-telly__bottom">
-            <button type="button" className="osd__btn osd-inv" onClick={onResume} aria-label={resumeLabel}>
+            <button type="button" className="osd__btn osd-inv" {...busyProps({ busy, onClick: pressed(onResume) })} aria-label={resumeLabel}>
               {at ? `Resume at ${at}` : 'Resume'}
               <PxPlay />
             </button>

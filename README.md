@@ -2,13 +2,14 @@
 
 A small, self-hosted video shop for lending films to friends. You put a handful of
 films you think your friends should see on the shelf, write a staff pick saying why,
-and lend a friend a tape: a link that opens the film in their browser. You choose
-every film, and nobody can sign up on their own.
+and send a friend a link that opens the film in their browser. Each film is one tape:
+pressing Play takes it out, and it's theirs until it's due back. You choose every
+film, and nobody can sign up on their own.
 
-Since 1.1.0 the pages look and talk like a one-shelf video shop. The code, the API
-and the database still say ticket where the pages say tape, screening where they say
-play, and person where they say member; [docs/access.md](docs/access.md#words) has
-the full list.
+The pages look and talk like a one-shelf video shop. The code, the API and the
+database still say ticket where the pages say link, screening where they say play,
+and person where they say member, and a loan is one time a tape went out;
+[docs/access.md](docs/access.md#words) has the full list.
 
 > You should watch this film. Here's the link.
 
@@ -20,8 +21,8 @@ computer with the encoder, copy them to the server, and it sends those files as 
 are. So the server needs little processing power. What matters is its disk space and
 upload speed.
 
-Nor is it copy protection: every request for a film is checked against a tape, but
-anyone who can play a film could record it.
+Nor is it copy protection: every request for a film is checked against the tape the
+browser has out, but anyone who can play a film could record it.
 
 Only share films you have the right to share.
 
@@ -35,18 +36,20 @@ Only share films you have the right to share.
 | Prepared films | Encoded on your computer with `scripts/encode.mjs`, which needs Node and `ffmpeg`, into one folder per film ([docs/encoding.md](docs/encoding.md), [docs/import-format.md](docs/import-format.md)). |
 | Optionally | A TMDB API key, free for non-commercial use, to fill in film details and artwork ([docs/metadata.md](docs/metadata.md)), and somewhere off the server to copy backups to. |
 
-What your friends need depends on the kind of tape. The back office offers two:
+What your friends need depends on the kind of link. The back office offers two:
 **Anyone with the link**, and **Only one member, signed in**, which this page calls a
-tape for one member.
+link for one member.
 
-- **A browser.** A tape for anyone with the link needs no membership card. Playback has been
+- **A browser.** A link for anyone with the link needs no membership card. Playback has been
   checked in Safari on iPhone and Mac (on the Mac by keyboard alone too), Chrome on a
   computer and on Android, desktop Firefox, WhatsApp's and Instagram's built-in
   browsers, a TV browser, AirPlay, Chromecast and a screen without HDR
   ([device checks](docs/history/device-checks.md)). TV browsers vary, so others may
   not work.
 - **A passkey, only if you make them a membership card under Members.** You'd do that
-  to lend them a tape for one member, or to show them films before they have a tape.
+  to send them a link for one member, which keeps the tape on their card on every
+  device and lets them hand it back with a word for you, or to show them films before
+  they have a link.
   They create the passkey from a link you send, and need no password. The only
   password is yours: you sign in to the back office with `ADMIN_PASSWORD`. Passkeys have been checked on iPhone, Mac,
   Android, Chrome signing in with a phone's QR code, and a password manager. TV
@@ -57,43 +60,54 @@ tape for one member.
 - **Film pages** with the poster printed as the sleeve (a plain kraft sleeve with a
   typed label when there's no artwork), the details, your staff pick, and details and
   artwork from TMDB if you want them.
-- **Tapes**, each for one film, with its own link. By default a tape has one play,
-  whenever they like. You can allow more plays, or leave the limit empty for no limit.
-  You can also set a date to start by, and the days until it's due back after the
-  first play. The next deadline is on an orange sticker. Taking a tape back stops it
-  on the next request.
-- **Plays**: pressing Play starts one. It can be paused and come back to for 48 hours
-  by default (Time to come back, in Settings), on one device at a time.
+- **Links and loans**: each film is one tape, and you send links for it freely,
+  several for one film if you like. Sending one takes nothing: the first to press
+  Play takes the tape out, and anyone else with a link sees "Out on loan" and the
+  date it's due back, never who has it. A link lends once.
+- **Due back**: a loan lasts the link's days, 3 by default (Due back after, in
+  Settings and on each link), up to 30. The borrower watches as often as they like
+  until then, on one device at a time, and the date is on an orange sticker. It
+  comes back when it's due, when they press Return it now, or when you take it back,
+  which stops it on the next request. You can also set a date to start by, which
+  stands still while the tape is out with someone else.
+- **Picked for you and handing it back**: a note from you on a link, apart from the
+  film's staff pick; and a member who has a tape out on their own link can hand it
+  back with "Loved it", "Still thinking about it", "Not for me" or "Let's talk" and a
+  few words, for you alone.
 - **Protected media**: every playlist, segment and subtitle request is checked against
-  the browser's tape and the play it holds.
+  the tape the browser has out and the play it holds.
 - **Playback**: adaptive HLS, through hls.js or Safari's own player, in HEVC and H.264,
   with HDR10. Audio and subtitle choices are remembered in each browser, and the lock
   screen shows the film. A **Playback help** link gives a friend a summary to send you
   when something won't play.
-- **Members and passkeys**: a membership card for everyone you add, tapes for one
-  member, letting someone keep a tape for anyone with the link on their card, films
-  on the shelf for members (signed in), who can read about a film but need a tape to
-  play it, and recovery when someone loses a phone.
+- **Members and passkeys**: a membership card for everyone you add, links for one
+  member, what they have out on their card on every device, letting someone keep a
+  link for anyone on their card, films on the shelf for members (signed in), who can
+  read about a film and see whether it's in but need a link to play it, and recovery
+  when someone loses a phone.
 - **Your shop**: its name, your name (to sign the staff picks), your colour (which
-  prints the membership card), the background, a logo and a tab icon. A tape for
-  anyone with the link previews its film's poster and title in chat apps.
-- **The back office**: scan the media folder, put films on the shelf, lend tapes, make
-  membership cards, read the Ledger, choose how long records are kept, and check on
-  the server under **Status**.
+  prints the membership card), the background, a logo and a tab icon. A link for
+  anyone previews its film's poster and title in chat apps, until it's spent.
+- **The back office**: scan the media folder, put films on the shelf, send links,
+  see who has each tape and take it back, read what friends said, make membership
+  cards, read the Ledger, choose how long records are kept, and check on the server
+  under **Status**.
 - **Backups** every day, keeping the last 14 days and one a month for a year, with a
   timer to copy them off the server. A backup holds the database (films' details,
-  tapes, plays, the ledger, members, passkeys and the shop's settings), the
-  posters and backdrops downloaded from TMDB, and your logo and tab icon, but not the films or `deploy/.env`.
+  links and your notes on them, loans and plays, what friends said, the Ledger,
+  members, passkeys and the shop's settings), the posters and backdrops downloaded
+  from TMDB, and your logo and tab icon, but not the films or `deploy/.env`.
 
-[docs/access.md](docs/access.md) has the rules: who can play what, and what is
-recorded about viewers and for how long.
+[docs/access.md](docs/access.md) has the rules: who can play what, how a loan works,
+and what is recorded about viewers and for how long.
 
 ## Where to start
 
 [docs/installing.md](docs/installing.md) takes you from a fresh server to a working
 shop and a played tape. Before you update, read [CHANGELOG.md](CHANGELOG.md): each
 release says whether it needs a backup first, and whether you can go back without a
-restore.
+restore. From 1.x to 2.0, its Upgrading note comes with a preview of what the upgrade
+will do to your shop.
 
 To report a security problem, see [SECURITY.md](SECURITY.md).
 
@@ -125,8 +139,9 @@ them on an IP address. Locally they need no setting; on a server, see
 [docs/installing.md](docs/installing.md).
 
 Put a film folder in `media/` (or make a test one with the encoder), open
-http://localhost:3000/admin, scan, put a film on the shelf, and lend a tape. Open the
-tape's link in a private window to see it as a friend would.
+http://localhost:3000/admin, scan, put a film on the shelf, and send a link. Open the
+link in a private window to see it as a friend would: pressing Play there takes the
+film's tape out, so press Return it now on its page before you close the window.
 
 ```bash
 npm test                    # access rules, passkeys, scanner, retention and the full ticket journey
@@ -180,7 +195,8 @@ terms require apps that use its data to show it. It isn't covered by the GPL.
 `web/public/fonts/` holds the fonts the pages are set and printed in: Libre Franklin
 (headings and reading text), IBM Plex Mono (the interface's own words), Fraunces (the
 shop's printing), Courier Prime (typed labels), Grape Nuts (the one handwritten
-hand), and VT323 (only on the video machine's blue screen). They're unchanged, each
+hand), VT323 (only on the video machine's blue screen), and Doto (only on the till
+slip, the receipt for a tape taken out). They're unchanged, each
 under the SIL Open Font License 1.1 (its licence is beside it, and in the licences
 file), not the GPL.
 

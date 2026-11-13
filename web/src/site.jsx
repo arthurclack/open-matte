@@ -185,7 +185,7 @@ function PersonMenu({ me, onSignOut, refresh }) {
 
   return (
     <Menu
-      disabled={busy}
+      busy={busy}
       label={
         <>
           <PersonName name={me.person.name} />

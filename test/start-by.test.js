@@ -453,7 +453,8 @@ describe('the date a link goes by, where it is used', () => {
     // The back office: it waits, and its time stands still. The date it goes by is
     // the date as set plus the time the tape has been out so far, and moves with the clock.
     const [t0, waiting, t1] = [Date.now(), await dates(dated), Date.now()];
-    assert.deepEqual([waiting.linkState, waiting.state, waiting.startBy, waiting.startByPaused], ['waiting', 'ok', passed, true]);
+    // (1.x's state, 'ok' here, went in slice 10: linkState says it.)
+    assert.deepEqual([waiting.linkState, waiting.state, waiting.startBy, waiting.startByPaused], ['waiting', undefined, passed, true]);
     assert.ok(waiting.effectiveStartBy >= passed + (t0 - taken) && waiting.effectiveStartBy <= passed + (t1 - taken), 'the date as set, and the time the tape has been out');
     assert.ok(waiting.effectiveStartBy > t1, 'so it is still ahead');
     assert.deepEqual(await links(film), { live: 2, waiting: 1, total: 2 }, 'both links are live: one has the tape, one waits');
@@ -470,7 +471,7 @@ describe('the date a link goes by, where it is used', () => {
     const goesBy = passed + (returned.at - taken);
     assert.ok(Math.abs(goesBy - Date.now() - (2 * DAY - HOUR)) < 5000, 'two days less an hour ahead: what it had left when the tape went out');
     const back = await dates(dated);
-    assert.deepEqual([back.linkState, back.state, back.startBy, back.effectiveStartBy, back.startByPaused], ['opened', 'ok', passed, goesBy, false]);
+    assert.deepEqual([back.linkState, back.startBy, back.effectiveStartBy, back.startByPaused], ['opened', passed, goesBy, false]);
     assert.deepEqual(await links(film), { live: 1, waiting: 1, total: 2 }, 'the link that lent is spent; the dated one can still lend');
     for (const read of [friendsLink, onFrontPage]) {
       const again = await read(friend, film);
@@ -516,9 +517,10 @@ describe('the date a link goes by, where it is used', () => {
     const said = async () => {
       const [office, page, front] = [await dates(missed), await friendsLink(friend, film), await onFrontPage(friend, film)];
       assert.deepEqual([page, (await friend.post(`/api/films/${film.slug}/screenings`)).data], [front, { error: 'expired' }]);
+      // The back office's linkState, and no 1.x state beside it ('expired', until slice 10).
       return [office.linkState, office.state, office.startBy, office.effectiveStartBy, office.startByPaused, page.state, page.tape, page.startBy, page.dueBack];
     };
-    const expected = ['missed', 'expired', set, set, false, 'expired', null, set, null];
+    const expected = ['missed', undefined, set, set, false, 'expired', null, set, null];
     assert.deepEqual(await said(), expected, 'with the tape in');
     const borrower = await opened(lends);
     const played = await ok(borrower.post(`/api/films/${film.slug}/screenings`));

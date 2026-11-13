@@ -7,8 +7,8 @@
 // follows the page. In the admin, a setup link that opens a film is worded as one, a
 // tape that is out can be come back to until it's due (as the film page said before
 // Play), and Sign out only looks done once the server has done it. Signing out just
-// after Play names the tape that goes back, and a tape handed back is gone from the
-// front page reached without a reload. Back after signing out is in back.spec.js. Every browser.
+// after Play names the tape that goes back, and then it does go back; a tape handed
+// back is gone from the front page reached without a reload. Back after signing out is in back.spec.js. Every browser.
 import { NO_SNAPSHOTS, admin, cinemaName, expect, film, heartbeats, playButton, signInAsAdmin, signedInPerson, test, unique } from './fixtures.js';
 
 // The admin's sign-in puts the run's password in a form field, and trace snapshots
@@ -191,7 +191,7 @@ test('a spent link in a fresh browser shows the notice, and nothing of the film'
 // Question 5, and the review of slices 7 to 9: signing out just after Play, with no
 // reload, names the tape that goes back (the question is asked from /api/me read
 // again), and the front page reached without a reload shows it out to this browser.
-test('signing out just after Play names the tape that goes back, with no reload', async ({ page, context }, testInfo) => {
+test('signing out just after Play names the tape that goes back, with no reload, and it goes back', async ({ page, context, newContext }, testInfo) => {
   const name = unique('Joanna', testInfo);
   const { cookie } = await signedInPerson(name);
   await context.addCookies([cookie]);
@@ -218,6 +218,18 @@ test('signing out just after Play names the tape that goes back, with no reload'
   expect(await asked).toBe(`Sign out of this browser? ${film.title} is out to this browser, so it goes back to the shop, and the link that took it out won't take it out again.`);
   // Not signed out: the question was dismissed.
   await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+
+  // Asked again and accepted: signed out, the tape is back in, and the link is spent.
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name, exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+  await expect(page.locator('header').getByRole('link', { name: 'Sign in' })).toBeVisible();
+  const fresh = await (await newContext()).newPage();
+  await fresh.goto(`/t/${ticket.code}`);
+  await expect(fresh.locator('.fl-notice')).toContainText('That link has been used.');
+  const next = await admin.issueTicket({ label: unique('Next', testInfo) });
+  await fresh.goto(`/t/${next.code}`);
+  await expect(playButton(fresh)).toHaveAccessibleName('Play');
 });
 
 // The review of slices 7 to 9: a tape handed back with a response is gone from the

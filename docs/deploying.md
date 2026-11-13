@@ -25,9 +25,9 @@ under its real name, where a scan could take it for a whole one). A new film is 
 off the shelf until you put it on the shelf.
 
 To take a film down, press **Take off the shelf** on its page. Deleting its folder as well
-frees the space: the next scan marks the film missing, keeping its tickets and
-activity, and it comes back if the folder does. Don't rename a film's folder once
-tickets are out ([import-format.md](import-format.md#rescans-and-your-edits)).
+frees the space: the next scan marks the film missing, keeping its links, loans and
+activity, and it comes back if the folder does. A tape out when it goes keeps its
+clock running. Don't rename a film's folder once links are out ([import-format.md](import-format.md#rescans-and-your-edits)).
 
 ## Changing settings
 
@@ -68,9 +68,63 @@ the new password signs in.
    The server keeps it as well, for three days at least (unless `BACKUP_KEEP_DAYS` is
    below 3), however many backups are made after it.
 
-4. **Note the version you run now**, in case you need to go back. **Status** in the
+4. **Preview the upgrade, when the release's Upgrading note asks you to**, on the copy
+   from step 3 ([below](#previewing-an-upgrade)). 2.0.0 does: its migration can end
+   something a friend is doing.
+5. **Note the version you run now**, in case you need to go back. **Status** in the
    back office shows it, and so does the foot of **Settings**. With git,
    `git -C /srv/open-matte/app describe --tags` gives the release.
+
+### Previewing an upgrade
+
+From 1.1.0 to 2.0.0, `scripts/upgrade-preview.mjs` says what the update would do to
+your shop, before you do it. On your computer, in a copy of the release's code, with
+Node 22.13 or later and nothing else (it needs no `npm install`):
+
+```bash
+git fetch --tags
+git checkout v2.0.0
+node scripts/upgrade-preview.mjs ~/open-matte-backups/open-matte-2026-11-03-153012.db
+```
+
+It copies that one file to a temporary folder, upgrades the copy with the new code as
+the server would on starting, prints what that did, and deletes the copy. The file you
+give it is only read, to copy it, and nothing is written beside it. It refuses a
+database that has a `-wal` file beside it: that's one a server has open, not a backup.
+
+The report lists, film by film:
+
+- **Tapes out after the upgrade**: the play under way on each film that becomes its
+  loan, who has it (a member, or a browser and its device), how far in, and when it's
+  due back.
+- **Plays cut off**: people part-way through a film whose tape goes to someone else.
+  Their player stops, and their link lends once when the tape is back, from the
+  beginning. Updating while nobody is watching avoids this.
+- **Links spent early**: links that have the tape after the upgrade and are spent when
+  it's due back, though 1.x would have let them play again. Send a new link to anyone
+  who should have longer.
+- **Links already spent**, **links that lend once more**, and **loan lengths capped**
+  at 30 days, then how many links were never played, and that films, members,
+  passkeys, sessions, settings and the Ledger are as they were.
+
+The report is as of the backup, by your computer's clock. The real upgrade decides by
+the clock when the server starts, so a Play pressed in between can change it. If the
+upgrade would fail, the report says so, and that nothing would change: keep running
+the release you have, and report it.
+
+**Without Node on a computer**, and updating with git, you can run it on the server
+instead, with the image you run now and the new code read-only, after
+`git checkout v2.0.0` and before `docker compose up -d --build`:
+
+```bash
+docker run --rm --network none \
+  -v /srv/open-matte/app/server:/app/server:ro -v /srv/open-matte/app/scripts:/app/scripts:ro \
+  -v /srv/open-matte/backups:/backups:ro deploy-app node scripts/upgrade-preview.mjs /backups/open-matte-2026-11-03-153012.db
+```
+
+The image itself has no `scripts/` folder, so it can't be run there any other way.
+`scripts/deploy.sh` sends the code and restarts the app in one go, so with it, run the
+preview on your computer.
 
 ### Updating with git
 
@@ -79,7 +133,7 @@ On the server, with the release you're updating to:
 ```bash
 cd /srv/open-matte/app
 git fetch --tags
-git checkout v1.1.0
+git checkout v2.0.0
 cd deploy
 docker compose up -d --build
 docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
@@ -97,7 +151,7 @@ On your computer, check out the release (or your own branch) and deploy it:
 
 ```bash
 git fetch --tags
-git checkout v1.1.0
+git checkout v2.0.0
 scripts/deploy.sh my-server
 ```
 
@@ -123,9 +177,19 @@ blocked](#what-browsers-blocked) for which ones matter.
 
 **Status** in the back office shows the new version and the schema the database is on.
 
+A migration runs in one transaction. If it fails, the app stops at start with the
+reason in its log, and nothing has changed: the database is still on the schema it
+had, and the release you ran before still opens it. Go back to that release's code
+(as in [Rolling back](#rolling-back), but with no restore), and report the error.
+
+Then check what the release's **Upgrading** note asks. After 2.0.0, check **Films**
+and **Tapes**: each film is in, or out with one borrower, as the preview said. A
+friend who was part-way through a film and lost the tape to someone else sees "Out on
+loan" on its page; their link lends once when the tape is back.
+
 A film page someone left open from before the update can't load the player from
 the new build. If they press Play there, the page says the site may have just been
-updated and offers Reload. The screening that Play started isn't lost: after the
+updated and offers Reload. If that Play took the tape, it isn't lost: after the
 reload, it shows as Resume.
 
 A build can leave the previous image behind, unnamed, depending on how Docker stores
@@ -199,8 +263,9 @@ tests than on your computer.
 
 ## Backups
 
-Nearly everything Open Matte knows lives in its database: films' details, tickets,
-screenings and activity, people and their passkeys, and settings (including a TMDB key
+Nearly everything Open Matte knows lives in its database: films' details, the links
+you've sent and your "Picked for you" notes on them, loans and plays, what friends
+said handing tapes back, activity, people and their passkeys, and settings (including a TMDB key
 saved in the back office, and the shop's colours). The exceptions are two folders of
 images in the data folder: posters and backdrops downloaded from TMDB (`artwork`), and
 the logo and tab icon you uploaded (`branding`). Backups copy both. The films
@@ -234,11 +299,12 @@ sessions after a while ([access.md](access.md#how-long-its-kept)), but a backup 
 database as it was, so it keeps them until the backup itself is deleted: the monthly
 backups hold up to a year of events the app has since deleted.
 
-Backups hold people's names, your notes about them and their activity, which are
-personal data, and the codes of tickets for anyone with the link, which work for
-whoever reads them. Keep every copy somewhere private. On the server, the app makes
-its files readable by its own user only, and the data and backups folders should be
-yours alone too ([The folders](installing.md#the-folders)). If
+Backups hold people's names, your notes about them, your "Picked for you" notes to
+them, their activity, who had which tape and when, and the words friends wrote you
+when handing a tape back, which are all personal data; and the codes of links for
+anyone with the link, which work for whoever reads them until they've lent. Keep
+every copy somewhere private. On the server, the app makes its files readable by its
+own user only, and the data and backups folders should be yours alone too ([The folders](installing.md#the-folders)). If
 `ls -ld /srv/open-matte/data /srv/open-matte/backups` shows anything but
 `drwx------` for them, run `chmod 700 /srv/open-matte/data /srv/open-matte/backups`.
 
@@ -389,19 +455,32 @@ the card off** where needed,
 and cancel any waiting link you didn't mean. Passkeys created since the backup are
 gone from the server, so those people can't sign in until you send them a new link.
 
-**Check Tapes.** A tape you took back since works again for anyone with its link, so
-take it back again: if you took it back because the link got out, this matters most.
-A tape you gave to someone, or that someone kept, since is for anyone with the link
-again, and the browsers that opened it before have it back: give it to them again.
-Browsers you signed out of a tape (**Sign out browsers**), and everyone signed out
-with **Sign out every friend and member**, are signed in again. A film you took off
-the shelf since is back on it, and one you put on the shelf since is off it. Tapes
-you lent since are gone, so their links no longer open anything.
+**Check Tapes.** Each film's tape is where the backup had it, and the clock has
+moved on since:
+
+- **A tape returned, handed back or taken back since is out again**, with whoever had
+  it then, until its due date. One whose due date has passed since is back at once,
+  by the clock, and its link is spent. A tape you took back since is out again and its
+  link works again, so take it back again: if you took it back because the link got
+  out, this matters most.
+- **A tape lent since is in again**, and the link that took it has never lent: it
+  lends again, for a full loan, to whoever presses Play first. The friend who had it
+  finds it in, or out with someone else, where they'd been watching.
+- **Links you sent since are gone**, so they no longer open anything, and so are
+  "Picked for you" notes written since, due-back dates moved since, and what friends
+  said handing tapes back since. A link cancelled since works again, until it lends.
+- A link you gave to someone, or that someone kept, since is for anyone with the link
+  again, and the browsers that opened it before have it back: give it to them again.
+  Browsers you signed out of a link (**Sign out browsers**), and everyone signed out
+  with **Sign out every friend and member**, are signed in again, with the tapes they
+  had out then. A film you took off the shelf since is back on it, and one you put on
+  the shelf since is off it.
 
 To see what to redo, look at the database as it was before the restore: the backup
 you made with **Back up now** first. Copy it to your computer and open it there, as in
-[Checking a backup](#checking-a-backup): its Tapes list shows which were taken back,
-and who each was for.
+[Checking a backup](#checking-a-backup): its Tapes page shows which tapes were out and
+with whom, which links were taken back or cancelled, and who each was for, and
+Responses what friends said.
 
 **Don't delete people, passkeys or links by hand** (with `sqlite3`, say). Use the back office
 instead: **Remove** for a passkey, **Lost phone: take back the keys**, **Turn the card
@@ -440,7 +519,7 @@ before the update:
 
    ```bash
    cd /srv/open-matte/app
-   git checkout v1.0.0
+   git checkout v1.1.0
    cd deploy
    docker compose up -d --build
    ```
@@ -449,7 +528,7 @@ before the update:
    whatever is checked out):
 
    ```bash
-   git checkout v1.0.0
+   git checkout v1.1.0
    scripts/deploy.sh my-server
    ```
 
@@ -457,15 +536,21 @@ before the update:
 4. **Check** that `docker compose logs app` shows no `newer Open Matte` line, and that
    **Status** shows the older version.
 
-Screenings, events, people and tickets written since that backup are lost, and
-whatever you changed since is as it was: check Members and Tapes, as [after
+Loans, plays, responses, events, people and links written since that backup are
+lost, and whatever you changed since is as it was: check Members and Tapes, as [after
 restoring an older backup](#after-restoring-an-older-backup). When you update again,
 the migrations run again on the restored database.
 
+**Going back from 2.0.0 to 1.1.0** is this, with the backup from before the update
+(1.1.0 is schema 7, 2.0.0 schema 8). Every tape lent since is forgotten: friends
+watching then are back to 1.1.0's plays, as the backup had them. Links sent since,
+"Picked for you" notes and what friends said handing tapes back are lost, so read
+**Responses** before you go back, and copy out anything you want to keep.
+
 ## Moving to a new server
 
-Everything that matters moves with the data folder: tickets, screenings, people,
-passkeys, settings, posters and the logo. Keep the same `DOMAIN`, or every link you've
+Everything that matters moves with the data folder: links, loans and plays, friends'
+responses, people, passkeys, settings, posters and the logo. Keep the same `DOMAIN`, or every link you've
 sent stops working, and the same `WEBAUTHN_RP_ID`, or nobody's passkey works.
 
 ### With the old server still running
@@ -537,12 +622,14 @@ Then check Members and Tapes, as after
 
 **Status** in the back office answers two questions without a trip to
 the server. **Needs attention**: setup and recovery links still waiting, or expired
-unused in the last 7 days; tickets never played whose start-by date is close or just
-passed; and the media requests the app refused or couldn't answer since it started,
+unused in the last 7 days; how many tapes are out, and which is due back next; links
+that haven't lent whose start-by date is close or just passed (paused while the tape
+is out with someone else); and the media requests the app refused or couldn't answer since it started,
 counted by reason, with the latest ten (repeats share a row). **The server**: whether
 the media folder is readable and how many film folders the last scan found; the free
 disk space for the data and the media; the newest backup file, the last backup error,
-and the off-server copy if `BACKUP_COPY_DIR` is set; the last clean-up; and the
+and the off-server copy if `BACKUP_COPY_DIR` is set; the last clean-up; when the app
+last wrote down tapes that had come back (it checks every minute); and the
 version, Node, SQLite and schema versions, and when the app started. When something
 needs attention, the top of the Films page says so.
 
@@ -698,8 +785,9 @@ A passkey works only on the site's own address: `https://` and `DOMAIN`, exactly
 Names in `REDIRECT_FROM` only redirect there, so a passkey is never used on them.
 
 TV browsers and the built-in browsers of apps such as Instagram and Facebook usually
-can't use passkeys, so they can't use tapes for one member. For a TV, lend a tape for
-anyone with the link. Someone who opens their tape in an app's browser can open it
+can't use passkeys, so they can't use links for one member. For a TV, send a link for
+anyone with the link, and press Play on the TV: the tape stays with the browser that
+took it out. Someone who opens their tape in an app's browser can open it
 again in Safari or Chrome: the code stays in the address until they sign in.
 
 In development you don't set it: with no `PUBLIC_URL`, or one on `localhost`, passkeys
@@ -744,6 +832,7 @@ pressing a button in a loop:
 | Opening a ticket link | 30 every 10 minutes |
 | Pressing Play (or **Watch here instead**) | 60 every 10 minutes |
 | Keeping a ticket | 30 every 10 minutes |
+| Returning a tape (**Return it now**, **Hand it back**) | 30 every 10 minutes |
 | A ticket link's preview, the page and its poster together | 60 every 10 minutes |
 | Posters and backdrops downloaded from TMDB | 2000 requests that find nothing every 10 minutes, and 6000 for each IPv6 /48 |
 | Setting up a passkey from a setup or recovery link | 20 requests every 15 minutes |

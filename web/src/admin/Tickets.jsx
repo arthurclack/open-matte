@@ -1,7 +1,7 @@
 import { useContext, useId, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, formatAgo, formatDayTime, plural } from '../api.js';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { LinkStateMark, OutNow } from './Loans.jsx';
 import { loanDaysWords, pickHint, readyLines, sendWarnings } from './loanWords.js';
 import { CreatedLink, peopleError } from './People.jsx';
@@ -369,9 +369,9 @@ export function IssueTicket({ film, links: given = null, personId = '', onIssued
         </p>
       </div>
       <div className="ui-btns">
-        <button className="ui-btn ui-btn--primary" disabled={action.busy || (forPerson && !chosen)}>
+        <BusyButton className="ui-btn ui-btn--primary" busy={action.busy} disabled={forPerson && !chosen}>
           {buttonText}
-        </button>
+        </BusyButton>
       </div>
     </form>
   );
@@ -472,9 +472,9 @@ function IssuedForPerson({ ticket: t, person, film, ready, onLinkCreated }) {
                 then goes straight to {film.title}.{person.linkWaiting ? " The setup link that's waiting stops working." : ''}
               </p>
               <div className="ui-btns">
-                <button type="button" className="ui-btn" onClick={createSetupLink} disabled={action.busy}>
+                <BusyButton type="button" className="ui-btn" onClick={createSetupLink} busy={action.busy}>
                   Create a setup link that opens {film.title}
-                </button>
+                </BusyButton>
               </div>
             </Line>
           )}

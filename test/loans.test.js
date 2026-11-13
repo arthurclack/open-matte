@@ -1147,7 +1147,8 @@ describe('taking a tape back', () => {
     const r = await takeBack(ticket);
     assert.equal(r.status, 200, JSON.stringify(r.data));
     assert.deepEqual(r.data.alsoCancelled, []);
-    assert.deepEqual([r.data.ticket.id, r.data.ticket.state], [ticket.id, 'revoked']);
+    // Cancelled with it (1.x's state said 'revoked').
+    assert.deepEqual([r.data.ticket.id, r.data.ticket.linkState], [ticket.id, 'cancelled']);
     const ended = loanOf(ticket);
     assert.equal(ended.ended_how, 'taken-back');
     assert.ok(ended.ended_at >= before && ended.ended_at <= Date.now());
@@ -1340,7 +1341,8 @@ describe('cancelling a link, and restoring one', () => {
     const took = await play(sam.phone, film);
     const r = await admin.post(`/api/admin/tickets/${first.id}/revoke`);
     assert.equal(r.status, 200, JSON.stringify(r.data));
-    assert.deepEqual([r.data.id, r.data.state, r.data.tookBack, r.data.alsoCancelled], [first.id, 'revoked', true, [second.id]]);
+    // Cancelled (1.x's state said 'revoked'), its loan taken back.
+    assert.deepEqual([r.data.id, r.data.linkState, r.data.loan.endedHow, r.data.tookBack, r.data.alsoCancelled], [first.id, 'cancelled', 'taken-back', true, [second.id]]);
     assert.equal(loanOf(first).ended_how, 'taken-back');
     assert.deepEqual(answer(await report(sam.phone, took.data.screeningId)), [409, { error: 'taken-back' }]);
     assert.deepEqual(answer(await sam.phone.get(`/api/films/${film.slug}`)), [404, { error: 'not-found' }]);
@@ -1353,7 +1355,8 @@ describe('cancelling a link, and restoring one', () => {
     const waiting = await issue(film);
     const w = await opened(waiting);
     const r = await admin.post(`/api/admin/tickets/${waiting.id}/revoke`);
-    assert.deepEqual([r.status, r.data.state, r.data.tookBack, r.data.alsoCancelled], [200, 'revoked', false, []]);
+    // Cancelled, with no loan of its own (1.x's state said 'revoked').
+    assert.deepEqual([r.status, r.data.linkState, r.data.loan, r.data.tookBack, r.data.alsoCancelled], [200, 'cancelled', null, false, []]);
     assert.deepEqual(answer(await w.get(`/api/films/${film.slug}`)), [404, { error: 'not-found' }]);
     assert.equal(held(waiting), 0);
     assert.equal(loanOf(ticket).ended_at, null, 'the tape is still out on the other link');
@@ -1371,7 +1374,8 @@ describe('cancelling a link, and restoring one', () => {
     const never = await issue(film);
     assert.equal((await admin.post(`/api/admin/tickets/${never.id}/revoke`)).status, 200);
     const restored = await admin.post(`/api/admin/tickets/${never.id}/restore`);
-    assert.deepEqual([restored.status, restored.data.state, restored.data.revokedAt], [200, 'ok', null]);
+    // As it was before, never opened (1.x's state said 'ok').
+    assert.deepEqual([restored.status, restored.data.linkState, restored.data.revokedAt], [200, 'unopened', null]);
     assert.deepEqual(eventsOf(never, 'ticket-restored').map((e) => e.film_id), [film.id]);
     // Restoring one that isn't cancelled changes nothing, and logs nothing.
     assert.equal((await admin.post(`/api/admin/tickets/${never.id}/restore`)).status, 200);
@@ -1384,7 +1388,8 @@ describe('cancelling a link, and restoring one', () => {
     // Spent, then cancelled: still once.
     assert.equal((await giveBack(b, film, { takenAt: loanOf(never).taken_at })).status, 200);
     const cancelled = await admin.post(`/api/admin/tickets/${never.id}/revoke`);
-    assert.deepEqual([cancelled.data.state, cancelled.data.tookBack], ['revoked', false]);
+    // Cancelled, its loan over before (1.x's state said 'revoked').
+    assert.deepEqual([cancelled.data.linkState, cancelled.data.loan.endedHow, cancelled.data.tookBack], ['cancelled', 'returned', false]);
     assert.deepEqual(answer(await admin.post(`/api/admin/tickets/${never.id}/restore`)), [409, { error: 'lent-once' }]);
     assert.ok(ticketRow(never).revoked_at);
     // Taken back.
@@ -1493,7 +1498,8 @@ describe('moving a due date (question 8)', () => {
     const later = await patch(ticket, { loanDays: 10 });
     assert.equal(later.status, 200, JSON.stringify(later.data));
     const to = loan.taken_at + 10 * DAY;
-    assert.deepEqual([loanOf(ticket).due_at, ticketRow(ticket).loan_days, later.data.expiresAt], [to, 10, to]);
+    // The back office's answer has the loan's new date (1.x said it as expiresAt).
+    assert.deepEqual([loanOf(ticket).due_at, ticketRow(ticket).loan_days, later.data.loan.dueAt, later.data.loanDays], [to, 10, to, 10]);
     assert.deepEqual([(await page(b, film)).dueBack, (await page(other, film)).dueBack], [to, to]);
     assert.deepEqual(eventsOf(ticket, 'due-changed').map((e) => [e.film_id, e.screening_id, e.detail]), [[film.id, loan.screening_id, { loanId: loan.id, from: loan.due_at, to }]]);
     assert.equal(loanOf(ticket).taken_at, loan.taken_at, 'when it was taken never moves');

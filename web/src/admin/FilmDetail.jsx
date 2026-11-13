@@ -2,7 +2,7 @@ import { useContext, useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, formatAgo, formatBytes, formatClock, formatRuntime, plural } from '../api.js';
 import { Sleeve } from '../look/objects.jsx';
-import { Line, TabRow } from '../look/ui.jsx';
+import { BusyButton, Line, TabRow } from '../look/ui.jsx';
 import { pickedBy } from '../look/words.js';
 import FilmInfo from './FilmInfo.jsx';
 import { editedHere, fromTmdb } from './filmEdits.js';
@@ -116,19 +116,19 @@ export default function FilmDetail() {
             Preview the page
           </a>
           {film.published ? (
-            <button type="button" className="ui-btn" onClick={() => setPublished(false)} disabled={action.busy}>
+            <BusyButton type="button" className="ui-btn" onClick={() => setPublished(false)} busy={action.busy}>
               Take off the shelf
-            </button>
+            </BusyButton>
           ) : (
-            <button
+            <BusyButton
               type="button"
               className="ui-btn ui-btn--primary"
               onClick={() => setPublished(true)}
-              disabled={action.busy || broken}
+              busy={action.busy} disabled={broken}
               title={broken ? 'Fix the media errors first' : ''}
             >
               Put on the shelf
-            </button>
+            </BusyButton>
           )}
         </div>
       </div>
@@ -196,7 +196,14 @@ export default function FilmDetail() {
             <Lending filmId={film.id} l={current.lending} />
             <h2 className="of-h2">Members</h2>
             <label className="ui-check of-w">
-              <input type="checkbox" checked={film.memberVisible} onChange={(e) => setMemberVisible(e.target.checked)} disabled={action.busy} />
+              {/* Busy as a BusyButton is (look/busy.js): it keeps the focus while it saves,
+                  and a press meanwhile changes nothing (the box is drawn as it was). */}
+              <input
+                type="checkbox"
+                checked={film.memberVisible}
+                onChange={(e) => !action.busy && setMemberVisible(e.target.checked)}
+                aria-disabled={action.busy || undefined}
+              />
               <span>
                 <b>Show to members</b>
                 <small>
@@ -347,13 +354,13 @@ function Details({ film, onSaved }) {
         <input id={`${id}-sort`} className="ui-input ui-input--num" type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} />
       </div>
       <div className="ui-btns">
-        <button className="ui-btn ui-btn--primary" disabled={!dirty || action.busy}>
+        <BusyButton className="ui-btn ui-btn--primary" busy={action.busy} disabled={!dirty}>
           {saved ? 'Saved' : 'Save details'}
-        </button>
+        </BusyButton>
         {anyEdited && (
-          <button type="button" className="ui-btn" onClick={resetMetadata} disabled={action.busy}>
+          <BusyButton type="button" className="ui-btn" onClick={resetMetadata} busy={action.busy}>
             Reset to film.json
-          </button>
+          </BusyButton>
         )}
         <span className="of-faint of-small">Later scans won't overwrite what you change here.</span>
       </div>

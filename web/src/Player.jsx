@@ -3,6 +3,7 @@ import { createRef, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { api, formatClock, formatDay } from './api.js';
 import { StepIcon } from './icons.jsx';
 import { OsdStrip, StopStrip, VcrMenu, tapeCounter } from './look/crt.jsx';
+import { BusyButton } from './look/ui.jsx';
 import { useMediaSession } from './mediaSession.js';
 import { scrollBehavior } from './motion.js';
 import { haltMessages } from './pages/tapeWords.js';
@@ -96,8 +97,9 @@ function startPosition(position, duration) {
 // the paused strip; none in the owner's preview. At the film's end the bar under the
 // picture gives way to STOP and `end`, the page's own choices (none: the bar stays),
 // and onEnded tells the page: true at the end, false once it plays again. onPaused tells
-// it each time the viewer pauses (the paused strip shows).
-export default function Player({ film, screening, onHalt, onReclaim, dueBack = screening.dueBack ?? null, onEnded, onPaused, end = null }) {
+// it each time the viewer pauses (the paused strip shows). `reclaiming`: the page's
+// request for Watch here instead is under way (a BusyButton, question 20).
+export default function Player({ film, screening, onHalt, onReclaim, reclaiming = false, dueBack = screening.dueBack ?? null, onEnded, onPaused, end = null }) {
   const { site } = useSite();
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
@@ -801,9 +803,9 @@ export default function Player({ film, screening, onHalt, onReclaim, dueBack = s
             <div>
               <p>{HALT[halted]}</p>
               {halted === 'playing-elsewhere' && (
-                <button type="button" className="ui-btn ui-btn--primary" onClick={onReclaim}>
+                <BusyButton type="button" className="ui-btn ui-btn--primary" onClick={() => onReclaim()} busy={reclaiming}>
                   Watch here instead
-                </button>
+                </BusyButton>
               )}
               {HELP_FOR.has(halted) && (
                 <button type="button" className="ui-btn ui-btn--quiet" onClick={showHelp}>

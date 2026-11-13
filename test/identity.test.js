@@ -76,6 +76,10 @@ const me = async (b) => {
 // This browser's entries under Your tickets for one film.
 const listed = async (b, slug = 'arrival') => (await me(b)).tickets.filter((t) => t.film.slug === slug);
 const adminTicket = async (id) => (await admin.get(`/api/admin/tickets/${id}`)).data;
+// 1.x counted a link's plays (screeningsUsed) and named its state in its own words
+// (state: ok, used_up, expired, revoked). Both went from the back office's answer in
+// slice 10: a link lends once, so what the tests below read now is its one loan
+// (null until Play took the tape on it; its screeningId is the play) and linkState.
 
 // A person with one (synced) passkey, created from a setup link on their phone.
 // device() signs another browser in as them with the same passkey.
@@ -349,7 +353,8 @@ describe('opening a ticket for one person', () => {
     assert.deepEqual(await statuses(sam.phone, playbackFiles(slug)), every(playbackFiles(slug), 403));
 
     const a = await adminTicket(t.id);
-    assert.equal(a.screeningsUsed, 1);
+    // Lent once (1.x: screeningsUsed 1).
+    assert.ok(a.loan, 'the link has lent');
     assert.equal(a.browsers, 0, 'a ticket with a person is held by no browser');
     assert.deepEqual(a.browserList, []);
     assert.equal(ticketRow(t.id).first_opened_at, first, 'later page loads keep the first');
@@ -429,7 +434,9 @@ describe('disabling the person', () => {
     // The borrower is told when it went back, and no more than "it was due".
     assert.deepEqual(page.ticket.returned, { at: loan.ended_at, how: 'due' });
     assert.deepEqual(await statuses(sam.phone, playbackFiles(slug)), every(playbackFiles(slug), 403));
-    assert.equal((await adminTicket(t.id)).screeningsUsed, 1);
+    // Its one loan, ended when the card went off, and the link done (1.x: screeningsUsed 1).
+    const done = await adminTicket(t.id);
+    assert.deepEqual([done.linkState, done.loan.endedHow], ['done', 'disabled']);
     const still = srv.db.prepare('SELECT * FROM loans WHERE ticket_id = ?').get(t.id);
     assert.deepEqual([still.ended_at, still.ended_how], [loan.ended_at, 'disabled'], 'turned on again, the loan stays ended');
   });
@@ -469,7 +476,8 @@ describe("two of the person's devices", () => {
     const hb = await heartbeat(sam.phone, screeningId, { position: 41 });
     assert.equal(hb.status, 409);
     assert.equal(hb.data.error, 'playing-elsewhere');
-    assert.equal((await adminTicket(t.id)).screeningsUsed, 1);
+    // Taking over carries on the one loan and its one play (1.x: screeningsUsed 1).
+    assert.equal((await adminTicket(t.id)).loan.screeningId, screeningId);
   });
 
   test('takes over at once when the holding device can no longer play: signed out, or its session expired', async () => {
@@ -499,8 +507,9 @@ describe("two of the person's devices", () => {
     assert.deepEqual(rs.map((r) => r.status).sort(), [200, 409], JSON.stringify(rs.map((r) => r.data)));
     assert.equal(rs.find((r) => r.status === 409).data.error, 'playing-elsewhere');
     const a = await adminTicket(t.id);
-    assert.equal(a.screeningsUsed, 1);
+    // One loan, and its play the only one (1.x: screeningsUsed 1).
     assert.equal(a.screenings.length, 1);
+    assert.equal(a.loan.screeningId, a.screenings[0].id);
   });
 });
 
@@ -548,7 +557,8 @@ describe('revoking and restoring a ticket for one person', () => {
     assert.equal(await status(sam.phone, segment(4, slug)), 200);
 
     const revoked = await admin.post(`/api/admin/tickets/${t.id}/revoke`);
-    assert.deepEqual([revoked.status, revoked.data.tookBack, revoked.data.state], [200, true, 'revoked']);
+    // Cancelled (1.x's state said 'revoked').
+    assert.deepEqual([revoked.status, revoked.data.tookBack, revoked.data.linkState], [200, true, 'cancelled']);
     assert.equal(await status(sam.phone, segment(5, slug)), 403, 'the next segment');
     const report = await heartbeat(sam.phone, screeningId, { position: 25 });
     assert.deepEqual([report.status, report.data], [409, { error: 'taken-back' }]);
@@ -655,8 +665,10 @@ describe("a browser with a link ticket and the person's own ticket for one film"
     assert.equal(again.screeningId, screeningId);
     assert.equal(again.resumed, true);
     assert.equal(again.position, 25);
-    assert.equal((await adminTicket(own.id)).screeningsUsed, 0, "the person's ticket is untouched");
-    assert.equal((await adminTicket(link.id)).screeningsUsed, 1);
+    // Their own link never lent; the link's one loan is the play resumed (1.x:
+    // screeningsUsed 0 and 1).
+    assert.equal((await adminTicket(own.id)).loan, null, "the person's ticket is untouched");
+    assert.equal((await adminTicket(link.id)).loan.screeningId, screeningId);
     assert.equal(loanOf(own.id), undefined);
 
     // Signing in doesn't change whose loan it is: on their other device the tape is out, like anyone's.
@@ -685,7 +697,8 @@ describe("a browser with a link ticket and the person's own ticket for one film"
     assert.equal(await status(sam.phone, master(slug)), 403);
     assert.equal((await play(friend, slug)).position, 33, 'the friend carries on');
     assert.equal(await status(friend, master(slug)), 200);
-    assert.equal((await adminTicket(own.id)).screeningsUsed, 0);
+    // Their own link never lent (1.x: screeningsUsed 0).
+    assert.equal((await adminTicket(own.id)).loan, null);
     assert.equal(loanOf(own.id), undefined);
   });
 
@@ -701,8 +714,10 @@ describe("a browser with a link ticket and the person's own ticket for one film"
     const r = await play(sam.phone, slug);
     assert.equal(r.screeningId, screeningId);
     assert.equal(r.resumed, true);
-    assert.equal((await adminTicket(own.id)).screeningsUsed, 1);
-    assert.equal((await adminTicket(link.id)).screeningsUsed, 0);
+    // Their own link lent, and the play is its loan's; the link never lent (1.x:
+    // screeningsUsed 1 and 0).
+    assert.equal((await adminTicket(own.id)).loan.screeningId, screeningId);
+    assert.equal((await adminTicket(link.id)).loan, null);
     // With both in one browser and the tape in, Play had taken their own, though the link is older.
     assert.ok(link.id < own.id);
     assert.equal(loanOf(link.id), undefined);
@@ -720,7 +735,8 @@ describe("a browser with a link ticket and the person's own ticket for one film"
     const own = await forPerson(sam.p, {}, slug);
 
     assert.deepEqual((await sam.phone.post(`/api/films/${slug}/screenings`)).data, { error: 'out' });
-    assert.equal((await adminTicket(own.id)).screeningsUsed, 0);
+    // Their own link took nothing (1.x: screeningsUsed 0).
+    assert.equal((await adminTicket(own.id)).loan, null);
     assert.deepEqual(await statuses(sam.phone, playbackFiles(slug)), every(playbackFiles(slug), 403));
     assert.deepEqual(await statuses(friend, playbackFiles(slug)), every(playbackFiles(slug), 200), 'the friend keeps watching');
 
@@ -729,8 +745,10 @@ describe("a browser with a link ticket and the person's own ticket for one film"
     assert.notEqual(r.screeningId, theirs);
     assert.deepEqual([r.resumed, r.took, r.toBrowser, r.position], [false, true, false, 0]);
     assert.equal(loanOf(own.id).person_id, sam.p.id);
-    assert.equal((await adminTicket(own.id)).screeningsUsed, 1);
-    assert.equal((await adminTicket(link.id)).screeningsUsed, 1);
+    // Their own link lends now, with this play; the link's one loan was the friend's,
+    // and is over (1.x: screeningsUsed 1 on each).
+    assert.equal((await adminTicket(own.id)).loan.screeningId, r.screeningId);
+    assert.deepEqual([(await adminTicket(link.id)).loan.screeningId, (await adminTicket(link.id)).loan.live], [theirs, false]);
     assert.deepEqual(await statuses(sam.phone, playbackFiles(slug)), every(playbackFiles(slug), 200));
     assert.deepEqual(await statuses(friend, playbackFiles(slug)), every(playbackFiles(slug), 403));
     assert.deepEqual((await friend.post(`/api/films/${slug}/screenings`)).data, { error: 'spent' });
@@ -758,8 +776,10 @@ describe("a browser with a link ticket and the person's own ticket for one film"
     const ended = loanOf(link.id);
     assert.equal(ended.ended_how, 'signed-out');
     assert.ok(ended.ended_at >= ended.taken_at && ended.ended_at < ended.due_at, 'dated when the browser signed out, not when it was due');
-    assert.equal((await adminTicket(own.id)).screeningsUsed, 1);
-    assert.equal((await adminTicket(link.id)).state, 'used_up');
+    // Their own link lent, from the start; the link is done (1.x: screeningsUsed 1,
+    // and state 'used_up').
+    assert.equal((await adminTicket(own.id)).loan.screeningId, r.screeningId);
+    assert.equal((await adminTicket(link.id)).linkState, 'done');
   });
 });
 
@@ -777,12 +797,15 @@ describe('a browser with a usable ticket and one that has ended, for one film', 
       ['ok'],
       'Your tickets lists the film once, by the usable ticket',
     );
-    const before = (await adminTicket(ended.id)).screeningsUsed;
+    // Play lends on the usable link, and the ended one's loan (none, or the one it had)
+    // stays as it was; its linkState is `endedState` (1.x counted plays, screeningsUsed,
+    // and named the state in its own words: expired, used_up).
+    const before = (await adminTicket(ended.id)).loan?.id ?? null;
     const r = await play(b, slug);
     assert.equal(r.resumed, false);
-    assert.equal((await adminTicket(usable.id)).screeningsUsed, 1, 'Play uses the usable ticket');
-    assert.equal((await adminTicket(ended.id)).screeningsUsed, before);
-    assert.equal((await adminTicket(ended.id)).state, endedState);
+    assert.equal((await adminTicket(usable.id)).loan.screeningId, r.screeningId, 'Play uses the usable ticket');
+    assert.equal((await adminTicket(ended.id)).loan?.id ?? null, before);
+    assert.equal((await adminTicket(ended.id)).linkState, endedState);
     assert.deepEqual(await statuses(b, playbackFiles(slug)), every(playbackFiles(slug), 200));
   }
 
@@ -794,7 +817,7 @@ describe('a browser with a usable ticket and one that has ended, for one film', 
     assert.equal((await b.get(`/api/films/${slug}`)).data.access.ticket.state, 'expired');
     const replacement = await issue({ label: 'Second link' }, slug);
     await opened(b, replacement, slug);
-    await goesByTheUsable(b, replacement, old, 'expired', slug);
+    await goesByTheUsable(b, replacement, old, 'missed', slug);
   });
 
   // 1.x: "used up", once its one play could no longer be resumed. A link is spent when its tape is back.
@@ -807,8 +830,8 @@ describe('a browser with a usable ticket and one that has ended, for one film', 
     assert.equal((await sam.phone.get(`/api/films/${slug}`)).data.access.ticket.state, 'spent');
     const link = await issue({ label: 'Another go' }, slug);
     await opened(sam.phone, link, slug);
-    // The back office still says "used up" for a link that has lent, until it is rebuilt.
-    await goesByTheUsable(sam.phone, link, own, 'used_up', slug);
+    // The back office says "done" for a link that has lent and is back (1.x: "used up").
+    await goesByTheUsable(sam.phone, link, own, 'done', slug);
   });
 });
 
@@ -856,7 +879,8 @@ describe('a ticket for anyone with the link, with people around', () => {
     assert.equal((await heartbeat(sam.phone, screeningId, { position: 1 })).status, 404);
     assert.equal((await play(anon, slug)).screeningId, screeningId);
     assert.equal(await status(anon, master(slug)), 200);
-    assert.equal((await adminTicket(t.id)).screeningsUsed, 1);
+    // One loan, and the play resumed is its own (1.x: screeningsUsed 1).
+    assert.equal((await adminTicket(t.id)).loan.screeningId, screeningId);
     assert.equal((await adminTicket(t.id)).person, null);
   });
 

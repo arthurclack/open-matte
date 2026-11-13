@@ -188,6 +188,8 @@ span.ob { display: inline-block; }
 .osd { position: relative; height: 100%; }
 .osd__mode { font-size: max(30px, 1em); line-height: 1; white-space: nowrap; }
 .osd__btn { font: inherit; font-size: max(24px, 1em); line-height: 1; border: 0; border-radius: 0; padding: 8px 12px 6px; min-height: 44px; max-width: 100%; white-space: nowrap; cursor: pointer; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+/* busy (look/busy.js: the telly's Resume while Play's request runs) is drawn as disabled, as Play is */
+.osd__btn:disabled, .osd__btn[aria-disabled='true'] { cursor: not-allowed; opacity: 0.6; }
 .osd--play { padding: 6.5% 7.5%; display: flex; flex-direction: column; justify-content: space-between; height: 100%; }
 .osd--play .osd__mode { font-size: max(32px, 5.2cqw); }
 .osd--play .osd__counter { align-self: flex-end; font-size: max(24px, 3.4cqw); line-height: 1; font-variant-numeric: tabular-nums; }
@@ -197,12 +199,13 @@ span.ob { display: inline-block; }
 .crt-play__in { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 100%; padding: 0 20px 0 12px; }
 .crt-play__mode { font-size: 34px; line-height: 1; padding: 7px 12px 5px; white-space: nowrap; }
 .crt-play__ctr { font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
-.crt-play:active:not(:disabled) { background: var(--blue-press); }
-.crt-play:disabled { cursor: not-allowed; }
-.crt-play:disabled .crt-play__in { opacity: 0.6; }
+.crt-play:active:not(:disabled):not([aria-disabled='true']) { background: var(--blue-press); }
+/* busy (look/busy.js) is drawn as disabled */
+.crt-play:disabled, .crt-play[aria-disabled='true'] { cursor: not-allowed; }
+.crt-play:disabled .crt-play__in, .crt-play[aria-disabled='true'] .crt-play__in { opacity: 0.6; }
 @media (prefers-reduced-motion: no-preference) {
   .crt-play { transition: transform 120ms cubic-bezier(0.23, 1, 0.32, 1); }
-  .crt-play:active:not(:disabled) { transform: scale(0.97); }
+  .crt-play:active:not(:disabled):not([aria-disabled='true']) { transform: scale(0.97); }
 }
 @media (max-width: 767px) { .crt-play { width: 100%; max-width: 360px; } }
 

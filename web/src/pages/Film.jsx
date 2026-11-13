@@ -4,7 +4,7 @@ import { api, formatClock, formatRuntime } from '../api.js';
 import { lazyPart } from '../ErrorBoundary.jsx';
 import { ComingBack, PlayScreen, PlayTile } from '../look/crt.jsx';
 import { PickCard, PickNote, Sleeve, TillSlip } from '../look/objects.jsx';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { hostName, nextDeadline, noTapeYet, stickerText, tapeCounter } from '../look/words.js';
 import { scrollBehavior } from '../motion.js';
 import PasskeySignIn, { NewPasskeys } from '../PasskeySignIn.jsx';
@@ -67,6 +67,9 @@ export default function Film() {
   const [picture, setPicture] = useState(false);
   const [message, setMessage] = useState(null);
   const [starting, setStarting] = useState(false);
+  // Play's request is under way: a second Play meanwhile (Watch here instead pressed
+  // twice, say) does nothing, rather than send another.
+  const startingRef = useRef(false);
   // Passkeys added since the one used to sign in here (Sign in and keep it). The
   // server reports them once, so they stay on the page after the offer goes.
   const [newPasskeys, setNewPasskeys] = useState(null);
@@ -156,6 +159,8 @@ export default function Film() {
 
   // `fromStart`: the tape was watched to the end, and Play starts it again.
   async function play({ fromStart = false } = {}) {
+    if (startingRef.current) return;
+    startingRef.current = true;
     setMessage(null);
     setReturnError(null);
     setJustReturned(false);
@@ -180,6 +185,7 @@ export default function Film() {
       else if (PLAY_ERRORS[err.code]) setMessage(PLAY_ERRORS[err.code]);
       await load(true);
     } finally {
+      startingRef.current = false;
       setStarting(false);
     }
   }
@@ -377,6 +383,11 @@ export default function Film() {
 
   return (
     <article className="fl-page">
+      {/* While the theatre is open the film's title is the page's first heading, ahead
+          of the player and the end of the film (whose heading is the page's second), so
+          the page's order is the order it is drawn in; the title under it is then the
+          same words in plain type. */}
+      {screening && <h1 className="visually-hidden">{film.title}</h1>}
       {screening && (
         <div className="theatre fl-theatre" ref={theatreRef}>
           <div className="fl-stage">
@@ -395,6 +406,7 @@ export default function Film() {
                   }}
                   onPaused={() => setJustTook(false)}
                   end={end || null}
+                  reclaiming={starting}
                 />
               </Suspense>
             ) : (
@@ -406,7 +418,7 @@ export default function Film() {
 
       <div className={`fl-film ui-w${film.recommendation ? '' : ' fl-film--nopick'}`}>
         <div className="fl-info">
-          <h1>{film.title}</h1>
+          {screening ? <p className="fl-title">{film.title}</p> : <h1 className="fl-title">{film.title}</h1>}
           {film.originalTitle && film.originalTitle !== film.title && <p className="fl-original">{film.originalTitle}</p>}
           {meta && <p className="fl-meta">{meta}</p>}
         </div>
@@ -592,14 +604,14 @@ function Counter(props) {
         canPlay &&
         (!yours ? (
           <div className="fl-playrow">
-            <PlayTile onClick={() => onPlay()} disabled={starting} label="Play" />
+            <PlayTile onClick={() => onPlay()} busy={starting} label="Play" />
           </div>
         ) : finished ? (
           <div className="fl-playrow">
-            <PlayTile onClick={() => onPlay({ fromStart: true })} disabled={starting} label="Play from the start" />
+            <PlayTile onClick={() => onPlay({ fromStart: true })} busy={starting} label="Play from the start" />
           </div>
         ) : (
-          <ComingBack counter={tapeCounter(position)} at={resumeAt} onResume={() => !starting && onPlay()} resumeLabel={resumeAt ? `Resume at ${resumeAt}` : 'Resume'} />
+          <ComingBack counter={tapeCounter(position)} at={resumeAt} onResume={() => onPlay()} busy={starting} resumeLabel={resumeAt ? `Resume at ${resumeAt}` : 'Resume'} />
         ))}
       {lines.length > 0 && !(playing && (ended || took)) && (
         <p className="fl-clock">
@@ -656,12 +668,12 @@ function ReturnControls({ film, ticket, asking, onAsk, onCancelAsk, onReturn, re
           </p>
           {problem}
           <div className="ui-btns">
-            <button type="button" className="ui-btn ui-btn--primary" onClick={onReturn} disabled={returning}>
+            <BusyButton type="button" className="ui-btn ui-btn--primary" onClick={onReturn} busy={returning} busyText="Returning…">
               {returning ? 'Returning…' : 'Return it'}
-            </button>
-            <button type="button" className="ui-btn" onClick={onCancelAsk} disabled={returning}>
+            </BusyButton>
+            <BusyButton type="button" className="ui-btn" onClick={onCancelAsk} busy={returning}>
               Keep it
-            </button>
+            </BusyButton>
           </div>
         </div>
       </div>
@@ -725,7 +737,7 @@ function PreviewCounter({ access, film, onPlay, starting, playing }) {
       </Line>
       {!playing && (
         <div className="fl-playrow">
-          <PlayTile onClick={() => onPlay()} disabled={starting || access.mediaStatus === 'error' || access.mediaStatus === 'missing'} label="Play" />
+          <PlayTile onClick={() => onPlay()} busy={starting} disabled={access.mediaStatus === 'error' || access.mediaStatus === 'missing'} label="Play" />
         </div>
       )}
       <p className="fl-clock">{previewClock(tape).join(' ')}</p>
@@ -784,9 +796,9 @@ function KeepOffer({ film, signedIn, onKept, onNewPasskeys }) {
         {problem}
         <p>Keep this tape on your membership card, so it's on every device you sign in on?</p>
         <div className="ui-btns">
-          <button type="button" className="ui-btn" onClick={() => window.confirm(KEEP_CONFIRM) && keep()} disabled={busy}>
+          <BusyButton type="button" className="ui-btn" onClick={() => window.confirm(KEEP_CONFIRM) && keep()} busy={busy} busyText="Keeping…">
             {busy ? 'Keeping…' : 'Keep it'}
-          </button>
+          </BusyButton>
         </div>
       </div>
     );

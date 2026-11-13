@@ -131,6 +131,7 @@ async function call(method, url, body, cookie = env('E2E_ADMIN_COOKIE')) {
 
 // As the admin, with the session global setup signed in.
 export const admin = {
+  get: async (url) => (await call('GET', url)).data,
   post: async (url, body = {}) => (await call('POST', url, body)).data,
   patch: async (url, body = {}) => (await call('PATCH', url, body)).data,
   // A link for anyone, lending for the shop's own days, unless `fields` say otherwise:
@@ -146,6 +147,14 @@ export const admin = {
   // A setup link, <origin>/enroll#<token>.
   setupLink: async (personId) => (await admin.post(`/api/admin/people/${personId}/links`)).link,
 };
+
+// A browser signed in to the back office with global setup's session, without the
+// form (so without the password). Its own previews never take a tape: a friend's
+// browser in a journey is always another context.
+export async function asAdmin(context) {
+  const value = env('E2E_ADMIN_COOKIE').split('; ').find((c) => c.startsWith('om_admin=')).slice('om_admin='.length);
+  await context.addCookies([{ name: 'om_admin', value, url: env('E2E_BASE_URL'), httpOnly: true, sameSite: 'Lax' }]);
+}
 
 // ------------------------------------------------------------ the admin's password
 
@@ -367,10 +376,12 @@ async function prepare(context, pageErrors) {
   const browser = context.browser()?.browserType().name();
   const own = BROWSERS_OWN.filter((o) => o.browser === browser);
   await context.exposeFunction('e2eCspViolation', (violation) => {
-    if (!watching(pageErrors)) return;
     const kind = own.find((o) => o.is(violation));
+    // The browser's own doing is set aside even once the test is over: WebKit can say
+    // so in the console just before the guard stops watching, and fire the event that
+    // sets that line aside just after (stopWatching). It only ever sets a line aside.
     if (kind) pageErrors.browsersOwn.push({ kind, line: violation.line });
-    else pageErrors.csp.push(violation.line);
+    else if (watching(pageErrors)) pageErrors.csp.push(violation.line);
   });
   await context.addInitScript(watchPolicy);
   await context.addInitScript(initScript);
@@ -392,7 +403,9 @@ const watching = (pageErrors) => !pageErrors.stopped && pageErrors.testInfo.erro
 // used, first lets through what they reported before. A round trip alone isn't
 // enough: WebKit can log a refusal to the console before the page's
 // securitypolicyviolation event has run, and the console line would then be left
-// without the event that sets it aside.
+// without the event that sets it aside. Nor is the wait always: WebKit reports its
+// drop-down menus' styles when it gets round to drawing them, which can be during the
+// wait itself, so a report of the browser's own is heard even after it (prepare).
 async function stopWatching(pageErrors) {
   if (pageErrors.stopped) return;
   const pages = pageErrors.contexts.flatMap((context) => context.pages());

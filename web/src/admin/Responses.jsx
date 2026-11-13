@@ -2,7 +2,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatDateTime, formatDayTime } from '../api.js';
 import { Sleeve } from '../look/objects.jsx';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { hostName } from '../look/words.js';
 import { RESPONSE_WORDS, handedBackWhen } from './loanWords.js';
 import { AdminContext, DoneNote, ErrorNote, Head, Mark, useAction, useLoad } from './ui.jsx';
@@ -86,25 +86,25 @@ export default function Responses() {
                 <div className="ui-btns">
                   {!r.readAt && (
                     // Each name starts with the button's own words, then whose response.
-                    <button
+                    <BusyButton
                       type="button"
                       className="ui-btn ui-btn--small"
                       onClick={() => markRead(r)}
-                      disabled={action.busy}
+                      busy={action.busy}
                       aria-label={`Mark as read: ${r.person.name}'s response to ${r.film.title}`}
                     >
                       Mark as read
-                    </button>
+                    </BusyButton>
                   )}
-                  <button
+                  <BusyButton
                     type="button"
                     className="ui-btn ui-btn--small"
                     onClick={() => remove(r)}
-                    disabled={action.busy}
+                    busy={action.busy}
                     aria-label={`Delete: ${r.person.name}'s response to ${r.film.title}`}
                   >
                     Delete
-                  </button>
+                  </BusyButton>
                 </div>
               </div>
               <p className="of-resp__when">

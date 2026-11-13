@@ -49,11 +49,13 @@ const heartbeat = (b, id) => b.post(`/api/screenings/${id}/heartbeat`, { positio
 // window to come back to a play, and each place showed whichever came first. There is
 // one now: the time the tape is due back.
 describe('when the tape is due back: one date, wherever it is shown', () => {
-  // The admin's ticket page, still in 1.x's fields: the link's expiry, its open
-  // screening, and each line of its Screenings.
+  // The admin's link page: its loan's due date, and each line of its plays. (1.x's
+  // expiresAt and openScreening.resumableUntil, which said it twice, went in slice 10:
+  // the loan says it once.)
   const adminSays = async (t) => {
     const r = (await admin.get(`/api/admin/tickets/${t.id}`)).data;
-    return [r.expiresAt, r.openScreening.resumableUntil, ...r.screenings.map((s) => s.resumableUntil)];
+    assert.deepEqual([r.expiresAt, r.openScreening], [undefined, undefined]);
+    return [r.loan.dueAt, ...r.screenings.map((s) => s.resumableUntil)];
   };
   // The friend's film page and their front page: the date. (1.1.0's expiresAt and
   // openScreening, which said it twice more, went with its pages in slice 7.)
@@ -71,7 +73,7 @@ describe('when the tape is due back: one date, wherever it is shown', () => {
     assert.equal(dueBack, takenAt + DAY);
     assert.equal(resumableUntil, undefined, 'Play says when it is due once: dueBack');
     assert.deepEqual(await friendSays(b, 'arrival'), Array(2).fill(dueBack));
-    assert.deepEqual(await adminSays(t), [dueBack, dueBack, dueBack]);
+    assert.deepEqual(await adminSays(t), [dueBack, dueBack]);
   });
 
   test('the date is the loan’s: with the shop’s days it is 3 days after Play, and if it is moved, every place says the new one', async () => {
@@ -83,14 +85,14 @@ describe('when the tape is due back: one date, wherever it is shown', () => {
     const { screeningId: id, takenAt, dueBack } = await pressed(b, film.slug);
     assert.equal(dueBack, takenAt + 3 * DAY);
     assert.deepEqual(await friendSays(b, film.slug), Array(2).fill(dueBack));
-    assert.deepEqual(await adminSays(t), [dueBack, dueBack, dueBack]);
+    assert.deepEqual(await adminSays(t), [dueBack, dueBack]);
 
     // What Play wrote on the screening is never read again: the loan says when it's due.
     const later = dueBack + DAY;
     srv.db.prepare('UPDATE loans SET due_at = ? WHERE screening_id = ?').run(later, id);
     assert.equal(srv.db.prepare('SELECT resumable_until FROM screenings WHERE id = ?').get(id).resumable_until, dueBack);
     assert.deepEqual(await friendSays(b, film.slug), Array(2).fill(later));
-    assert.deepEqual(await adminSays(t), [later, later, later]);
+    assert.deepEqual(await adminSays(t), [later, later]);
     assert.equal((await pressed(b, film.slug)).dueBack, later);
   });
 });

@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, formatDateTime } from '../api.js';
 import { TapeStrip, TillSlip } from '../look/objects.jsx';
+import { BusyButton } from '../look/ui.jsx';
 import { loanEventWords } from './loanWords.js';
 import { ErrorNote, Mark, Table, describeEvent, isSecurityEvent, keptFor, useAction, useLoad } from './ui.jsx';
 
@@ -178,9 +179,9 @@ function Events({ query, filtered }) {
       <ErrorNote error={older.error} />
       {data.next && (
         <div className="ui-btns of-gap">
-          <button type="button" className="ui-btn" onClick={showOlder} disabled={older.busy}>
+          <BusyButton type="button" className="ui-btn" onClick={showOlder} busy={older.busy} busyText="Loading…">
             {older.busy ? 'Loading…' : 'Show older'}
-          </button>
+          </BusyButton>
         </div>
       )}
     </>

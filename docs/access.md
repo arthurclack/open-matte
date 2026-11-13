@@ -1,24 +1,43 @@
-# Tickets, people and screenings
+# Tickets, loans and people
 
 The goal is "private enough for friends", not DRM. These are the rules the code
-follows: `server/access.js` implements the ticket rules, `server/people.js` and
-`server/webauthn.js` people and passkeys, and the tests in `test/` check them.
+follows: `server/access.js` implements the ticket and loan rules, `server/people.js`
+and `server/webauthn.js` people and passkeys, and the tests in `test/` check them.
 
-This page covers the two kinds of ticket, screenings, people and passkeys, and what
-is recorded about viewers and for how long. The checks the project made on real
+Since 2.0 each film is one tape. You send a friend a link, and nothing happens to the
+tape until they press Play. Play takes it out, and from then it's theirs until the date
+it's due back: they can watch it as often as they like. Anyone else with a link sees
+"Out on loan" and that date, never who has it. The tape comes back when the time runs
+out, when the borrower returns it, or when you take it back.
+
+This page covers the two kinds of ticket, loans and plays, people and passkeys, and
+what is recorded about viewers and for how long. The checks the project made on real
 phones, computers and TVs are in its build record,
-[history/device-checks.md](history/device-checks.md).
+[history/device-checks.md](history/device-checks.md). How 2.0 was planned and built,
+rule by rule, is in [version-2.md](version-2.md).
 
 ## Words
 
-Since 1.1.0 the pages are a one-shelf video shop's, and call things by its names. The
-code, the API, the database and the logs keep the names they always had, and so does
-this page; the pages' names are in bold where a button or a heading is quoted.
+The pages are a one-shelf video shop's, and call things by its names. The code, the
+API, the database and the logs keep the names they always had, and so does this page;
+the pages' names are in bold where a button or a heading is quoted.
+
+"Tape" has two meanings on the pages. In the back office, and wherever a page says a
+tape is out, the tape is the film's one copy, and what you send is a link. On a
+friend's pages, what you sent them is still "a tape" wherever that doesn't claim the
+tape is out ("Your tapes", "A tape from" your shop, "This tape is for one member").
 
 | On the pages | In the code, the API, the database and the logs |
 |---|---|
-| A tape; lend a tape; take a tape back | A ticket; issue a ticket; revoke it |
-| A play; time to come back | A screening; the resume window (`resumeWindowHours`) |
+| A link; send a link; cancel the link (a friend's pages: a tape) | A ticket; issue a ticket; revoke it |
+| The tape: the film's one copy | The film: at most one loan of it is out (`loans_out`) |
+| Lent; out on loan; out with you, out to this browser; due back | A loan (`loans`): taken when Play is pressed, due at `due_at` |
+| Due back after (days) | `loanDays`: the setting, and a ticket's `loan_days` |
+| Take the tape back | End the loan as `taken-back` and revoke its ticket |
+| Return it now; Hand it back | `POST /api/films/:slug/return`, without or with a response |
+| What a friend said, handing it back; Responses | A response (`responses`) |
+| Picked for you | A ticket's `pickNote` (`tickets.pick_note`) |
+| A play | A screening: the playback of one loan |
 | A member; their membership card | A person; their account |
 | On the shelf, off the shelf; put on, take off the shelf | Published, a draft; publish, unpublish |
 | The staff pick | The recommendation |
@@ -35,9 +54,11 @@ this page; the pages' names are in bold where a button or a heading is quoted.
 
 | Record | What it is | Created when |
 |---|---|---|
-| **Ticket** | A tape, on the pages: an invitation to one film, with its own link, for anyone with the link or only for one person | You lend it (**Lend a tape**) |
+| **Ticket** | A link, on the pages: an invitation to one film, with its own address, for anyone with the link or only for one person. It lends the film's tape once | You send it (**Send a link**) |
+| **Loan** | One time a film's tape went out: on which ticket, to whom, when, when it's due back, and how it came back | Someone presses Play while the tape is in |
+| **Screening** | A play: the playback of one loan, with its position and whether it was watched to the end | With the loan, by the same Play |
+| **Response** | What a member said handing a tape back: one of four, and a message or none | They press **Hand it back** |
 | **Session** | A browser's sign-in, held in an HttpOnly cookie | Someone opens the link of a ticket for anyone, or signs in with a passkey |
-| **Screening** | A play: one use of a ticket | Someone presses Play |
 | **Person** | A member: someone you've made a membership card for, who can sign in | You add them (**Make a membership card**) |
 | **Passkey** | A person's sign-in key, kept by their phone, computer or password manager | They create it from a link you sent |
 | **Setup or recovery link** | A single-use link for creating a passkey | You create it for one person |
@@ -55,38 +76,66 @@ Every ticket is one of two kinds, chosen when you issue it:
 
 Afterwards only two things change who a ticket is for: someone keeping a ticket for
 anyone that you've let them keep, and you giving a ticket to a person or letting
-anyone with the link use it again (see [Keeping a ticket](#keeping-a-ticket)). A
-ticket for a person needs them to be enabled, and is issued one at a time. They
-don't need a passkey yet: send them a setup link that carries the ticket (see
-[Setup and recovery links](#setup-and-recovery-links)).
+anyone with the link use it again (see [Keeping a ticket](#keeping-a-ticket)). Neither
+can happen while the ticket has the tape out. A ticket for a person needs them to be
+enabled, and is issued one at a time. They don't need a passkey yet: send them a setup
+link that carries the ticket (see [Setup and recovery links](#setup-and-recovery-links)).
 
-Each ticket has, all optional:
+Sending a link takes nothing: links are sent freely, several for one film if you
+like, and the first to press Play takes the tape (see [Loans](#loans)). The send form
+warns, and only warns, when the film's tape is out, when it already has links waiting,
+or when the member already has a link for it.
 
-- **Plays**: how many screenings it allows.
-- **Start by**: if the first screening hasn't started by this date, the ticket expires.
-  Once it has started, the deadline no longer matters. The day ends at midnight where
-  you are when you set it. A friend's film page shows the deadline with its time, in
-  their own time zone, so a friend abroad sees when it really is.
-- **Days after first play**: the ticket expires this long after the first screening starts.
-- **Take the tape back** (revocation): immediate, and can be undone (**Restore the tape**).
+**A ticket lends once.** Play on it takes the tape out once, and when that tape comes
+back, however it comes back, the ticket is spent: it won't take the tape out again.
+Its page says so to whoever had it. There is no play limit: while the tape is theirs,
+they can play it as often as they like. To let someone watch again, send a new link.
 
-The expiry clock starts at first **playback**, not when the link is opened, so a
-preview visit or a chat app's link scanner doesn't start the countdown.
+Each ticket has:
+
+- **Due back after**: how many days the loan lasts, from 1 to 30, counted from the
+  moment Play is pressed. The form starts with the shop's days (**Due back after, for
+  new links**, in Settings: 3 by default), and each link keeps its own. You can change
+  it later on the link's page: before Play that changes the loan it will make, and on
+  a link that has the tape it moves the due-back date (see [Loans](#loans)).
+- **Start by**, optional: if nobody has taken the tape on it by the end of this day,
+  the link stops working (**Start-by missed**). Once it has lent, the date no longer
+  matters. The day ends at midnight where you are when you set it. While the tape is
+  out with someone else the date doesn't count down: the time the tape was out on
+  other links since this link was sent is given back once it's in again, to the
+  minute, so a link sent "Start by Fri 13 Nov" may read "Start by Sun 15 Nov 14:30"
+  later. A friend's film page shows the date the link goes by, with its time when that
+  isn't the end of a day, in their own time zone, and no date at all while the tape is
+  out with someone else. The back office shows both dates, and whether the link's time
+  is standing still. A date that had already passed when the link was sent is missed
+  from the start.
+- **Picked for you**, optional: your note to whoever has the link, up to 2,000
+  characters, shown on the film's page on a sheet of its own. It's apart from the
+  film's staff pick: editing one never changes the other. On a link for anyone, the
+  form says whoever has the link will read it. A link's label is never shown as its
+  note. When you give a link with a note to someone else, or let anyone use it, the
+  page shows the note with **Take the note away** ticked.
+- **Cancel the link** (revocation): immediate. For a link that has the tape out, the
+  button is **Take the tape back** instead. **Restore the link** undoes a cancel, only
+  for a link that never lent: a link lends once, so one that has lent (its tape taken
+  back, or cancelled once spent) can't be restored.
 
 ### Two kinds of ticket
 
 | | For anyone with the link | Only for one person, signed in |
 |---|---|---|
 | Who can use it | Any browser that opened the link | Any browser signed in as that person; they don't need to open the link |
-| Opening the link | Adds it to this browser | Signed in as the person: opens the film. Not signed in: a sign-in page, with nothing created or recorded. Signed in as someone else: told it's for someone else |
-| Forwarding the link | Works for whoever gets it | Does nothing |
-| Its link's preview in a chat app | The film's title and poster (see [Link previews](#link-previews)) | Only the shop's name and logo, never the film |
-| Under Your tapes | In that browser only | On every device the person signs in on |
+| Who has the tape once Play takes it | The browser that pressed Play, and no other: other browsers with the same link see "Out on loan". Signing in doesn't change that | The person, on every device they sign in on, one at a time |
+| Opening the link | Adds it to this browser, the tape in or out. A spent link adds nothing to a browser that doesn't hold it | Signed in as the person: opens the film. Not signed in: a sign-in page, with nothing created or recorded. Signed in as someone else: told it's for someone else |
+| Forwarding the link | Works for whoever gets it, until it has lent | Does nothing |
+| Its link's preview in a chat app | The film's title and poster until it's spent (see [Link previews](#link-previews)) | Only the shop's name and logo, never the film |
+| On the front page | In that browser only: **Out to this browser** while its tape is out there | On every device the person signs in on: **On your card** while its tape is out with them |
+| Handing it back with a response | No: the link may have been forwarded | Yes, by that member |
 | TVs and in-app browsers | Work | Need a browser that can use passkeys |
-| Take back / restore | Stops on the next request; after a restore, browsers must open the link again | Stops on the next request; after a restore it works for the person at once |
-| **Sign out browsers** | Forgets it in every browser that opened the link | No browser holds it: use the person's **Sign out everywhere**, or revoke the ticket. For a ticket that was kept or given, it forgets the browsers that opened the link before, so they don't get it back if you release it |
-| The member's card turned off | Not affected | Stops on the next request |
-| Limits, start by, days after first play, resume window, one device at a time | The same | The same |
+| Cancel / restore | Stops on the next request; after a restore, browsers must open the link again | Stops on the next request; after a restore it works for the person at once |
+| **Sign out browsers** | Forgets it in every browser that opened the link. Not while it has the tape out | No browser holds it: use the person's **Sign out everywhere**, or cancel the link. For a ticket that was kept or given, it forgets the browsers that opened the link before, so they don't get it back if you release it |
+| The member's card turned off | Not affected, but a tape that one of the member's signed-in browsers took out on it goes back | Stops on the next request, and a tape out on it goes back |
+| Due back after, start by, one device at a time | The same | The same |
 
 ### Who can do what
 
@@ -96,6 +145,10 @@ preview visit or a chat app's link scanner doesn't start the countdown.
 | Signed in as P | page, Play, stream | page, Play, stream, on every device | page and poster |
 | Signed in as Q | page, Play, stream | nothing (the link says it's for someone else) | page and poster |
 | P disabled | P's sessions are gone, so P is anonymous and can open link tickets again | nothing | nothing |
+
+Play here means pressing it takes the tape if it's in, or carries on if it's this
+browser's (or this person's), and stream means only once it has the tape: see
+[Loans](#loans) and [Media requests](#media-requests).
 
 The rules behind both tables:
 
@@ -110,24 +163,39 @@ The rules behind both tables:
    could use anyway, and a film shown to members is only listed and described;
    being listed lets nothing play.
 5. Who may use a ticket is decided in one place, the lookups in `server/access.js`. A
-   ticket's own state (its limits, expiry and revocation) is the same whoever asks.
+   ticket's own state is the same whoever asks: cancelled, the film off the shelf or
+   unavailable, spent, has the tape, start-by missed, waiting (the tape is out on
+   another link) or in. Only what a browser sees of it depends on who asks: the
+   borrower sees the tape as theirs, and everyone else holding a link to the film sees
+   "Out on loan", the same answer whichever link the tape went out on (see
+   [Never who has it](#never-who-has-it)).
 
 ## Opening a link
 
 `/t/<code>` is a page that sends the code to `/api/tickets/open` from JavaScript.
 Link previews in chat apps fetch the URL but don't run scripts, so they create no
 session and no "opened" event (what they're shown is under
-[Link previews](#link-previews)). Unknown and revoked tickets, and tickets for an
-unpublished film, are refused first, whichever kind they are.
+[Link previews](#link-previews)). Unknown and cancelled tickets, and tickets for a
+film off the shelf, are refused first, whichever kind they are. A cancelled link says
+"{Host} has cancelled that link." to anyone who opens it, whether or not its tape was
+taken back.
+
+**Opening a link never takes the tape**, and never reads whether it's out. It adds a
+ticket for anyone to the browser even while the film's tape is out, and the film page
+then says so.
 
 For a ticket for anyone with the link, the page receives a session cookie and
 replaces the URL with the film's clean address straight away. The code is never used
-again after the exchange.
+again after the exchange. **A spent link** (it lent, and its tape is back) opened in
+a browser that doesn't hold it gets nothing: no session, no cookie, and not the film,
+only a notice on the front page that the link has been used. A browser that holds it
+still has its page, which says the tape is back.
 
 For a ticket for one person:
 
 - **Signed in as that person**: the page goes to the film. Nothing is added to the
-  browser: the ticket is already theirs on every device they sign in on.
+  browser: the ticket is already theirs on every device they sign in on. A spent one
+  opens for them too, and says so.
 - **Not signed in**: a sign-in page. No session or cookie is created, the ticket
   isn't marked as opened and no event is recorded, and the server says neither
   which film it is nor who it's for. Once they've signed in, the page opens the
@@ -154,15 +222,18 @@ that the server writes into the page as it sends it. For a `/t/<code>` address:
 
 - **A ticket for anyone with the link** previews its film: the title and year, the
   poster, and "A tape from" followed by your shop's name. That holds while the
-  ticket isn't revoked and its film is published, exactly when opening the link would
-  show someone the film. A ticket that's used up or expired still previews its film,
-  since opening it still shows the film page.
+  ticket isn't cancelled or spent and its film is on the shelf. The preview is the
+  same whether the film's tape is in or out, on whichever link, and never holds a
+  note, a date or a name. A link whose start-by date was missed still previews its
+  film, since opening it still shows the film page.
+- **A spent ticket** previews as the shop: the link has done its job, and tells a
+  newcomer nothing.
 - **A ticket for one person**, including one that was kept or given, previews as the
   shop: its name, and its logo if you've uploaded one. A browser that isn't signed
   in as that person learns neither the film nor who it's for, and a preview fetcher
   is such a browser.
-- **A revoked ticket, a ticket for an unpublished film, or an unknown code** previews
-  as the shop too, as every other page on the site does.
+- **A cancelled ticket, a ticket for a film off the shelf, or an unknown code**
+  previews as the shop too, as every other page on the site does.
 
 The poster has an address of its own, made for the preview: `/poster/<id>.<mac>`,
 where `<id>` is the ticket's number and `<mac>` is worked out from it with a key the
@@ -171,9 +242,9 @@ apps repeat it in their own image servers' addresses, and people copy it. So thi
 holds neither the ticket's code nor anything that opens the ticket. It can fetch the
 poster and nothing else, and without the key nobody can make the address for another
 ticket. It needs no session, and works only while the link would preview its film:
-once the ticket is revoked, kept or given, or its film unpublished, it answers 404 and
-says nothing more. It serves the poster the film page shows, TMDB's if one was
-downloaded, otherwise the film folder's.
+once the ticket is cancelled, spent, kept or given, or its film off the shelf, it
+answers 404 and says nothing more. It serves the poster the film page shows, TMDB's
+if one was downloaded, otherwise the film folder's.
 
 Fetching the page or the poster creates and records nothing: no session or cookie,
 no "opened" event, and the ticket isn't marked as opened. Only the page's script,
@@ -186,8 +257,8 @@ fetch previews on their own servers learn it there; iMessage and WhatsApp fetch 
 on the phone instead. That's deliberate: a ticket link's preview is meant to show
 its film. To send a link whose preview doesn't name the film, issue a ticket for one
 person. A preview is made when the link is sent and stays in the conversation, so
-revoking the ticket stops its poster address but doesn't take back a preview already
-shown.
+cancelling the ticket stops its poster address but doesn't take back a preview
+already shown.
 
 ## Keeping a ticket
 
@@ -199,38 +270,39 @@ there) can then press **Keep it** on the film page; someone not signed in is off
 you'd issued it that way: it's under Your tapes on every device they sign in on,
 and the link works for nobody else.
 
+A tape never moves with its link. So a ticket can be kept only before it has lent,
+and only while the film's tape is in: not while it's out, on this link or another.
+Someone who presses Play on a link for anyone and signs in afterwards has the tape in
+that browser only, not on their card or another device, and can't hand it back with a
+response.
+
 | | Before | After Sam keeps it | After you choose **Let anyone with the link use it** |
 |---|---|---|---|
 | Who can use it | Any browser that opened the link | Only Sam, signed in | Any browser that opened the link, again |
-| Browsers that opened the link | Hold it | Lose it from their next request, and are told "This tape has been kept": it's on someone's membership card now (not whose) | Hold it again, unless you signed them out of it or revoked it meanwhile |
+| Browsers that opened the link | Hold it | Lose it from their next request, and are told "This tape has been kept": it's on someone's membership card now (not whose) | Hold it again, unless you signed them out of it or cancelled it meanwhile |
 | Sam's devices | Only browsers that opened it | Every device Sam signs in on | Lose it, unless they opened the link |
-| An open screening | Where it is | Sam can take it over at once, at the same place | The same rule |
-| Screenings used, first play, expiry, resume deadline | Unchanged throughout | | |
+| Due back after, start by, a "Picked for you" note | Unchanged throughout (a note can go when you give or release it) | | |
 
 The rules:
 
 - **The first keep wins.** Keeping checks and changes the ticket in one write
   transaction, so of two people keeping it at once, exactly one gets it and the other
   is told it has been kept. Only you can change it after that.
-- **Only a ticket in the `ok` state** can be kept: not one that's used up, expired,
-  revoked or unavailable.
-- **Not while another browser is playing it.** If a browser that can still play the
-  ticket is playing it right now, keeping is refused until it pauses, closes or goes
-  quiet (about 75 seconds). So a keep never stops a film someone is watching.
-- **The screening follows the ticket.** A screening left in a browser that lost the
-  ticket isn't voided or used again: the keeper resumes it where it was, within the
-  same resume window, without waiting.
-- **Nothing else changes**: limits, start by, days after first play and the resume
-  window are as they were. **Opened** and **First played** keep their dates.
+- **Only a ticket whose tape is in, and that has never lent**, can be kept: not one
+  that's spent, missed its start-by date, cancelled or unavailable, and not while the
+  film's tape is out with anyone.
+- **Nothing else changes**: its days, start by and note are as they were. **Opened**
+  keeps its date.
 - Keeping is never offered while the player is open, and a browser that can't use
   passkeys is told to open the link in Safari or Chrome to keep it.
 
-On the ticket's page you can also:
+On the ticket's page you can also, while the link doesn't have the tape out (the
+buttons are disabled then, with a line saying why: take the tape back first, and send
+a new link):
 
 - **Let anyone with the link use it**: the ticket is for anyone again, not keepable
-  unless you tick the box again. The person loses it from their next request (an open
-  screening can then be taken over at once), and browsers that opened the link get it
-  back, if they haven't been signed out since.
+  unless you tick the box again. The person loses it from their next request, and
+  browsers that opened the link get it back, if they haven't been signed out since.
 - **Give it to a member** (or to someone else): only they, signed in, can use it from
   the next request. You can do this with any ticket, kept or not; browsers that opened
   the link lose it and are told it has been kept. A ticket you gave shows as "Only Sam,
@@ -238,75 +310,111 @@ On the ticket's page you can also:
 - See which browsers opened the link before it was kept or given, and **Forget it in
   these browsers**, so a release gives it to nobody until the link is opened again.
   Only browsers still signed in are listed and counted, here and under **Browsers
-  holding this tape**: one signed out since (by its viewer, by you, or by **Sign
+  holding this link**: one signed out since (by its viewer, by you, or by **Sign
   out every friend and member**), or whose session expired, can't use the ticket or
   get it back.
 
-Revoking a kept ticket also forgets those browsers, as it does for any ticket.
+Cancelling a kept ticket also forgets those browsers, as it does for any ticket.
 
 ## Films shown to members
 
-Each film has a **Show to members** switch on its back office page (the **Tapes** tab), off to begin with. While
-it's on and the film is published, every browser signed in as a person sees the film
-under **On the shelf for members** on the front page, marked "No tape yet: ask" and your name (or the shop's), and can read
-its page: the sleeve, details and your staff pick. Where Play would be,
-the page says they don't have a tape yet, and to ask you (by your name, or the shop's).
+Each film has a **Show to members** switch on its back office page (the **Tape and
+links** tab), off to begin with. While it's on and the film is on the shelf, every
+browser signed in as a person sees the film under **On the shelf for members** on the
+front page, marked "No tape yet: ask" and your name (or the shop's), and can read its
+page: the sleeve, details and your staff pick. Where Play would be, the page says they
+don't have a tape yet, and to ask you (by your name, or the shop's).
 
-- **It never plays.** Play is refused (`no-ticket`) and no screening starts, and
-  playlists, segments, audio and subtitles are refused exactly as for any film
-  without a ticket. To let someone watch, issue them a ticket: the film then moves
-  to Your tapes and plays.
+- **In or out, never who.** On the shelf for members, each film says "In the shop",
+  or "Out on loan" with the date it's due back. That's the loan's due date and
+  nothing else, the same to every member, whoever has the tape; once it's back it
+  reads as it did before anyone had it.
+- **It never plays.** Play is refused (`no-ticket`), no tape is taken, and playlists,
+  segments, audio and subtitles are refused exactly as for any film without a ticket.
+  To let someone watch, send them a link: the film then moves to Your tapes, and their
+  Play takes the tape if it's in.
 - **Only signed-in people see it.** A browser that isn't signed in gets the front
   page it always did, and the film's address says nothing is showing there, even if
   the browser holds link tickets for other films.
-- **It goes from the next request** when you switch it off or unpublish the film,
-  or when the person signs out or is disabled. Switching it off doesn't affect
+- **It goes from the next request** when you switch it off or take the film off the
+  shelf, or when the person signs out or is disabled. Switching it off doesn't affect
   tickets for the film.
-- **A ticket in a worse state wins.** Someone whose ticket for the film is used up
-  or expired sees that ticket's page, which says so, not the member page. Someone
-  whose ticket was revoked sees the member page again.
+- **A ticket in a worse state wins.** Someone whose ticket for the film is spent or
+  missed its start-by date sees that ticket's page, which says so, not the member
+  page. Someone whose ticket was cancelled sees the member page again.
 - **Reading it records nothing**: no "opened" event, and no ticket is marked as
   opened.
-- A draft can be switched on ahead of time: members see it once it's published.
+- A draft can be switched on ahead of time: members see it once it's on the shelf.
 
-## Screenings
+## Loans
 
 | Action | Result |
 |---|---|
-| Open a ticket link | Shows the film page (for a ticket for one person, once they're signed in). No screening is used. |
-| Press Play | Resumes the ticket's open screening, or starts a new one if the limit allows. |
-| Pause, refresh, reconnect | Continues the same screening. |
-| Switch device | The new device takes the screening over once the old one has paused, closed the tab, or gone quiet for about 75 seconds. Two devices can't play one screening at once. The next time the old device asks for anything, playing or paused, it says the screening is playing on another device and offers **Watch here instead**. |
-| The device playing can no longer play: it was signed out (by its viewer or by you), its session expired, its person was disabled, or **Sign out browsers** took the ticket out of it | Another device can take the screening over at once, without waiting. This covers link tickets too, for example after **Sign out every friend and member**. |
-| Two devices signed in as the same person, with a ticket for them | One at a time, with the same takeover rules as two browsers that opened the same link. |
-| Reach the limit | No new screenings; an open one can still be resumed. |
-| The resume window ends while the film is playing | Playback stops at the next request, and the player says the screening has ended. The page offers Play again: it starts a new screening, from the beginning, if the limit allows. |
-| You give a screening back (**Give back**, on the ticket's page), say because playback failed | It no longer counts towards the limit and stays in the history. If it's playing, playback stops at the next request and the player says the screening has ended. The page offers Play again, which starts a new screening, from the beginning. The ticket's expiry clock keeps running from the first play. |
-| Take the tape back (revoke the ticket) | Page and media requests fail from the next request on. |
-| Take the film off the shelf (unpublish it) | The page disappears and playback under way stops, for every ticket. Putting it back on the shelf restores both; open screenings keep their place, and their resume windows keep running meanwhile. |
-| The film's folder goes missing, or a scan finds errors in it | The page stays and says the film isn't available right now; nothing plays and no screening can start. Resume windows keep running meanwhile. |
-| The ticket is kept, given or released | Its open screening stays as it is. A browser that can no longer use the ticket stops on its next request, and whoever can use it now can take the screening over at once. |
+| Open a ticket link | Shows the film page (for a ticket for one person, once they're signed in). Nothing is taken. With the tape in, the page says Play takes it out, and the date it would be due back. |
+| Press Play, the tape in | Takes the tape: a loan and its play, due back after the ticket's days, counted from now. The checks and the take are one write transaction, so of two links pressed at once one takes the tape and the other is told it's out. |
+| Press Play, the tape out with someone else | Refused: the page says "Out on loan" and when it's due back, never who has it. |
+| Press Play, the tape yours | Carries on where you were, on this device or another of yours (a member's own link). As often as you like until it's due back. |
+| Pause, refresh, reconnect | Continues the same play. |
+| Switch device | Only among one member's own devices, on their own link. The new device takes the play over once the old one has paused, closed the tab, or gone quiet for about 75 seconds. Two devices can't play at once. The next time the old device asks for anything, playing or paused, it says the tape is playing on another device and offers **Watch here instead**. A second browser on a link for anyone never takes over, even from a paused tape: it sees "Out on loan". |
+| Watch it to the end | "Watched to the end" is 92% of the running time, decided on the server. The tape stays out until it's due back, so a scene can be watched again: the page offers **Play from the start**, and the end of the film offers Keep it until the due date, Return it now and, to a member on their own link, Hand it back. |
+| **Return it now** (the borrower, asked on the page first) | The tape is back in the shop at once, the ticket is spent, and the next Play on another link takes it. A device still playing it stops at its next request. Only the loan the page was showing can be returned: a tab left open from an earlier loan returns nothing. |
+| **Hand it back** (a member, on their own link, while they have it) | The same return, with one of four responses and an optional message, for you alone (see [Responses](#responses)). |
+| It comes due | It's back from its due time, by the server's clock, whether or not anything has written that down yet (a sweeper writes it every minute). A play stops at its next request, and the player says "This tape has gone back to the shop." The ticket is spent. |
+| You move the due date | On the link's page, by changing **Due back after**: whole days from when the tape was taken, earlier or later, never into the past (that is refused, and nothing is saved). Saving the days the link already has moves nothing. The borrower sees the new date the next time they open the page or press Play. |
+| You take the tape back (**Take the tape back**, on the film's page, on Tapes, or on the link's page) | Asked on the page first, saying what the borrower will see. The loan ends, the ticket is cancelled and dropped from every browser that opened it, and the play stops at its next request: the player says "{Host} has taken this tape back.", and the page says "Nothing on the shelf here". The member's other links for that film that never lent are cancelled in the same step, and so are those of a member signed in on the browser that had the tape. Links for anyone that the borrower's browser also holds are left alone, because other people hold them too: the question names them, each with a box to cancel it too. |
+| The borrower can no longer play: a browser with the tape out on a link for anyone was signed out (by its viewer, by you, or by **Sign out every friend and member**), or its session expired; or the member's card was turned off | The tape comes back at once, and the ticket is spent. A member's own tape stays theirs when they sign out of one device, or everywhere: it's on their card, and theirs again when they sign in. |
+| Take the film off the shelf | The page disappears and playback under way stops, for every ticket. The loan's clock keeps running: the borrower sees no such film and can't return it, but you can take the tape back or move its date. Putting it back on the shelf restores the page; a loan still running carries on. |
+| The film's folder goes missing, or a scan finds errors in it | The page stays and says the film isn't available right now; nothing plays and no tape can be taken. The loan's clock keeps running: the borrower still sees the date it's due back and can return it, anyone else sees it's out until then, and a link with the tape in says nothing has been taken out. |
+| The ticket is kept, given or released | Only before it has lent, and not while its tape is out (see [Keeping a ticket](#keeping-a-ticket)). |
 
-A screening can be resumed for a fixed window after it starts: **48 hours** by
-default, set in the back office under Settings (from 1 to 720 hours). Changing it affects
-new screenings only. The window doesn't wait for the film to end: resume a screening
-an hour before its window closes, and it stops an hour later. Ticket expiry always
-wins over a resume window that is still running, so the film page, Your tapes and
-the ticket's page in the back office say a screening can be resumed until whichever ends
-first. Before Play, the film page of a ticket that ends sooner than the window says
-you can come back to it until the ticket expires.
-
-Checking the limit and creating the screening happen in one write transaction,
-so two simultaneous presses of Play can't both take the last screening.
+A loan lasts its ticket's **Due back after** days, 1 to 30, counted from the moment
+Play is pressed, and doesn't wait for the film to end. The page before Play says how
+long, and the date. A borrower who pressed Play on a link for anyone has the tape in
+that browser: its session, and its cookie, are made to last a day past the due time,
+so a browser that first opened a link long ago doesn't lose the tape part-way through.
 
 A browser can have more than one ticket it may use for a film: say a link ticket it
-opened and one for the person it's signed in as. Then the ticket in the best state
-wins; among those, one with an open screening this browser could resume now, rather
-than one another browser is busy playing; then the person's own ticket; then the
-oldest. The film page, Play and Your tapes all go by the same choice. So a ticket
-that another browser is busy playing can still be chosen ahead of one with no open
-screening, if it comes first in that order. Play then says the screening is playing
-on another device, until it's paused there or goes quiet.
+opened and one for the person it's signed in as. Then the one in the best state wins:
+the tape that's yours, then one Play would take, then out on loan, then spent, then a
+missed start-by. Among those, the person's own ticket; then the oldest. The film
+page, Play and Your tapes all go by the same choice. So with their own link and a
+link for anyone in one browser, Play takes their own. One member may have two links
+for one film: the second waits, and lends once the first is back; Play takes the
+older one, and only that one is spent.
+
+**Your own previews never take a tape.** A browser signed in to the back office plays
+in preview mode, and its film page says who has the tape, since when and until when,
+or that nobody has it out. **Trying a link in a private window, or another browser,
+takes the tape** just as it would for a friend: Play there takes it out for that link's
+days, and spends the link. Return it from that window's film page (**Return it now**)
+before you close it. A private window that's closed with the tape out still has a
+session on the server, so the tape stays out until it's due, or until you take it back.
+
+Tickets from before 2.0 were converted when the shop was upgraded, as the 2.0.0 entry
+in the [changelog](../CHANGELOG.md) says: a play under way became its film's loan, and
+a ticket that had been used up became spent.
+
+### Never who has it
+
+Only the borrower and you learn anything about a loan. While a tape is out, everyone
+else with a link to the film gets the same answer, whether it went out on another link
+or on their own link in another browser: "Out on loan", the date it's due back, their
+own link's "Picked for you" note, and nothing else. No name, no device, no label, not
+when it was taken, and no start-by date. Play, Return it now, Keep it, a progress
+report and a media request each answer them the same way whichever link has the tape.
+What a borrower said handing a tape back reaches no viewer, not even the one who said
+it: to everyone else a tape handed back looks like one returned without a word.
+
+What can still be worked out is **when**, not who:
+
+- The due-back date, less the loan's days, is when Play was pressed. Someone whose own
+  link says 7 days, who saw the tape in yesterday and reads "due back in 2 days"
+  today, knows it went out on another link.
+- A start-by date given back says how long the tape was out since their link was sent.
+- Once a tape is back, another browser holding the same link for anyone knows the
+  tape went out on its link, and how it came back: returned, handed back or due, the
+  link is spent; taken back, the link is cancelled and gone from that browser.
+- A cancelled link says so to anyone who opens its address, as it always did.
 
 ### On the lock screen
 
@@ -317,11 +425,29 @@ screen can see which film it is. For when the title is part of the surprise, unt
 every viewer then sees only the shop's name, with no poster. It's on by default.
 
 Play, pause and skipping back or forward there, or on headphones, work the player
-itself. So the screening, its progress reports and the one-device rule see them
-exactly as they see the page's own controls. When the player stops (the screening
-moved to another device, the ticket ended, it was refused, an error) or closes, it
-takes the film and its buttons off the lock screen, so they can't start a screening
-that has stopped.
+itself. So the play, its progress reports and the one-device rule see them exactly as
+they see the page's own controls. When the player stops (the play moved to another
+device, the tape was returned, came due or was taken back, it was refused, an error)
+or closes, it takes the film and its buttons off the lock screen, so they can't start
+a play that has stopped.
+
+## Responses
+
+**Hand it back** is for a member who has the tape on a link for them alone, on any of
+their devices, at any time while it's theirs, watched to the end or not. They choose
+one of four responses ("Loved it", "Still thinking about it", "Not for me", "Let's
+talk") and may add a message of up to 2,000 characters. The form says only you will
+see it, and **Return it without a note** is there for saying nothing. Handing it back
+returns the tape in the same step.
+
+It isn't offered on a link for anyone, signed in or not: that link may have been
+forwarded. Nor once the tape has come back on its own, or been taken back: there is
+nothing left to hand back.
+
+Responses are under **Responses** in the back office, newest first, with the unread
+ones counted on its tab; **Mark as read** and **Delete** each act on one. They're kept
+until you delete them. What was said is never in the Ledger: the Ledger only says a
+tape came back with a response.
 
 ## Media requests
 
@@ -332,26 +458,26 @@ Every request under `/media/<film>/` is checked:
 - master and child playlists, init segments, media segments, audio and subtitles
   need a valid session that may use a ticket for that film under the rules above
   (it opened the link of a ticket for anyone, or it's signed in as the ticket's
-  person), that ticket in the `ok` state (the film published and playable, the
-  ticket not revoked or expired), **and** an open screening of that ticket which
-  this browser currently holds
+  person), that ticket's tape out with this browser (or this person), the film on the
+  shelf and playable, **and** the loan's play held by this browser right now
 
 So knowing a file's URL is not enough, nor is having the link of a ticket for one
 person without being signed in as them, nor holding a ticket without pressing
-Play. A ticket for one film unlocks nothing of another, and a file in a
-film folder that is really a symlink to somewhere outside it is never served.
-A film that doesn't exist is refused exactly as one you may not have, so asking
-doesn't tell anyone which films you've imported, published or not. The same goes
-for a film's page, **Play** and **Keep it**. Posters and backdrops downloaded from
-TMDB, at `/artwork/<film>/<file>`, need the same as a film folder's own, but are
-refused the other way round: a browser that may not have one is answered exactly as
-if there were no such film, a bare 404. Their file names are made from the image's
-address at TMDB, which anyone can look up, so a refusal that said "not for you"
-would say the film is here. Whether a film's folder is missing is only said to a
-browser that may play it.
-Revoking a ticket, signing a browser out, disabling a person or removing a passkey
-stops future requests, playlists and segments included; none of them can take back
-what is already in the player's buffer (typically under a minute of video).
+Play, nor holding the same link as the borrower. A ticket for one film unlocks nothing
+of another, and a file in a film folder that is really a symlink to somewhere outside
+it is never served. A film that doesn't exist is refused exactly as one you may not
+have, so asking doesn't tell anyone which films you've imported, on the shelf or not.
+The same goes for a film's page, **Play**, **Keep it** and **Return it now**. Posters
+and backdrops downloaded from TMDB, at `/artwork/<film>/<file>`, need the same as a
+film folder's own, but are refused the other way round: a browser that may not have
+one is answered exactly as if there were no such film, a bare 404. Their file names
+are made from the image's address at TMDB, which anyone can look up, so a refusal that
+said "not for you" would say the film is here. Whether a film's folder is missing is
+only said to a browser that may play it.
+Cancelling a ticket, taking a tape back, a tape coming back, signing a browser out,
+disabling a person or removing a passkey stops future requests, playlists and segments
+included; none of them can take back what is already in the player's buffer
+(typically under a minute of video).
 
 Media responses are marked `private`, so only the viewer's own browser caches them.
 A film folder's poster and backdrop keep for a day: their address changes when the
@@ -386,10 +512,11 @@ PNG, JPEG or WebP image, checked by its bytes, never an SVG, which can carry scr
 The shop's name and Your name (in Settings) are in every page, so anyone who opens
 the address can read them.
 
-A browser signed in to the back office plays in preview mode and never uses a screening.
-Who a ticket is for doesn't matter there either, so check tickets for one person in
-a browser that isn't signed in to the back office. The site says so when a browser is
-signed in to both.
+A browser signed in to the back office plays in preview mode and never takes a tape.
+Who a ticket is for doesn't matter there either, so check tickets as a friend would
+in a browser that isn't signed in to the back office, remembering that Play there
+takes the tape (see [Loans](#loans)). The site says so when a browser is signed in to
+both.
 
 ## People and passkeys
 
@@ -434,7 +561,8 @@ its message, since an app's browser the page doesn't know refuses just as a
 cancelled attempt does. On a setup link, Copy link still copies the whole link,
 though its secret part has already left the address. TV browsers usually can't use
 passkeys either, so for watching on a TV's own browser, issue a ticket for anyone
-with the link.
+with the link, and have them press Play on the TV: the tape stays with the browser
+that pressed Play.
 
 ## Setup and recovery links
 
@@ -452,10 +580,11 @@ first time, a **recovery link** ever after.
   it was first opened, which may have been a scanner rather than the person. If two
   browsers finish one link, the first wins, and the second is told the link has
   already been used and to tell whoever sent it straight away.
-- **One at a time.** Creating a link cancels any other waiting link for that person.
+- **One at a time.** Creating a link cancels any other waiting setup or recovery link
+  for that person.
   You can also cancel one yourself, and disabling a person cancels theirs.
 - **It can carry a ticket.** A link can carry a ticket for that person that isn't
-  revoked; once the passkey is created, the page takes you on to the film. So a
+  cancelled; once the passkey is created, the page takes you on to the film. So a
   friend with no passkey yet still gets one link that ends on the film. A ticket's
   own link never creates a passkey: ticket codes are stored as they are and can be
   copied again, so if one could, a leaked ticket would become a way into the account.
@@ -484,7 +613,9 @@ Then there are two choices:
   use the phone's QR code, or a move to another password manager.
 - **Lost phone: take back the keys**: removes all of Sam's passkeys and signs Sam out of every
   browser **when you create the link**, not when it's used, so a lost or stolen
-  device is cut off at once. The link then creates a new passkey.
+  device is cut off at once. The link then creates a new passkey. A tape out on a
+  link for Sam alone stays Sam's; one that a browser of Sam's took out on a link for
+  anyone goes back to the shop, and that link is spent.
 
 A caveat with synced passkeys: the new passkey is saved to Sam's Apple ID, Google
 account or password manager, and from there it reaches every device still signed in
@@ -500,12 +631,15 @@ Signing in always creates a **new session and cookie** and ends the browser's ol
 session, so a cookie someone planted beforehand never becomes a signed-in one.
 Creating a passkey from a link signs in the same way. Then:
 
-| | This browser | Link tickets opened here, and a screening held here | The person's other browsers |
+| | This browser | Link tickets opened here, a play held here, and a tape this browser has out | The person's other browsers |
 |---|---|---|---|
-| Sign in, from anonymous or from the same person | New cookie; old session ended | Carried over; playback continues | Unaffected |
-| Sign in, from someone else's session | New cookie; old session ended | Not carried over (they were the other person's); the screening is freed | Unaffected |
-| Sign out | Cookie cleared; session ended | Forgotten (the links still work if opened again); the screening is freed | Unaffected |
-| Sign out everywhere, from the account page | Cookie cleared; session ended | Forgotten; the screening is freed | Signed out too, and playback stops on their next request |
+| Sign in, from anonymous or from the same person | New cookie; old session ended | Carried over; playback continues. The tape is still this browser's, not the person's, and the new session lasts a day past its due time | Unaffected |
+| Sign in, from someone else's session | New cookie; old session ended | Not carried over (they were the other person's); a tape that browser had out on a link for anyone goes back, and its link is spent | Unaffected |
+| Sign out | Cookie cleared; session ended | Forgotten (the links still work if opened again); a tape out to this browser on a link for anyone goes back, and its link is spent. A tape on the person's own link stays theirs | Unaffected |
+| Sign out everywhere, from the account page | Cookie cleared; session ended | The same | Signed out too, and playback stops on their next request; a tape any of them had out on a link for anyone goes back |
+
+Before signing out does more than sign out, the page asks, naming the tapes out to
+this browser that would go back to the shop.
 
 Signing out also makes the tab forget a setup or recovery link it was keeping, as
 does the page that says this device already has a passkey. So the next person at a
@@ -513,9 +647,9 @@ shared computer can't press Back and finish someone else's link.
 
 Signing out doesn't touch the browser's own history, though. Every ticket link and
 setup link opened in that browser is still listed there, as it was opened. A ticket
-for anyone works again if it's opened from there, and so does a setup link that
-hasn't been used. So send setup links to the person's own phone or computer, and
-suggest a private window on a borrowed one.
+for anyone works again if it's opened from there, unless it has lent since, and so
+does a setup link that hasn't been used. So send setup links to the person's own
+phone or computer, and suggest a private window on a borrowed one.
 
 **Your membership card** (`/account`, in the menu under their name) shows a signed-in person
 their membership card, which turns over: your shop's name on the front, and their
@@ -533,9 +667,11 @@ signed in as them, this one included; their passkeys still work. Adding or remov
 a passkey is still something they ask you for.
 
 You can sign people out too (below). Whichever way a browser is signed out, it
-forgets the link tickets it opened, and a screening it held is freed at once. A
-film playing there stops on its next request, and the page says the browser has
-been signed out, with a way to sign in again.
+forgets the link tickets it opened, and a tape it had out on one of them goes back to
+the shop. A film playing there stops on its next request, and the page says the
+browser has been signed out: for a tape on the person's own link, with a way to sign
+in again; for a tape that went back, that it went back and the link won't take it out
+again.
 
 After signing out, the pages the browser showed before don't come back, which
 matters on a shared computer. The API's answers are never kept in the browser's
@@ -546,7 +682,8 @@ if the server can't be reached, the page says so and stays signed in, so you can
 again.
 
 Tickets for the person themselves aren't held by any browser: every browser signed
-in as them can use them, and a browser that signs out simply can't any more.
+in as them can use them, and a browser that signs out simply can't any more. So a tape
+out on such a ticket stays theirs, and carries on on whichever device they sign in on.
 
 When someone signs in, they're told about any passkey added to their account since
 the one they're using last signed in, with when and from which device. Only someone
@@ -565,35 +702,43 @@ A sign-in is refused when:
   so nobody can find out that an account is disabled without its passkey.
 
 A person's sessions last the same 90 days as any viewer's (`VIEWER_SESSION_DAYS`),
-use the same cookie, and **Sign out every friend and member** in Settings covers them too. A
-session counts as signed in only while it's unrevoked and unexpired and its person
-exists and isn't disabled; that's checked on every request, playlists and segments
-included.
+use the same cookie, and **Sign out every friend and member** in Settings covers them
+too: links keep working, a tape out to a browser on a link for anyone goes back, and
+a tape out to a member on their own link stays theirs. A browser with a tape out on a
+link for anyone has its session made to last a day past the due time, whatever
+`VIEWER_SESSION_DAYS` says. A session counts as signed in only while it's unrevoked
+and unexpired and its person exists and isn't disabled; that's checked on every
+request, playlists and segments included.
 
 ## Disabling people and removing passkeys
 
-- **Turn the card off** (disable) signs the person out everywhere, cancels any waiting link, and refuses
+- **Turn the card off** (disable) signs the person out everywhere, cancels any waiting setup or recovery link, and refuses
   their passkeys until you enable them. It doesn't remove passkeys: for a lost or
   stolen device, use **Lost phone: take back the keys**. A disabled person is simply anonymous, so
   like anyone else they can still watch with a ticket for anyone, by opening its link
   again. Tickets only for them stop working from the next request, playlists and
-  segments included. Once you enable them and they sign in, those work again, and
-  an open screening resumes where it was if its resume window is still running.
-- **Turn the card back on** (enable) lets them sign in again with the passkeys they have. A link that
-  disabling cancelled stays cancelled.
+  segments included. Every tape they have out comes back at once: one on their own
+  link, and one a browser of theirs took out on a link for anyone. Those tickets are
+  spent, and turning the card back on doesn't bring the tapes back. Their tickets that
+  never lent work again once you enable them and they sign in.
+- **Turn the card back on** (enable) lets them sign in again with the passkeys they have. A setup or
+  recovery link that disabling cancelled stays cancelled.
 - **Sign out everywhere** signs the person out of every browser. Their passkeys still
-  work.
+  work. A tape out on their own link stays theirs; one a browser of theirs took out on
+  a link for anyone goes back.
 - **Remove** a passkey: it stops working at once, and the browsers it signed in are
-  signed out. Their other passkeys, and the browsers those signed in, are
-  unaffected. The passkey stays in their password manager, but is refused here.
-  Removed passkeys are deleted; the Ledger keeps the device they were added from, for
-  as long as it keeps the event (see [How long it's kept](#how-long-its-kept)).
+  signed out, with what that means for their tapes (above). Their other passkeys, and
+  the browsers those signed in, are unaffected. The passkey stays in their password
+  manager, but is refused here. Removed passkeys are deleted; the Ledger keeps the
+  device they were added from, for as long as it keeps the event (see
+  [How long it's kept](#how-long-its-kept)).
 
 ## Secrets and sessions
 
 - Ticket codes are about 64 random bits. They're stored as they are, so the back office
   can copy a link again later; anyone who can read the database could use the ones
-  for anyone with the link. A ticket for one person still needs their passkey.
+  for anyone with the link that haven't lent. A ticket for one person still needs
+  their passkey.
 - Poster addresses for [link previews](#link-previews) are made with a key of 256
   random bits, created once and kept in the database. The key is never sent anywhere.
 - Session cookies are 256 random bits, HttpOnly, SameSite=Lax, and Secure over
@@ -602,9 +747,9 @@ included.
   the database. So a new `ADMIN_PASSWORD` signs every admin browser out, and someone
   with a copy of the database and an admin cookie finds each guess at the password
   slow. A long random `ADMIN_PASSWORD` (`openssl rand -base64 24`) puts it out of
-  reach. Admin sign-out, session expiry, ticket revocation, signing a person out and
-  signing out every viewer (in Settings) take effect on the server, from the next
-  request.
+  reach. Admin sign-out, session expiry, cancelling a ticket, taking a tape back,
+  signing a person out and signing out every viewer (in Settings) take effect on the
+  server, from the next request.
 - The shop sets one session cookie in a browser, and one admin cookie. A browser
   that sends two different values for either is treated as having neither. The
   other one can only come from a site on another name under the same parent
@@ -637,8 +782,8 @@ included.
   in development, `http://localhost` on any port), and one made inside another
   site's frame is refused.
 - Opening ticket links and their link previews, pressing Play, keeping a ticket,
-  setup and recovery links, signing in, the back office password and posters and backdrops
-  downloaded from TMDB are rate-limited per visitor
+  returning a tape, setup and recovery links, signing in, the back office password and
+  posters and backdrops downloaded from TMDB are rate-limited per visitor
   ([deploying.md](deploying.md#ipv6-and-rate-limits)). An IPv6 visitor counts by its
   /64. The back office password and those posters and backdrops are also limited for each
   IPv6 /48 together, so someone holding a whole range of addresses doesn't get a fresh
@@ -685,7 +830,7 @@ Viewing:
 - **opened**: the film page was loaded with a ticket (at most once per 30 minutes per
   browser; the page reading itself again after Play, or once the player stops, isn't
   an open)
-- **play**: a screening started or resumed (pressing Play again in the same browser
+- **play**: a play started or resumed (pressing Play again in the same browser
   is logged at most once per 5 minutes; moving to another device always is)
 - **heartbeat**: playback position, reported every 30 seconds while playing and
   logged every 5 minutes
@@ -696,9 +841,26 @@ the session: nothing more is stored. Events from before they signed in stay
 anonymous. Reading the page of a film shown to members, without a ticket, records
 nothing, and nor does a link preview fetching a ticket's page or poster.
 
+Loans, under the Ledger's **Loans** filter:
+
+- **ticket-sent**: you sent a link (its days, and whether it carries a "Picked for
+  you" note, never the note's words)
+- **lent**: Play took the tape (and when it's due back)
+- **returned**: a tape came back, dated when it did, and how: returned early, handed
+  back with a response, it was due, you took it back, its browser was signed out, or
+  the member's card was turned off. Whether a response came with it, never what it said
+- **due-changed**: you moved a due-back date (from when, to when)
+- **ticket-cancelled** and **ticket-restored**: you cancelled or restored a link
+
+Each **loan** is also a record of its own (the link, the borrower, when it was taken,
+when it was due and how it came back), and so is each **response**. For a tape taken
+out on a link for anyone, the loan keeps the browser's coarse device label, and the
+back office shows whom that browser is signed in as for as long as its session is
+kept (below); after that, the device alone.
+
 **Playback help**, the link under the player, reads the browser and the player only.
 Opening it and copying its summary record nothing and send nothing. The summary
-leaves out every address (they hold screening ids), cookies, ticket labels and codes,
+leaves out every address (they hold play ids), cookies, ticket labels and codes,
 people's names, the film's title and the shop's name, so a viewer can send it to
 you without giving any of those away.
 
@@ -715,7 +877,7 @@ People and passkeys:
 - **passkey-removed**: you removed a passkey (and how many browsers that signed out)
 - **link-created**: you created a link (which kind, how long it works, whether it was
   a reset, and how many passkeys and browsers that removed)
-- **link-cancelled**: you cancelled a waiting link
+- **link-cancelled**: you cancelled a waiting setup or recovery link
 - **person-disabled** (and how many browsers that signed out) and **person-enabled**
 - **sign-in-refused**: one of a person's passkeys was refused, because they're
   disabled or because the passkey's counter hadn't moved on
@@ -732,23 +894,25 @@ Keeping tickets:
 Plus a coarse device label such as "Safari on iPhone": the browser's, or for a
 passkey, the one it was added from. No IP addresses and no full user-agent strings
 are stored, nor how often a link was opened (only when it first was). Viewers are
-told on the film page that progress is recorded. This is operational information,
-not proof that anyone watched.
+told on the film page what you can see: when the link is opened, when the tape is
+taken out and played, the kind of device, and roughly how far playback gets (and,
+signed in, that it was them). This is operational information, not proof that anyone
+watched.
 
 **Refused media requests** aren't stored in the database. Besides a line in the
 server's log (the same refusal once a minute at most, and a few dozen lines a minute
 in all: [deploying.md](deploying.md#refused-media-requests)), the latest 50 are kept
 in memory for **Status** in the back office: the time, status and
-reason, the kind of file (playlist, segment, subtitles, artwork or other), the film
-and the coarse device label. A refused poster or backdrop downloaded from TMDB is kept
-with the status it was answered with, 404, and the reason it was refused. Repeats of the
-same refusal share a row, with how many there were and when the last was. Requests
-with no session the server knows (no cookie, or one that has expired, been signed
-out or was made up) can come from anyone, so they keep to the latest five rows:
-however many there are, they can't push out the others. A request for a film that
-doesn't exist isn't kept or logged. They hold no IP address, cookie, session,
-ticket, person or full address, and a restart forgets them. Opening Status
-records nothing.
+reason ("the tape is out with someone else", say), the kind of file (playlist,
+segment, subtitles, artwork or other), the film and the coarse device label. A refused
+poster or backdrop downloaded from TMDB is kept with the status it was answered with,
+404, and the reason it was refused. Repeats of the same refusal share a row, with how
+many there were and when the last was. Requests with no session the server knows (no
+cookie, or one that has expired, been signed out or was made up) can come from anyone,
+so they keep to the latest five rows: however many there are, they can't push out the
+others. A request for a film that doesn't exist isn't kept or logged. They hold no IP
+address, cookie, session, ticket, person or full address, and a restart forgets them.
+Opening Status records nothing.
 
 ### How long it's kept
 
@@ -759,8 +923,10 @@ records**:
 | What | Kept for, by default | Can be set to |
 |---|---|---|
 | Progress reports (**heartbeat**) | 30 days | 1 to 365 days |
-| Every other event: **opened**, **play**, **finished**, and all those under People and passkeys and Keeping tickets above | 365 days | 30 to 3,650 days |
+| Every other event: **opened**, **play**, **finished**, and all those under Loans, People and passkeys and Keeping tickets above | 365 days | 30 to 3,650 days |
 | A browser's session, once it has ended (signed out or expired) | 30 days from when it ended | 1 to 365 days |
+| Loans | For good | |
+| Responses | Until you delete one | |
 
 The same section shows what the clean-up would delete right now and what it last
 deleted, and **Clear now** runs it at once.
@@ -768,20 +934,24 @@ deleted, and **Clear now** runs it at once.
 **A session lives as long as its events.** The Ledger finds the person and device
 behind a viewing event through the browser's session, so a session that has ended is
 kept, however long ago that was, while any event still names it. Nor is one deleted
-while it holds a screening that can still be resumed, and a session that hasn't ended
-never is. The link tickets a browser held go with its session.
+while a loan it took is out with no end written yet, and a session that hasn't ended
+never is. The link tickets a browser held go with its session. Once a session is
+deleted, a loan it took shows the device it kept, and no longer whom that browser was
+signed in as.
 
-**The clean-up never changes tickets or screenings.** Screening limits, **finished**,
-resume positions, start-by deadlines, expiry, and when a ticket was first opened and
-first played all come from those, so the clean-up changes nothing a viewer can do,
-and a test checks it. The counts on a film's and a person's page in the back office
-come from tickets and screenings too, and a person's **Last signed in** is kept with
-the person, not worked out from their sessions. On the ticket list, a ticket whose
-events have gone shows its latest screening as its last activity, or else when it was
-first opened.
+**The clean-up never changes tickets, loans, responses or plays.** Whether a tape is
+out and with whom, since when and until when, whether a ticket is spent, how many
+times a film has lent, **finished**, resume positions, start-by deadlines (and the
+time given back to them), and when a ticket was first opened and first played all
+come from those, so the clean-up changes nothing a viewer can do, and a test checks
+it. The counts on a film's and a person's page in the back office come from tickets,
+loans and responses too, and a person's **Last signed in** is kept with the person,
+not worked out from their sessions. On the ticket list, a ticket whose events have
+gone shows its latest play as its last activity, or else when it was first opened.
 
 **Backups keep what they had.** A backup is the database as it was when it was
 written, so the events and sessions deleted since stay in it until the backup itself
 expires: by default after 14 days for a daily one and a year for a monthly one (see
 [deploying.md](deploying.md#backups)). Restoring an older backup brings them back
-until the clean-up runs again, about a minute after the app starts.
+until the clean-up runs again, about a minute after the app starts. Backups hold
+friends' responses and your "Picked for you" notes as well.

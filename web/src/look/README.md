@@ -6,16 +6,18 @@ look in one place: its tokens and fonts, the interface layer, the flat printed o
 the shop's video machine (the blue screen), and the words that depend on the settings.
 
 Stage 1 (1.1.0) changed how the app looks and what it says, nothing else: no
-database change, no API or route change, no behaviour change. Version 2's one-tape
-loans ("Out on loan", the till slip, handing it back, "Return it now") came after, on
-the `v2` branch: their states are under "Version 2's states" and "Version 2's front
-page and notices", below.
+database change, no API or route change, no behaviour change. Version 2 (2.0.0) added
+the behaviour the look was drawn for: one tape per film, "Out on loan", the till slip,
+"Picked for you", handing it back, "Return it now". Its states are under "Version 2's
+states" and "Version 2's front page and notices", and its printed things under
+"Printed things" and "Version 2's printed things", below.
 
 The approved design is read-only, in the main checkout:
 `.claude/design/vhs/analogue/` (take 2: `index.html`, `notes.md`, `kit.css`, `kit.js`;
 the interface: `kit-ui.css`, `kit-ui-notes.md`, `ui.html`) and `.claude/design/vhs/app/`
 (every screen: `friend/`, `office/`, `notes.md`, `review/*.png`). The mocks show
-version 2's states; map them to today's (below) and leave out what only version 2 has.
+version 2's states, which the app now has; where the two differ, the app follows
+`docs/version-2.md`.
 
 ## Files
 
@@ -27,10 +29,11 @@ version 2's states; map them to today's (below) and leave out what only version 
 | `objects.css` | The flat objects and the blue screen | `main.jsx` |
 | `friend.css` | The friend's pages (`.fl-*`), and the player's older classes restyled under `.fl-page` | `main.jsx`, last |
 | `office.css` | The back office's pages (`.of-*`) | `admin/AdminApp.jsx`, so friends never download it |
-| `objects.jsx` | `Sleeve`, `PickCard`, `LabelTape`, `TapeStrip`, `Sticker`, `TypedLabel`, `ShopName`, `Paper`, `InkFilters` and the lettering (`Typed`, `Gun`, `Hand`, `Rub`) | |
+| `objects.jsx` | `Sleeve`, `PickCard`, `PickNote`, `TillSlip`, `LabelTape`, `TapeStrip`, `Sticker`, `TypedLabel`, `ShopName`, `Paper`, `InkFilters` and the lettering (`Typed`, `Gun`, `Hand`, `Rub`) | |
 | `crt.jsx` | The machine: `CrtScreen`, `PlayTile`, `PlayScreen`, `OsdStrip`, `StopStrip`, `VcrMenu`, `ComingBack`, `PxPlay`, `PxPause`, `PxStop` | |
-| `ui.jsx` | `Line`, `Menu`, `MenuSep`, `TabRow`, `Tri` | |
-| `words.js` | The host's name, the sticker's deadline, the tape counter (no DOM: unit-tested) | |
+| `ui.jsx` | `Line`, `Menu`, `MenuSep`, `TabRow`, `Tri`, `BusyButton` (and `useBusyNews`) | |
+| `busy.js` | A busy button's props and the page's one status region for it (no DOM of its own beyond that region) | `ui.jsx`, `crt.jsx` |
+| `words.js` | The host's name, the sticker's deadline and its printed first line, the tape counter (no DOM: unit-tested) | |
 | `wear.js` | Seeded unevenness of printed things, the label tape's strips, the E-number (no DOM: unit-tested) | |
 | `paperCanvas.js` | Grain, tone, ink wear and gloss, drawn on `<canvas>` | |
 | `devicePixels.js` | `installDevicePixels()` (`main.jsx` calls it): the raster and scanlines in whole device pixels, set on `<body>` (`<html>`'s own style is Branding's preview) | |
@@ -58,7 +61,8 @@ allowed before still allowed, every accent refused before still refused),
 2. **Blue means the machine, and only the machine.** `--blue` #2030C8 with the subtle
    CRT (static scanlines in whole device pixels, a soft bloom on the letters, darker
    edges) appears only on: the Play tile, the short PLAY screen as playback starts, the
-   paused strip **under** the picture, and the coming-back screen. Never over the
+   paused strip **under** the picture, the STOP strip under it at the film's end, and
+   the coming-back screen. Never over the
    film's picture, never flickering or moving. While the film plays, the player is
    plain and the browser's own controls are as they were. VT323 is the machine's
    face, only on the blue, at 20px or more, ligatures off. (The staff-pick card's
@@ -85,7 +89,8 @@ allowed before still allowed, every accent refused before still refused),
    on the friend's pages, a printed thing, a poster, the blue or the picture.
 8. **Printed things are flat real objects**: the poster printed as a sleeve, a plain
    kraft sleeve with a typed label when a film has no artwork, the staff-pick card,
-   black label-maker tape, the orange sticker, the membership card. No drawn 3D. Their
+   a "Picked for you" sheet off the shop's notepad, black label-maker tape, the orange
+   sticker, the till slip, the membership card. No drawn 3D. Their
    wear is subtle and seeded (the same every render, on every device).
 
 Not kitsch: no terminal green, prompts, blinking carets, glow on the interface,
@@ -223,10 +228,22 @@ film's slug, a tape's id), so the print is the same every time.
   menu: Enter, Space or a click opens it with the focus still on the button, and Tab
   goes on into the items (e2e/keyboard.spec.js holds it to that). Added: the arrow keys
   open it on the first or last item and move, Home and End go to the ends, skipping an
-  item hidden at this width (`.ui-wide`, `.ui-narrow`). Escape closes
-  it (focus back to the button); the focus leaving it or a press elsewhere closes it. `after` is drawn under the button (a
+  item hidden at this width (`.ui-wide`, `.ui-narrow`). Escape, or choosing an item,
+  closes it with the focus back on the button; the focus leaving it or a press
+  elsewhere closes it. `after` is drawn under the button (a
   `.ui-menu__error` line). `buttonClass` defaults to `ui-item` (a bar's item); use
   `ui-btn` for a menu on a page. `<Tri />` is the stepped triangle.
+- `<BusyButton busy? busyText? disabled? ...>words</BusyButton>` (2.0, question 20,
+  answer b): every button that sends a request (the Player's Watch here instead and
+  the back office's Sign out included). While `busy` it is
+  `aria-disabled`, not `disabled`, so it keeps the focus; it is drawn as a disabled
+  one, a press on it does nothing (not even send its form), and the page's one status
+  region says `busyText` ("Taking it back…") or "Just a moment…". `disabled` stays for
+  a button that can't be used for another reason. `PlayTile`, the telly's Resume and
+  `Menu` (`busy`) use the same helpers (`busy.js`, `useBusyNews`), and the logo's
+  upload (a file input in a label) `busyProps`. The two checkboxes saved as they are
+  ticked are `aria-disabled` while they save and ignore a change meanwhile, which React
+  draws back as it was.
 - `<TabRow watch={pathname} className? role? label?>{tabs with className="ui-tab"}</TabRow>`: one row
   of tabs that scrolls sideways on a phone (`role="tablist"` and `label` for tabs that
   switch panels in the page, as a film's page in the back office has them), keeps the current tab (`aria-current` or
@@ -257,8 +274,10 @@ whole app has it.
 | `.ui-status` | The status line at the foot of a back office screen. |
 | `.ui-raster` | The back office's raster (already on `.ui-office__main` and the sign-in). |
 
-`objects.css` styles the components above (`.ob`, `.ob--*`, `.etape`, `.pick__*`, `.stk__*`,
-`.crt`, `.crt--strip|picture|tube`, `.crt-play`, `.osd*`, `.crt-telly`). Size them from
+`objects.css` styles the components above (`.ob`, `.ob--*`, `.etape`, `.pick__*`,
+`.note__*` (the pick note), `.slip__l*` (the till slip's lines), `.stk__*` (`.stk__top`:
+a two-line sticker's printed first line), `.crt`, `.crt--strip|picture|tube`,
+`.crt-play`, `.osd*` (`.osd--stop`: the STOP strip), `.crt-telly`). Size them from
 your own CSS with `--w` (sleeve, pick) or the box they sit in; don't restyle their insides.
 
 Every screen is on the `ui-*` classes and the components now. What is left of the older
@@ -296,11 +315,11 @@ a sticker (the E-number then gets its own strip); 18 on a wide screen. `eNumber(
   "Back office" (owner's browser; it moves into the name menu under 600px), the name
   menu (lit while open: Your tapes, Your membership card, Back office on a phone, Sign
   out) or Sign in (not while the player is open, nor on `/t/`, `/signin`, `/enroll`, as
-  today). A long name ends in an ellipsis, and under 360px only the first name shows.
+  in 1.1.0). A long name ends in an ellipsis, and under 360px only the first name shows.
   On a narrow screen the items go onto a second line, at the right. The owner's preview
-  line (`.site-preview`: "Preview. You're signed in to the back office here, so tape
-  rules don't apply in this browser.") sits above it when the owner is also signed in
-  as a member. `useSite()` gives `{ me, site, refresh, signOut, setPlayerOpen }`; `site`
+  line (`.site-preview`, `tapeWords.js PREVIEW_BANNER`: "Preview. You're signed in to
+  the back office here, so Play in this browser never takes a tape.") sits above it
+  when the owner is also signed in as a member. `useSite()` gives `{ me, site, refresh, signOut, setPlayerOpen }`; `site`
   carries `ownerName` too. A page that names itself sets `document.title` in its own
   effect (the shell sets the shop's name first).
 - **The footer** (`site.jsx`): TMDB's logo and its exact notice when the shop uses TMDB
@@ -382,7 +401,7 @@ security explanations a person needs in order to act.
 Report each string you cut or materially rewrote as
 `file:line: "before" -> "after" | cut (rung N)`.
 
-## Today's states in the look (stage 1)
+## 1.1.0's states in the look (stage 1)
 
 1.1.0's states, kept as history: version 2 has one clock, the due-back date, and no play
 limits. Its stickers are "Play takes it out" over "Due back" before Play, "Start by"
@@ -390,7 +409,7 @@ for a start-by date still to come, "Due back" for a tape out with you, and "Back
 tape out with someone else (`words.js nextDeadline`); "Come back by" and "2 plays left"
 are gone.
 
-| Today | In the look |
+| 1.1.0 | In the look |
 |---|---|
 | A ticket and its `/t/` link | A tape; the link page stays at `/t/` |
 | Start-by date, before the first play | Sticker "Start by Fri 6 Nov" |
@@ -424,6 +443,17 @@ tape is out: there the link is "link" and "tape" is the film's one copy.
 
 A link with a note from the owner shows it under the label tape, in every state:
 "Picked for you" (`PickNote`), apart from the staff pick card on the wall.
+
+## Version 2's printed things
+
+| Thing | Component | What it is, and where |
+|---|---|---|
+| The two-line sticker | `Sticker top="Play takes it out."` | Before Play: the line printed on the label roll, then "Due back" and the date Play would give (now plus the link's days, read again each minute). A link with a start-by date still to come has the one-line "Start by" sticker instead |
+| The out sticker | `Sticker top="Out on loan."` with "Back" | A tape out with someone else, on the counter: "Out on loan." over "Back Fri 6 Nov", and the words beside it give the time. On a sleeve on the front page (Picked for you, On the shelf for members) it is the one line, "Back Fri 6 Nov" (`Home.jsx shelfSticker`). Never who has it |
+| The pick note | `PickNote` (paper `note`) | "Picked for you" printed at the head of a ruled sheet, the owner's note and name in the hand. Under the label tape on the film's page, in every state; the front page only says a note is with a tape |
+| The till slip | `TillSlip` (paper `till`, torn by `wear.js tillTeeth`) | The receipt, in Doto: the shop, when it was taken out, a dotted rule, the film and its E-number, out to whom, due back when, "Watch it as often as you like until then.", "Done early? Return it from its page.", "Thank you" (`tapeWords.js slipLines`). A date and its time are one unit (no-break spaces). In full on the front page and just after Play; folded under "Your receipt" on the film's page. The Ledger prints lent and back in on strips of the same roll (`label={null}`, `.of-till`) |
+| The STOP strip | `StopStrip` (`crt.jsx`) | The film's end: STOP and where it stopped, on the blue under the picture, square like the paused strip, with the end's three choices under it in plain type (Keep it until …, Return it now, and Hand it back for a member on their own link) |
+| The paused strip's date | `OsdStrip aside="Due back Sun 8 Nov"` | The tape's due date on the right, where 1.1.0 counted down the time to come back |
 
 ## Version 2's front page and notices (slice 8)
 

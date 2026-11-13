@@ -1586,8 +1586,10 @@ describe('ticket link previews', () => {
     assert.equal((await posterOf(whileOut)).status, 200);
     // The tape came due a moment ago.
     srv.db.prepare('UPDATE loans SET taken_at = ?, due_at = ? WHERE ticket_id = ?').run(Date.now() - 1 - 3 * 24 * 3600e3, Date.now() - 1, lent.id);
-    assert.equal((await adminTicket(expired.id)).state, 'expired');
-    assert.equal((await adminTicket(lent.id)).state, 'used_up');
+    // The back office's words for them: missed, and done. (1.x's state, 'expired' and
+    // 'used_up', went in slice 10.)
+    assert.equal((await adminTicket(expired.id)).linkState, 'missed');
+    assert.equal((await adminTicket(lent.id)).linkState, 'done');
     assert.equal((await b.get('/api/films/arrival')).data.access.ticket.state, 'spent');
 
     const address = asFilm(await page(`/t/${expired.code}`), expired);

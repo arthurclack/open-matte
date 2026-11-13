@@ -85,16 +85,17 @@ storage, and v1.0.0 is released.
 
 ## Version 2: one tape, one borrower
 
-Agreed on 2026-11-05, not yet planned in detail. Open Matte becomes a small video shelf
-for lending films to friends: you choose a film, write a note for one person, and lend
-it. Each film is one tape, and only one person can have it out at a time. It's 2.0, not
-1.x, because two people can no longer watch the same film at once.
+Agreed on 2026-11-05, planned in [version-2.md](version-2.md) on 2026-11-11, and
+built there slice by slice for 2.0.0. Open Matte becomes a small video shelf for lending films to
+friends: you choose a film, write a note for one person, and lend it. Each film is one
+tape, and only one person can have it out at a time. It's 2.0, not 1.x, because two
+people can no longer watch the same film at once.
 
 How a loan works:
 
 - Links are sent freely, several for one film if you like. Sending a link doesn't take
   the tape.
-- Pressing Play takes it, if it's on the shelf. Checking that it's free and taking it
+- Pressing Play takes it, if it's in. Checking that it's free and taking it
   happen in one step, so two people can't take it at once.
 - From then on the borrower has a set time to watch, shown as the date it's due back.
 - While it's out, anyone else with a link sees "Out on loan" and the date it's due back,
@@ -104,29 +105,53 @@ How a loan works:
 
 In 2.0:
 
-- [ ] Loans: one tape per film, taken on the first Play, due back after a set time
-- [ ] The note on the tape. From milestone 4:
-  - Picked for you: your message to one person about one film or programme, kept apart
-    from your general note about the film, so editing one never changes the other
-- [ ] Handing it back, when the tape comes back, for signed-in friends only (anyone a
-  link was forwarded to could write one). From milestone 4:
-  - A private response after watching ("Loved it", "Still thinking about it", "Not for
-    me", "Let's talk") with an optional message, shared only with you, and saying so
-- [ ] On your card: what you have out and when it's due back, and continue watching
+- [x] Loans: one tape per film, taken on the first Play, due back after a set time
+- [x] The note on the tape. From milestone 4:
+  - Picked for you: your message to one person about one film, kept apart from your
+    general note about the film, so editing one never changes the other. (For one
+    film; programmes are still milestone 4's.)
+- [x] Handing it back, while the tape is out, for signed-in friends only, on a link for
+  them alone (anyone a link was forwarded to could write one). From milestone 4:
+  - A private response ("Loved it", "Still thinking about it", "Not for me", "Let's
+    talk") with an optional message, shared only with you, and saying so
+- [x] On your card: what you have out and when it's due back, and continue watching
   (the first part of milestone 4's warmer front page)
-- [ ] The video shop look, across the app and then the website
+- [x] The video shop look, across the app (1.1.0) and then the website
 
-Still to decide:
+Decided, from [version-2.md](version-2.md#decisions):
 
-- Two links for one film: first to press Play gets it (proposed), and the admin says
-  so when you send a second link for a film that already has one
-- Start-by dates: proposed not to count down while the tape is out with someone else
-- One clock: the resume window and "valid for N days after first play" become one
-  due-back time (proposed)
+- Two links for one film: first to press Play gets it, and the back office warns, and
+  only warns, when you send a link for a film that is out or already has links
+  waiting. One member may have two links for one film: the second waits, and lends
+  once the first is back
+- A link lends once: it is spent when its tape comes back. There are no play limits:
+  the borrower watches as often as they like until it's due back
+- One clock: the time to come back and "valid for N days after first play" became one
+  due-back date, 3 days by default and chosen for each link when you send it, from 1
+  to 30. You can move it, earlier or later, while the tape is out
+- Start-by dates don't count down while the tape is out with someone else: the time is
+  given back once it's in, to the minute
 - Finishing the film keeps the tape until it's due back, so a scene can be watched
-  again, with "Return it now" at the end (proposed)
-- Upgrading: what happens to films with several live tickets, and to screenings already
-  running on the same film
+  again, with "Return it now" at the end
+- A friend can hand a tape back with a response at any time while they have it, not
+  after it has gone back on its own
+- A link can't change hands while it has the tape: keeping, giving, letting anyone use
+  it and Sign out browsers all wait until it's back
+- A tape out to a browser on a link anyone can use goes back when that browser is
+  signed out, and a member's when their card is turned off. Taking a tape back cancels
+  the member's other waiting links for that film
+- Members see whether a film on the shelf for members is in, and when it's due back,
+  never who has it
+- Upgrading: of several people part-way through one film, one keeps the tape, the one
+  playing now, else the one heard from last; the others' links lend once when it's
+  back. A link part-way through keeps the tape for that play only. The 2.0.0 changelog
+  has the rest, and `scripts/upgrade-preview.mjs` says what the upgrade will do to a
+  shop before it's done
+
+Still later, from [version-2.md](version-2.md#out-of-20): a page of its own for a tape
+taken back, a loan length per film, responses after a tape goes back on its own, a tape
+that moves with its link when the link is kept or given, and keeping the name behind a
+browser's loan after its session is gone.
 
 After 2.0, as 2.x releases, moved from milestone 4. Before and after notes are the
 note in the sleeve, best watched blind is a plain unlabelled tape (the due-back date

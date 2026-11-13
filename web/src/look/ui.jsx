@@ -1,9 +1,58 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { scrollBehavior } from '../motion.js';
+import { BUSY_WORDS, busyProps, busyRegion, notePress, pressedLast, sayBusy } from './busy.js';
 
 // The interface layer's few pieces with behaviour or markup worth sharing (ui.css has
 // the rest as classes): a system line, the pull-down menu, a scrolling row of tabs and
 // the stepped triangle. See README.md.
+
+// A button whose request is under way (`busy`): it keeps the focus and is drawn as a
+// disabled one, a press on it does nothing, and the page's status region says so, in
+// `busyText` (its own words for it, "Taking it back…") or "Just a moment…". `disabled`
+// is for a button that can't be used for some other reason (nothing to save yet). Every
+// other prop is the button's own: `type` included, so one in a form still submits it.
+// A button that becomes `disabled` while it has the focus (Save, once there is nothing
+// left to save) keeps it the same way until the focus moves on. See busy.js.
+export function BusyButton({ busy = false, busyText, disabled = false, onClick, onFocus, onBlur, children, ...rest }) {
+  const [focused, setFocused] = useState(false);
+  const kept = Boolean(disabled) && focused;
+  const pressed = useBusyNews(busy && !disabled, busyText);
+  return (
+    <button
+      {...rest}
+      {...busyProps({ busy: busy || kept, disabled: disabled && !kept, onClick: pressed(onClick) })}
+      onFocus={(e) => {
+        setFocused(true);
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setFocused(false);
+        onBlur?.(e);
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// The status region's part for a busy button, BusyButton's and others' (PlayTile, the
+// telly's Resume, the name menu, the logo's upload): the region is made when the button
+// is first drawn, and while `busy` it says `words`, if this was the busy button pressed
+// last. Returns what wraps the button's press so that it counts as pressed.
+export function useBusyNews(busy, words = BUSY_WORDS) {
+  const token = useRef({});
+  useEffect(() => {
+    busyRegion();
+  }, []);
+  useEffect(() => (busy && pressedLast(token.current) ? sayBusy(words) : undefined), [busy, words]);
+  return useCallback(
+    (onPress) => (e) => {
+      notePress(token.current);
+      return onPress?.(e);
+    },
+    [],
+  );
+}
 
 // The pull-down's mark: a stepped triangle, drawn in whole pixels.
 export function Tri() {
@@ -38,14 +87,17 @@ export function Line({ kind = 'info', lead, block = false, wide = false, role, c
 // the button; the focus leaving it, or a press anywhere else, closes it. `label` is the
 // button's words (a name may need an ellipsis); `items` are menu items: elements with
 // className "ui-menu__item" and role="menuitem" (a Link, an <a> or a <button>), or
-// <MenuSep />. Choosing one closes the menu.
-export function Menu({ label, items, disabled = false, buttonClass = 'ui-item', after }) {
+// <MenuSep />. Choosing one closes the menu and gives the focus back to the button.
+// `busy`: what a choice in it started is under way (signing out): the button keeps the
+// focus and doesn't open, as a BusyButton.
+export function Menu({ label, items, disabled = false, busy = false, buttonClass = 'ui-item', after }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const buttonRef = useRef(null);
   const listRef = useRef(null);
   const id = `menu${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const focusItem = useRef(null);
+  const pressed = useBusyNews(busy && !disabled);
 
   // Only the items drawn now: one shown only at some widths (.ui-wide, .ui-narrow) is
   // still in the list when it's hidden, and the arrows would stop on it.
@@ -112,9 +164,8 @@ export function Menu({ label, items, disabled = false, buttonClass = 'ui-item', 
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? `${id}-list` : undefined}
-        disabled={disabled}
-        onClick={() => setOpen(!open)}
-        onKeyDown={onButtonKey}
+        {...busyProps({ busy, disabled, onClick: () => setOpen(!open) })}
+        onKeyDown={(e) => !busy && onButtonKey(e)}
       >
         {label}
       </button>
@@ -126,9 +177,13 @@ export function Menu({ label, items, disabled = false, buttonClass = 'ui-item', 
           aria-labelledby={`${id}-btn`}
           ref={listRef}
           onKeyDown={onListKey}
-          onClick={(e) => {
-            if (e.target.closest('[role="menuitem"]')) setOpen(false);
-          }}
+          onClick={pressed((e) => {
+            if (!e.target.closest('[role="menuitem"]')) return;
+            // The focus goes back to the menu's button, as Escape gives it back: the item
+            // that had it goes with the list, and a busy button keeps it (Sign out).
+            buttonRef.current?.focus();
+            setOpen(false);
+          })}
         >
           {items}
         </div>

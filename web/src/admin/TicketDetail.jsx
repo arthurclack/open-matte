@@ -1,7 +1,7 @@
 import { useContext, useEffect, useId, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, formatAgo, formatClock, formatDateTime, formatDayTime } from '../api.js';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { LinkStateMark, TakeBack, takenBackNote } from './Loans.jsx';
 import { endedWords, inTime, loanNow, startByWords } from './loanWords.js';
 import { KeepBox, PersonDisabledBadge, linkName, ticketKind, ticketMessage } from './Tickets.jsx';
@@ -108,7 +108,9 @@ export default function TicketDetail() {
   // A link only one member can use: their browsers are whichever are signed in as them.
   const person = t.person;
   const personLink = person && <Link to={`/admin/people/${person.id}`}>{person.name}</Link>;
-  const open = t.openScreening;
+  // The loan's playback while the link has the tape: one of its plays, with the device
+  // holding it now (or else the one that took the tape).
+  const open = loan?.live ? (t.screenings.find((s) => s.id === loan.screeningId) ?? null) : null;
   const first = person ? person.name.split(' ')[0] : null;
   const shopDays = site?.loanDays;
 
@@ -133,9 +135,9 @@ export default function TicketDetail() {
         actions={
           cancelled ? (
             !loan && (
-              <button type="button" className="ui-btn" onClick={() => post(`tickets/${t.id}/restore`, null, 'Restored. Browsers have to open the link again.')} disabled={action.busy}>
+              <BusyButton type="button" className="ui-btn" onClick={() => post(`tickets/${t.id}/restore`, null, 'Restored. Browsers have to open the link again.')} busy={action.busy}>
                 Restore the link
-              </button>
+              </BusyButton>
             )
           ) : (
             <>
@@ -145,25 +147,25 @@ export default function TicketDetail() {
                   {person.name}'s page
                 </Link>
               ) : (
-                <button
+                <BusyButton
                   type="button"
                   className="ui-btn"
                   onClick={() => post(`tickets/${t.id}/sign-out-browsers`, 'Forget this link in every browser that opened it? The link will still work if opened again.')}
-                  disabled={action.busy || !t.browsers || has}
+                  busy={action.busy} disabled={!t.browsers || has}
                   aria-describedby={has ? `${fid}-held` : undefined}
                 >
                   Sign out browsers
-                </button>
+                </BusyButton>
               )}
               {!has && (
-                <button
+                <BusyButton
                   type="button"
                   className="ui-btn ui-btn--danger"
                   onClick={() => post(`tickets/${t.id}/revoke`, 'Cancel this link? It stops working straight away, in every browser that opened it.', 'Cancelled.')}
-                  disabled={action.busy}
+                  busy={action.busy}
                 >
                   Cancel the link
-                </button>
+                </BusyButton>
               )}
             </>
           )
@@ -316,9 +318,9 @@ export default function TicketDetail() {
           </div>
           {!person && !loan && <KeepBox className="" checked={form.claimable} onChange={(claimable) => setForm({ ...form, claimable })} />}
           <div className="ui-btns">
-            <button className="ui-btn ui-btn--primary" disabled={action.busy}>
+            <BusyButton className="ui-btn ui-btn--primary" busy={action.busy}>
               Save changes
-            </button>
+            </BusyButton>
           </div>
         </form>
       </div>
@@ -349,7 +351,7 @@ export default function TicketDetail() {
               <td data-label="State">
                 {s.voidedAt ? (
                   <Mark tone="off">Given back</Mark>
-                ) : open?.id === s.id && open.playingNow ? (
+                ) : open?.id === s.id && loan.playingNow ? (
                   <Mark tone="info">Playing</Mark>
                 ) : open?.id === s.id ? (
                   <Mark tone="info">{s.finishedAt ? 'Finished, still out' : 'Paused'}</Mark>
@@ -372,16 +374,16 @@ export default function TicketDetail() {
             has kept it. They get it back if you let anyone with the link use it.
           </p>
           <div className="ui-btns of-btns-gap">
-            <button
+            <BusyButton
               type="button"
               className="ui-btn ui-btn--small"
               onClick={() =>
                 post(`tickets/${t.id}/sign-out-browsers`, "Forget this link in these browsers? They won't get it back if you let anyone with the link use it, unless they open the link again.")
               }
-              disabled={action.busy || has}
+              busy={action.busy} disabled={has}
             >
               Forget it in these browsers
-            </button>
+            </BusyButton>
           </div>
           <BrowserTable browsers={t.browserList} />
         </>
@@ -526,9 +528,9 @@ function WhoCanUseIt({ ticket: t, busy, held, heldId, onSetHolder }) {
           )}
           <div className="of-inline">
             {person && (
-              <button type="button" className="ui-btn" onClick={release} disabled={busy || held} aria-describedby={held ? heldId : undefined}>
+              <BusyButton type="button" className="ui-btn" onClick={release} busy={busy} disabled={held} aria-describedby={held ? heldId : undefined}>
                 Let anyone with the link use it
-              </button>
+              </BusyButton>
             )}
             {choices.length > 0 && (
               <>
@@ -547,9 +549,9 @@ function WhoCanUseIt({ ticket: t, busy, held, heldId, onSetHolder }) {
                     </option>
                   ))}
                 </select>
-                <button type="button" className="ui-btn" onClick={give} disabled={busy || !chosen || held} aria-describedby={held ? heldId : undefined}>
+                <BusyButton type="button" className="ui-btn" onClick={give} busy={busy} disabled={!chosen || held} aria-describedby={held ? heldId : undefined}>
                   Give
-                </button>
+                </BusyButton>
               </>
             )}
           </div>

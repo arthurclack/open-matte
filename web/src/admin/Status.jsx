@@ -2,7 +2,7 @@ import { Fragment, useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatAgo, formatBytes, formatDateTime, formatDay, formatDayTime, formatTime, plural } from '../api.js';
 import { CrtScreen } from '../look/crt.jsx';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { attentionLine, backupLate, copyOld, diskLow } from './facts.js';
 import { sweeperText, tapesOutLine } from './loanWords.js';
 import { AdminContext, ErrorNote, Head, Mark, Table, keptFor, lastClearedText, useLoad } from './ui.jsx';
@@ -56,9 +56,9 @@ export default function Status() {
         title="Status"
         lede="What needs attention, and whether the server is well. Each line says what was checked; nothing here tests a restore. Reading this page records nothing."
         actions={
-          <button type="button" className="ui-btn" onClick={refresh} disabled={busy}>
+          <BusyButton type="button" className="ui-btn" onClick={refresh} busy={busy} busyText="Checking…">
             {busy ? 'Checking…' : 'Refresh'}
-          </button>
+          </BusyButton>
         }
       />
       <ErrorNote error={error} />

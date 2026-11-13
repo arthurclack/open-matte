@@ -9,13 +9,15 @@
 //   list refuses every time), or on a film page, with no code left to copy, says to
 //   open the link you were sent; a browser with no passkeys gets Copy link at once;
 // - an attempt the cinema refused gets a fresh challenge before the next one, which
-//   then works.
+//   then works;
+// - a member signed in with their passkey hands a tape back with a response, which
+//   the back office shows under Responses, counted unread until marked as read.
 // e2e/account.spec.js has keeping from a signed-in browser, and the account page.
 //
 // Chromium and Chrome only: virtual passkey authenticators are a Chrome DevTools
 // Protocol feature, which Firefox and WebKit don't offer.
 import fs from 'node:fs';
-import { admin, cinemaName, expect, film, signedInPerson, test, unique } from './fixtures.js';
+import { admin, asAdmin, cinemaName, expect, film, playButton, signedInPerson, test, unique } from './fixtures.js';
 
 const CHROMIUM_ONLY = 'virtual passkey authenticators come from the Chrome DevTools Protocol, which only Chromium-based browsers have';
 
@@ -382,5 +384,91 @@ test("a browser that can't use passkeys leaves a setup link and a ticket for one
     await page.getByRole('button', { name: 'Copy link' }).click();
     await expect(page).toHaveURL((url) => url.pathname === `/t/${ticket.code}`);
     expect(await page.evaluate(() => window.__copied)).toBe(page.url());
+  });
+});
+
+// Hand it back (docs/version-2.md, "Browser journeys" 3): a member signs in with their
+// passkey on the link sent to them, presses Play, and hands the tape back with a
+// response and a few words. Under Responses the back office counts it among the
+// unread, shows what was said, and Mark as read takes it out of the count.
+test('a member with a passkey hands a tape back with a response, which the back office shows under Responses until it is marked as read', async ({ page, newContext }, testInfo) => {
+  const name = unique('Rae', testInfo);
+  await passkeys(page);
+  const person = await enrollThrough(page, name);
+  await signOut(page, name);
+  const ticket = await admin.issueTicket({ personId: person.id });
+  const words = `The ending stayed with me. ${unique('Note', testInfo)}`;
+
+  await test.step('signing in with the passkey on the link opens the film, and Play takes the tape', async () => {
+    await page.goto(`/t/${ticket.code}`);
+    await page.getByRole('button', { name: 'Sign in with a passkey' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: film.title })).toBeVisible();
+    await expect(menu(page, name)).toBeVisible();
+    const started = page.waitForResponse((r) => new URL(r.url()).pathname === `/api/films/${film.slug}/screenings` && r.request().method() === 'POST');
+    await playButton(page).click();
+    expect((await started).status()).toBe(200);
+  });
+
+  await test.step('Hand it back asks how it was, says only the owner reads it, and wants one of the four', async () => {
+    await page.locator('.fl-counter').getByRole('button', { name: 'Hand it back' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Hand it back' })).toBeFocused();
+    await expect(page.getByText(/^Only .+ sees this\. It isn't on the film's page, and nobody else can read it\.$/)).toBeVisible();
+    // Pressed with no response chosen: the page says so, and sends nothing.
+    const sent = [];
+    const watch = (req) => {
+      if (req.method() === 'POST' && new URL(req.url()).pathname === `/api/films/${film.slug}/return`) sent.push(req);
+    };
+    page.on('request', watch);
+    await page.getByRole('button', { name: 'Hand it back', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Not handed back yet.');
+    // Asked after the alert, so any return the press sent has gone before this answer.
+    expect((await page.evaluate(() => fetch('/api/me').then((r) => r.status)))).toBe(200);
+    page.off('request', watch);
+    expect(sent, 'nothing was sent').toHaveLength(0);
+    expect((await admin.get(`/api/admin/tickets/${ticket.id}`)).linkState, 'the tape is still out').toBe('has');
+  });
+
+  await test.step('handed back with Loved it and a message', async () => {
+    await page.getByRole('radio', { name: 'Loved it' }).check();
+    await page.getByRole('textbox', { name: /^Anything to add\?/ }).fill(words);
+    const returned = page.waitForResponse((r) => new URL(r.url()).pathname === `/api/films/${film.slug}/return`);
+    await page.getByRole('button', { name: 'Hand it back', exact: true }).click();
+    expect((await returned).status()).toBe(200);
+    await expect(page.getByRole('heading', { level: 1, name: 'Handed back' })).toBeFocused();
+    await expect(page.getByRole('status').filter({ hasText: `${film.title} is back in the shop.` })).toBeVisible();
+    await expect(page.locator('.fl-sent')).toContainText('Loved it');
+    await expect(page.locator('.fl-sent')).toContainText(words);
+  });
+
+  const office = await newContext();
+  await asAdmin(office);
+  const desk = await office.newPage();
+  const tab = desk.getByRole('navigation', { name: 'Back office' }).getByRole('link', { name: /^Responses/ });
+  const item = desk.getByRole('listitem').filter({ hasText: words });
+
+  await test.step('the back office counts it unread, and shows who said what about which film', async () => {
+    await desk.goto('/admin/responses');
+    await expect(desk.getByRole('heading', { level: 1, name: 'Responses' })).toBeVisible();
+    // The shop's count, which other journeys' responses share: this one is among them.
+    await expect(tab).toHaveAccessibleName(/^Responses, [1-9]\d* unread$/);
+    await expect(item).toContainText('Not read yet');
+    await expect(item).toContainText('Loved it');
+    await expect(item.getByRole('link', { name: name, exact: true })).toBeVisible();
+    await expect(item.getByRole('link', { name: film.title, exact: true })).toBeVisible();
+    await expect(item).toContainText(/Handed back .+ early|Handed back .+ just before it was due/);
+  });
+
+  await test.step('Mark as read takes it out of the count', async () => {
+    // The tab is counted again once marked: read that answer, which the tab must show.
+    const counted = desk.waitForResponse((r) => new URL(r.url()).pathname === '/api/admin/responses' && r.request().method() === 'GET');
+    await item.getByRole('button', { name: `Mark as read: ${name}'s response to ${film.title}` }).click();
+    await expect(desk.getByRole('status').filter({ hasText: 'Marked as read.' })).toBeVisible();
+    const { unread } = await (await counted).json();
+    await expect(tab).toHaveAccessibleName(unread ? `Responses, ${unread} unread` : 'Responses');
+    await expect(item).not.toContainText('Not read yet');
+    await expect(item).toContainText(/Read \S/);
+    await expect(item.getByRole('button', { name: /^Mark as read/ })).toHaveCount(0);
+    // Its Delete button, the one left, has the focus.
+    await expect(item.getByRole('button', { name: `Delete: ${name}'s response to ${film.title}` })).toBeFocused();
   });
 });

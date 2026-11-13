@@ -104,7 +104,10 @@ describe('a link from opening to the tape coming due', () => {
     }
     assert.equal(srv.db.prepare('SELECT COUNT(*) AS n FROM tickets').get().n, made);
     ticket = await newTicket({ label: 'Sam', loanDays: 5 });
-    assert.deepEqual([ticket.screeningLimit, ticket.daysAfterFirstPlay], [null, null]);
+    // The link's own days, and no 1.x play limit or days after the first play: those
+    // fields went from the back office's answer in slice 10.
+    assert.deepEqual([ticket.loanDays, ticket.linkState, ticket.loan], [5, 'unopened', null]);
+    assert.ok(!('screeningLimit' in ticket) && !('daysAfterFirstPlay' in ticket));
     viewer = browser(srv.base);
     await openTicket(viewer, ticket);
 
@@ -148,13 +151,14 @@ describe('a link from opening to the tape coming due', () => {
     // 1.1.0's two fields went with its pages (slice 7), and Play's resumableUntil with them.
     assert.equal(r.data.resumableUntil, undefined);
 
-    // The back office, still in 1.x's fields: one play, and the loan's due time as the expiry.
+    // The back office: the link has the tape, on its loan, playing now, due when the
+    // loan is. (1.x's state 'ok', screeningsUsed 1, expiresAt and openScreening, which
+    // said the same, went in slice 10.)
     const t = (await admin.get(`/api/admin/tickets/${ticket.id}`)).data;
-    assert.equal(t.state, 'ok');
-    assert.equal(t.screeningsUsed, 1);
+    assert.equal(t.linkState, 'has');
     assert.equal(t.firstPlayedAt, loan.taken_at);
-    assert.equal(t.expiresAt, loan.due_at);
-    assert.deepEqual([t.openScreening.id, t.openScreening.playingNow, t.openScreening.resumableUntil], [r.data.screeningId, true, loan.due_at]);
+    assert.deepEqual([t.loan.id, t.loan.screeningId, t.loan.playingNow, t.loan.dueAt], [loan.id, r.data.screeningId, true, loan.due_at]);
+    for (const old of ['state', 'screeningsUsed', 'screeningsLeft', 'screeningLimit', 'daysAfterFirstPlay', 'expiresAt', 'openScreening']) assert.ok(!(old in t), old);
     const kinds = (await admin.get(`/api/admin/activity?ticket=${ticket.id}`)).data.events.map((e) => e.type);
     assert.deepEqual(kinds.toSorted(), ['lent', 'opened', 'play', 'ticket-sent']);
   });
@@ -164,8 +168,9 @@ describe('a link from opening to the tape coming due', () => {
     const again = await viewer.post('/api/films/arrival/screenings');
     assert.deepEqual([again.data.resumed, again.data.took, again.data.position], [true, false, 40]);
     assert.deepEqual([again.data.takenAt, again.data.dueBack], [loan.taken_at, loan.due_at]);
+    // Still the one loan, and its one play (1.x: screeningsUsed 1).
     const t = (await admin.get(`/api/admin/tickets/${ticket.id}`)).data;
-    assert.equal(t.screeningsUsed, 1);
+    assert.deepEqual([t.loan.id, t.loan.screeningId], [loan.id, loan.screening_id]);
     assert.equal(srv.db.prepare('SELECT COUNT(*) AS n FROM loans').get().n, 1);
   });
 
@@ -245,7 +250,8 @@ describe('a link from opening to the tape coming due', () => {
     assert.deepEqual((await tv.post('/api/films/arrival/screenings')).data, { error: 'spent' });
 
     const t = (await admin.get(`/api/admin/tickets/${ticket.id}`)).data;
-    assert.deepEqual([t.state, t.openScreening, t.expiresAt], ['used_up', null, null], 'the back office’s 1.x word for a link that has lent');
+    // Done, its loan over (1.x said state 'used_up', with no open play and no expiry).
+    assert.deepEqual([t.linkState, t.loan.live, t.loan.endedHow], ['done', false, 'due'], 'the back office’s word for a link that has lent and is back');
     const returned = (await admin.get(`/api/admin/activity?ticket=${ticket.id}`)).data.events.filter((e) => e.type === 'returned');
     assert.equal(returned.length, 1);
     assert.deepEqual([returned[0].at, returned[0].detail], [loan.due_at, { loanId: loan.id, how: 'due', response: false }]);
@@ -397,7 +403,8 @@ test('cancelling a link blocks its page and the very next media request, and the
   assert.equal((await b.get(master(film.slug))).status, 403);
   assert.equal((await b.get(`/api/films/${film.slug}`)).status, 404);
   assert.equal((await browser(srv.base).post('/api/tickets/open', { code: ticket.code })).status, 410);
-  const revoked = (await admin.get('/api/admin/tickets')).data.filter((t) => t.state === 'revoked');
+  // Cancelled, with no loan out (1.x: state 'revoked', and no openScreening).
+  const revoked = (await admin.get('/api/admin/tickets')).data.filter((t) => t.linkState === 'cancelled');
   assert.ok(revoked.some((t) => t.id === ticket.id), 'the link cancelled here is listed');
-  for (const t of revoked) assert.equal(t.openScreening, null);
+  for (const t of revoked) assert.notEqual(t.loan?.live, true);
 });

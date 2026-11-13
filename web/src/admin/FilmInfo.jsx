@@ -2,7 +2,7 @@ import { useContext, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatAgo } from '../api.js';
 import { Sleeve } from '../look/objects.jsx';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { AdminContext, ErrorNote, Table, TmdbCredit, useAction, useLoad } from './ui.jsx';
 
 const FIELD_LABELS = {
@@ -163,9 +163,9 @@ function Identify({ film, onCancel, onApplied }) {
               <input id={`${id}-y`} className="ui-input ui-input--num" type="number" value={year} onChange={(e) => setYear(e.target.value)} />
             </div>
             <div className="ui-btns">
-              <button className="ui-btn ui-btn--primary" disabled={action.busy || !query.trim()}>
+              <BusyButton className="ui-btn ui-btn--primary" busy={action.busy} disabled={!query.trim()}>
                 Search TMDB
-              </button>
+              </BusyButton>
               <button type="button" className="ui-btn ui-btn--quiet" onClick={onCancel}>
                 Cancel
               </button>
@@ -182,9 +182,9 @@ function Identify({ film, onCancel, onApplied }) {
                     {r.originalTitle && r.originalTitle !== r.title && <span className="of-faint"> · {r.originalTitle}</span>}
                     <p className="of-result__over">{r.overview}</p>
                   </div>
-                  <button type="button" className="ui-btn ui-btn--small" onClick={() => choose(r.tmdbId)} disabled={action.busy}>
+                  <BusyButton type="button" className="ui-btn ui-btn--small" onClick={() => choose(r.tmdbId)} busy={action.busy}>
                     Choose
-                  </button>
+                  </BusyButton>
                 </div>
               ))}
             </div>
@@ -269,12 +269,12 @@ function ApplyChoice({ film, details, onBack, onApplied }) {
       <ImagePicker label="Backdrop" images={details.backdrops} value={backdrop} onChange={setBackdrop} hasCurrent={Boolean(film.backdropUrl)} />
 
       <div className="ui-btns of-gap">
-        <button type="button" className="ui-btn ui-btn--primary" onClick={apply} disabled={action.busy || (!fields.size && !poster && !backdrop)}>
+        <BusyButton type="button" className="ui-btn ui-btn--primary" onClick={apply} busy={action.busy} disabled={!fields.size && !poster && !backdrop} busyText="Applying…">
           {action.busy ? 'Applying…' : 'Apply'}
-        </button>
-        <button type="button" className="ui-btn" onClick={onBack} disabled={action.busy}>
+        </BusyButton>
+        <BusyButton type="button" className="ui-btn" onClick={onBack} busy={action.busy} busyText="Applying…">
           Back
-        </button>
+        </BusyButton>
       </div>
     </>
   );

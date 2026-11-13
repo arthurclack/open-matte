@@ -142,9 +142,9 @@ the metadata. Each later scan compares field by field:
 Media (playlists, artwork, subtitles) always follows the folder. New films are
 always off the shelf. A film whose folder disappears is marked missing, not deleted.
 
-Don't rename a film's folder once tapes are out. Tapes belong to the film,
+Don't rename a film's folder once links are out. Links and loans belong to the film,
 not its address, but a renamed folder imports as a new film, off the shelf, and the
-old one (with its tapes) is marked missing. Renaming it back restores it, and
+old one (with its links, and its tape if someone has it out) is marked missing. Renaming it back restores it, and
 leaves the film created under the new name behind, marked missing.
 
 Symlinks inside a film folder are fine if they point to something in the same

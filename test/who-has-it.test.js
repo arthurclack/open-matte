@@ -255,6 +255,8 @@ describe('GET /api/admin/loans: every time a tape went out, and who has it', () 
       endedAt: null,
       endedHow: null,
       live: true,
+      // Its playback, among the link's plays (slice 10: the link's page reads it there).
+      screeningId: played.screeningId,
       playingNow: true,
       position: 0,
       finished: false,
@@ -503,8 +505,10 @@ describe('a link, for the owner: where it stands, its loan and its days', () => 
     const has = await adminLink(a);
     assert.deepEqual(has.loan, await loanOn(a));
     assert.deepEqual([has.loan.live, has.loan.dueAt, (await adminLink(b)).loan], [true, played.takenAt + 7 * DAY, null]);
-    // 1.1.0's fields are still there beside them, until its pages are rebuilt.
-    assert.deepEqual([has.state, has.expiresAt, has.openScreening.resumableUntil], ['ok', has.loan.dueAt, has.loan.dueAt]);
+    // 1.1.0's fields went in slice 10, once its pages had been rebuilt: the loan says
+    // when it's due, and which play is its own.
+    for (const old of ['state', 'expiresAt', 'openScreening', 'screeningsUsed', 'screeningsLeft', 'screeningLimit', 'daysAfterFirstPlay']) assert.ok(!(old in has), old);
+    assert.equal(has.loan.screeningId, played.screeningId);
 
     // The film's own state comes first, as in the table; a cancelled link stays cancelled.
     sql("UPDATE films SET media_status = 'missing' WHERE id = ?", film.id);
@@ -518,7 +522,8 @@ describe('a link, for the owner: where it stands, its loan and its days', () => 
     assert.equal((await giveBack(first, film, played.takenAt)).status, 200);
     assert.deepEqual(await states(a, b), ['done', 'unopened']);
     const done = await adminLink(a);
-    assert.deepEqual([done.loan.live, done.loan.endedHow, done.state], [false, 'returned', 'used_up']);
+    // (1.x's state said 'used_up'; linkState says done, above.)
+    assert.deepEqual([done.loan.live, done.loan.endedHow, done.linkState], [false, 'returned', 'done']);
 
     // Taken back: cancelled, and its loan says how.
     const second = await opened(b);

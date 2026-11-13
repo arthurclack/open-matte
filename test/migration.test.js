@@ -1214,7 +1214,8 @@ describe('a schema 7 shop, upgraded, over HTTP', () => {
     assert.deepEqual(answer(await takeBack(T.pairAnyone)), [409, { error: 'not-out' }]);
     const taken = await takeBack(T.pairBen);
     assert.equal(taken.status, 200, JSON.stringify(taken.data));
-    assert.deepEqual([taken.data.loan.endedHow, taken.data.ticket.state, taken.data.alsoCancelled], ['taken-back', 'revoked', []]);
+    // Taken back, and the link cancelled with it (1.x's state said 'revoked').
+    assert.deepEqual([taken.data.loan.endedHow, taken.data.ticket.linkState, taken.data.alsoCancelled], ['taken-back', 'cancelled', []]);
     assert.deepEqual(answer(await ben.post(`/api/screenings/${SC.pairBen}/heartbeat`, { position: 2500 })), [409, { error: 'taken-back' }]);
     assert.deepEqual(answer(await ben.get('/api/films/pair')), [404, { error: 'not-found' }]);
     assert.deepEqual(answer(await takeBack(T.pairBen)), [409, { error: 'not-out' }]);

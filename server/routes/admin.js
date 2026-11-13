@@ -112,32 +112,15 @@ export function adminRoutes(deps) {
     return f;
   };
 
-  // How the film's tickets have been used, from tickets and screenings only, so
-  // deleting old events never changes it. Revoked tickets count among those
-  // issued (and are counted again on their own); played means any screening,
-  // finished one that reached the end and wasn't given back.
-  const filmViewing = {
-    tickets: db.prepare(`
-      SELECT COUNT(*) AS issued, COALESCE(SUM(revoked_at IS NOT NULL), 0) AS revoked,
-             COALESCE(SUM(first_opened_at IS NOT NULL), 0) AS opened,
-             COALESCE(SUM(EXISTS (SELECT 1 FROM screenings s WHERE s.ticket_id = t.id)), 0) AS played,
-             COALESCE(SUM(EXISTS (SELECT 1 FROM screenings s WHERE s.ticket_id = t.id AND s.finished_at IS NOT NULL AND s.voided_at IS NULL)), 0) AS finished
-      FROM tickets t WHERE t.film_id = ?`),
-    screenings: db.prepare('SELECT COUNT(*) AS started, COALESCE(SUM(voided_at IS NOT NULL), 0) AS voided FROM screenings WHERE film_id = ?'),
-  };
-  function viewingOf(filmId) {
-    const s = filmViewing.screenings.get(filmId);
-    return { ...filmViewing.tickets.get(filmId), screenings: s.started, voided: s.voided };
-  }
-
-  // One film for the admin. The list leaves out `viewing` and `lending`, which only
-  // the film's own page shows. From version 2 (all three decided in access.js):
+  // One film for the admin. The list leaves out `lending`, which only the film's own
+  // page shows. From version 2 (all three decided in access.js):
   //   tape     { state: 'in' | 'out' | 'off', loan }: who has it, while it is out;
   //   links    { live, waiting, total }: its links that have the tape or could still
   //            take it, those of them that haven't lent, and every link sent;
   //   lending  how it has been lent, counted from links, loans and responses.
-  // (1.1.0's tickets.active went with its Films page, in slice 9: Links is links.live.)
-  function adminFilm(f, { viewing = true, now = Date.now(), tape = access.filmTape(f, now), links = access.linkCounts('film_id', { film: f.id }, now).get(f.id) } = {}) {
+  // (1.1.0's tickets.active went with its Films page, in slice 9: Links is links.live.
+  // Its `viewing`, counted from links and plays, went in slice 10: lending says it.)
+  function adminFilm(f, { lending = true, now = Date.now(), tape = access.filmTape(f, now), links = access.linkCounts('film_id', { film: f.id }, now).get(f.id) } = {}) {
     const media = filmMedia(f);
     const artwork = filmArtwork(f);
     const out = { id: f.id, slug: f.slug };
@@ -171,7 +154,7 @@ export function adminRoutes(deps) {
       media,
       tape,
       links: links ?? { live: 0, waiting: 0, total: 0 },
-      ...(viewing && { viewing: viewingOf(f.id), lending: access.filmLending(f.id) }),
+      ...(lending && { lending: access.filmLending(f.id) }),
     };
   }
 
@@ -195,7 +178,7 @@ export function adminRoutes(deps) {
     const out = new Map(access.adminLoans({ live: true }, now).map((l) => [l.film.id, l]));
     const links = access.linkCounts('film_id', {}, now);
     res.json(
-      films.map((f) => adminFilm(f, { viewing: false, now, tape: access.filmTape(f, now, out.get(f.id) ?? null), links: links.get(f.id) ?? null })),
+      films.map((f) => adminFilm(f, { lending: false, now, tape: access.filmTape(f, now, out.get(f.id) ?? null), links: links.get(f.id) ?? null })),
     );
   });
 
@@ -320,7 +303,6 @@ export function adminRoutes(deps) {
     if (!t) throw bad('Tape not found', 404);
     return t;
   };
-  const deviceOf = db.prepare('SELECT device FROM sessions WHERE id_hash = ?');
 
   // The browsers holding a ticket from its link: session_tickets joined to sessions
   // that are still live, by the rule sessions.load uses (not signed out or expired,
@@ -362,7 +344,7 @@ export function adminRoutes(deps) {
       // The latest screening's last report, which outlives the events the clean-up deletes.
       lastScreening: byTicket(db.prepare(`SELECT ticket_id, MAX(COALESCE(last_heartbeat_at, started_at)) AS at FROM screenings WHERE 1 ${only} GROUP BY ticket_id`).all(...args)),
       progress: byTicket(
-        db.prepare(`SELECT ticket_id, COUNT(*) AS plays, MAX(furthest_seconds) AS furthest, MAX(finished_at IS NOT NULL) AS finished
+        db.prepare(`SELECT ticket_id, MAX(furthest_seconds) AS furthest, MAX(finished_at IS NOT NULL) AS finished
                     FROM screenings WHERE voided_at IS NULL ${only} GROUP BY ticket_id`).all(...args),
       ),
     };
@@ -376,13 +358,10 @@ export function adminRoutes(deps) {
   //   loanDays   the link's own days, or null for the shop's default when Play is
   //              pressed. Sent back unchanged, it changes nothing (access.js, setLoanDays);
   //   pickNote   "Picked for you".
-  // Until the back office is rebuilt for loans, a link is also described to it in
-  // 1.x's fields and states. A link that can lend, is waiting for the tape or has it
-  // is 'ok'; one that has lent is 'used_up'. expiresAt and openScreening are its
-  // loan's due time and playback while it has the tape. screeningLimit and
-  // daysAfterFirstPlay are what a 1.x link was sent with: history, read by nothing.
-  const OLD_STATE = { in: 'ok', waiting: 'ok', lent: 'ok', spent: 'used_up' };
-  const screeningRow = db.prepare('SELECT * FROM screenings WHERE id = ?');
+  // 1.x's state, expiresAt, openScreening, screeningsUsed, screeningsLeft,
+  // screeningLimit and daysAfterFirstPlay went in slice 10, once the back office's
+  // pages had been rebuilt without them: linkState is the state, and the loan its due
+  // time and its playback (loan.screeningId, among the link's plays).
 
   function adminTicket(req, t, now = Date.now(), ctx = ticketContext([t.id], now)) {
     const status = access.ticketStatus(t, now);
@@ -398,10 +377,6 @@ export function adminRoutes(deps) {
     // Browsers that opened the link. Once the ticket has a person they can't use
     // it: they're waiting, and get it back if it's released.
     const opened = ctx.browsers.get(t.id)?.n ?? 0;
-    // The loan's playback, while the link has the tape.
-    const open = status.state === 'lent' ? screeningRow.get(status.loan.screening_id) : null;
-    const limit = t.screening_limit;
-    const plays = progress.plays ?? 0;
     return {
       id: t.id,
       code: t.code,
@@ -420,7 +395,6 @@ export function adminRoutes(deps) {
       linkState: access.linkState(t, status),
       loan: ctx.loans.get(t.id) ?? null,
       loanDays: t.loan_days,
-      screeningLimit: limit,
       // The start-by date as it was set, which a form sends back as it came, and the
       // date the link goes by: later by the time the tape has been out on other links
       // since the link was made, and null once the link has been played (access.js,
@@ -429,24 +403,10 @@ export function adminRoutes(deps) {
       startBy: t.start_by,
       effectiveStartBy: status.startBy,
       startByPaused: access.startByPaused(status, now),
-      daysAfterFirstPlay: t.days_after_first_play,
       firstOpenedAt: t.first_opened_at,
       firstPlayedAt: t.first_played_at,
       revokedAt: t.revoked_at,
       createdAt: t.created_at,
-      state: OLD_STATE[status.state] ?? status.state,
-      screeningsUsed: plays,
-      screeningsLeft: limit == null ? null : Math.max(0, limit - plays),
-      expiresAt: open ? status.loan.due_at : null,
-      openScreening: open
-        ? {
-            id: open.id,
-            resumableUntil: status.loan.due_at,
-            playingNow: open.active_until > now,
-            // The browser holding the play now; failing that, the one that took the tape.
-            device: (open.session_hash && deviceOf.get(open.session_hash)?.device) ?? status.loan.device ?? null,
-          }
-        : null,
       browsers: t.person_id == null ? opened : 0,
       waitingBrowsers: t.person_id == null ? 0 : opened,
       furthestSeconds: progress.furthest ?? null,

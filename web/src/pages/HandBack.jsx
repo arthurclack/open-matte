@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatDayTime } from '../api.js';
 import { Sleeve } from '../look/objects.jsx';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { useSite } from '../site.jsx';
 import { NarrowPage } from './tape.jsx';
 import { RETURN_ERRORS, RETURN_FAILED, handBackWords, handedBackWords } from './tapeWords.js';
@@ -205,17 +205,17 @@ export default function HandBack({ film, ticket, site, onReturned, onClose }) {
         </p>
         <Line kind="info">{w.returns}</Line>
         <div className="ui-btns fl-handback__go">
-          <button type="submit" className="ui-btn ui-btn--primary ui-btn--big" disabled={busy}>
+          <BusyButton type="submit" className="ui-btn ui-btn--primary ui-btn--big" busy={busy} busyText={w.sending}>
             {busy ? w.sending : w.send}
-          </button>
+          </BusyButton>
         </div>
         <div className="ui-btns">
-          <button type="button" className="ui-btn" onClick={() => send(false)} disabled={busy}>
+          <BusyButton type="button" className="ui-btn" onClick={() => send(false)} busy={busy} busyText={w.sending}>
             {w.without}
-          </button>
-          <button type="button" className="ui-btn ui-btn--quiet" onClick={onClose} disabled={busy}>
+          </BusyButton>
+          <BusyButton type="button" className="ui-btn ui-btn--quiet" onClick={onClose} busy={busy} busyText={w.sending}>
             {w.notNow}
-          </button>
+          </BusyButton>
         </div>
       </form>
     </NarrowPage>

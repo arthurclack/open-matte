@@ -1,8 +1,8 @@
 # Installing Open Matte
 
 This takes you from a fresh Ubuntu server to a working video shop: the site on your
-own domain over HTTPS, your first film on the shelf, and a tape played. (The pages say
-tape where the code and the logs say ticket, and play where they say screening:
+own domain over HTTPS, your first film on the shelf, and its tape played. (The pages say
+link where the code and the logs say ticket, and play where they say screening:
 [access.md](access.md#words) has the list.) Once it's running,
 [deploying.md](deploying.md) covers updates, backups, restoring and the rest.
 
@@ -27,7 +27,7 @@ server, or on your computer. The paths are the defaults, under `/srv/open-matte`
 Two settings stay with the shop for as long as it runs. Decide them before you
 start.
 
-**`DOMAIN`, the address people visit.** Every tape's link and setup link you send
+**`DOMAIN`, the address people visit.** Every link to a film and setup link you send
 carries it. If the site moves to another name later, links already sent only keep
 working while the old name still points at the server and is listed in
 `REDIRECT_FROM` (below), which sends it on to the new one.
@@ -43,7 +43,7 @@ It must be `DOMAIN` itself or a parent of it. For `DOMAIN=cinema.example.com`:
 
 **Choose it before you create the first setup link.** Changing it later, or moving
 the site to a domain it doesn't cover, leaves every passkey useless, and each person
-needs a recovery link from you to make a new one. Tapes for anyone with the link
+needs a recovery link from you to make a new one. Links for anyone with the link
 don't use passkeys, so they aren't affected by this choice. The shop's name, colours
 and logo, and members' names, can change whenever you like.
 
@@ -58,7 +58,7 @@ shop ignores its session cookie when a browser sends two different ones, so such
 a site can stop someone's browser using the shop. It can also hand its own session
 to a browser with no cookie from the shop, and it can make that so, by setting
 more cookies than the browser keeps for `example.com` so the shop's is dropped.
-Tape links opened in that browser then work for whoever runs that site too, until
+Links to films opened in that browser then work for whoever runs that site too, until
 the browser next signs in. So if other people run sites under `example.com`, give
 the shop a domain of its own.
 
@@ -268,16 +268,16 @@ There are two ways to put the code on the server. Pick one and keep to it.
 **With git, on the server.** Use this unless you change the code yourself. The server
 then knows exactly which release it runs, and updating or going back is a checkout.
 In the command, put the newest release in [CHANGELOG.md](../CHANGELOG.md) in place
-of `v1.0.0` (and your own fork's address, if you run a changed copy). On the server:
+of `v2.0.0` (and your own fork's address, if you run a changed copy). On the server:
 
 ```bash
 cd /srv/open-matte
-git clone --branch v1.0.0 https://github.com/arthurclack/open-matte.git app
+git clone --branch v2.0.0 https://github.com/arthurclack/open-matte.git app
 ```
 
-Git may warn that `refs/tags/v1.0.0` "is not a commit", and says you're in "detached
+Git may warn that `refs/tags/v2.0.0` "is not a commit", and says you're in "detached
 HEAD" state. Both are expected when you check out a release: `git -C app describe
---tags` prints `v1.0.0`, the release you asked for.
+--tags` prints `v2.0.0`, the release you asked for.
 
 Git ignores `deploy/.env`, so your settings stay put when you update.
 
@@ -438,22 +438,27 @@ folder**. The film appears **Off the shelf**. If the scan reports missing segmen
 the copy didn't finish: run the same `rsync` again and scan again. Open the film,
 check its details, and press **Put on the shelf**.
 
-## The first tape
+## The first link
 
-On the film's page in the back office, on its **Tapes** tab, under **Lend a tape**:
+On the film's page in the back office, on its **Tape and links** tab, under **Send a
+link**:
 
 1. Choose **Anyone with the link**.
 2. Under **Who is it for?**, write `Test`. It's only a note for you.
-3. Leave **Plays** at 1, and press **Lend a tape for anyone with the link**.
+3. Leave **Due back after** as it is, and press **Send a link for anyone with the
+   link**.
 4. Press **Copy link**. The link looks like `https://cinema.example.com/t/...`.
 
 Open the link on your phone, or in a private window on your computer, so it isn't
-signed in to the back office, and press Play. A play starts, and the **Ledger** in the
-back office shows rows for `Test` reading **Opened the film page** and then **Started
-a new play**.
+signed in to the back office, and press Play. Play takes the film's tape out and a
+play starts, and the **Ledger** in the back office shows rows for `Test` reading
+**Opened the film page**, **Lent, due back** and the date, and **Started a new play**.
 
-That test used the tape's one play, so it's spent once the time to come back to it
-(48 hours by default) is over. Lend a fresh tape to each person you send one to.
+Each film is one tape, so while that test has it out, nobody else can play the film.
+Press **Return it now** on the film's page in that browser, or **Take the tape back**
+on the film's page in the back office, and it's back in. Either way the test link
+won't lend again: returned, it's spent (a link lends once); taken back, it's
+cancelled. Send a fresh link to each person you send one to.
 
 If the site works everywhere except on your home network, the network may be blocking
 or rewriting your domain: see [Testing from home](deploying.md#testing-from-home).
@@ -469,7 +474,8 @@ or rewriting your domain: see [Testing from home](deploying.md#testing-from-home
 - **Status** in the back office shows the media folder as **Readable**, with your film's folder among those it counts and the last scan having
   found the film, the free disk space, a backup file (the first is written about a minute after the first
   start), and the version running.
-- **A tape plays** on a phone over mobile data, away from your own network.
+- **A link plays** on a phone over mobile data, away from your own network (return
+  the tape afterwards).
 - **Passkeys work.** Under **Members**, make yourself a membership card. On your page,
   press **Create a setup link**, then **Create link**, then **Copy link** (the link is
   shown only once), and open the link on your phone. Create the passkey, then sign out
@@ -483,7 +489,7 @@ or rewriting your domain: see [Testing from home](deploying.md#testing-from-home
   sets up a daily copy.
 - **Read [deploying.md](deploying.md)** before your first update: it covers updating,
   backups and restoring, rolling back and moving to a new server.
-- **Read [access.md](access.md)** for the rules: the two kinds of tape, members and
+- **Read [access.md](access.md)** for the rules: the two kinds of link, loans, members and
   passkeys, and what is recorded about viewers and for how long.
 - **Before each update, read [CHANGELOG.md](../CHANGELOG.md).** Each release says
   whether it needs a backup first, and whether you can go back without a restore.

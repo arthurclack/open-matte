@@ -299,24 +299,20 @@ describe('the ticket list’s last activity, once the events have gone', () => {
 
 // ====================================================================== summaries
 // The spec names the numbers (issued, of which revoked; opened; played; finished;
-// screenings started) but not where they sit in the response: the summary is the
-// object holding opened, played and finished, and a person's is the list of films
-// each with those.
+// screenings started) but not where they sit in the response: a person's summary is
+// the list of films each with opened, played and finished. A film's is its `lending`
+// (version 2): links sent, of which cancelled; opened; lent; finished; responses.
+// (1.1.0's `viewing`, which counted links played and plays started, went in slice 10,
+// once the film's page read `lending` alone: a link lends once, so lent is played.)
 function* objects(v) {
   if (!v || typeof v !== 'object') return;
   if (!Array.isArray(v)) yield v;
   for (const x of Object.values(v)) yield* objects(x);
 }
 function filmSummary(film) {
-  const all = [...objects(film)];
-  const s = all.find((o) => ['opened', 'played', 'finished'].every((k) => typeof o[k] === 'number'));
-  assert.ok(s, `no summary in the film's page: ${JSON.stringify(film)}`);
-  // Screenings started may sit beside the ticket counts, or one level up.
-  const started = [s, all.find((o) => Object.values(o).includes(s))]
-    .filter(Boolean)
-    .map((o) => Object.entries(o).find(([k, v]) => /screening|started/i.test(k) && typeof v === 'number'))
-    .find(Boolean);
-  return { issued: s.issued ?? s.tickets, revoked: s.revoked, opened: s.opened, played: s.played, finished: s.finished, screenings: started?.[1] };
+  assert.ok(film.lending, `no lending on the film's page: ${JSON.stringify(film)}`);
+  assert.ok(!('viewing' in film), '1.1.0’s viewing went in slice 10');
+  return film.lending;
 }
 function personSummary(person) {
   // Each as a flag, a count or a time.
@@ -358,7 +354,10 @@ describe('summaries on the film and person pages', () => {
     const mine = await c.issue({ personId: alex.p.id, label: 'Alex' }, 'heat');
     assert.equal((await alex.phone.get('/api/films/heat')).status, 200);
     await finish(alex.phone, 'heat');
-    assert.equal((await c.admin.get(`/api/admin/tickets/${mine.id}`)).data.screeningsUsed, 1);
+    // Its one loan, watched to the end and still out. (1.x's screeningsUsed, 1, went in
+    // slice 10: the loan says it.)
+    const own = (await c.admin.get(`/api/admin/tickets/${mine.id}`)).data;
+    assert.deepEqual([own.linkState, own.loan.finished], ['has', true]);
 
     // Solaris: Alex's link, watched to the end in 1.x and that play then given back
     // (the back office's Give back, which goes: here the row is marked as 1.x left it).
@@ -372,13 +371,14 @@ describe('summaries on the film and person pages', () => {
     await c.play(alex.phone);
   });
 
-  test("a film's numbers come from its tickets and screenings", async () => {
-    assert.deepEqual(filmSummary(await filmPage('heat')), { issued: 6, revoked: 1, opened: 4, played: 3, finished: 2, screenings: 3 });
+  // Six links sent, one cancelled, four opened, three lent (each one play), two of
+  // those watched to the end. (1.x said issued 6, revoked 1, played 3, screenings 3.)
+  test("a film's numbers come from its links and loans", async () => {
+    assert.deepEqual(filmSummary(await filmPage('heat')), { sent: 6, cancelled: 1, opened: 4, lent: 3, finished: 2, responses: 0 });
   });
 
   test('a play given back in 1.x doesn’t count as finished', async () => {
-    const s = filmSummary(await filmPage('solaris'));
-    assert.deepEqual({ issued: s.issued, revoked: s.revoked, opened: s.opened, played: s.played, finished: s.finished }, { issued: 1, revoked: 0, opened: 1, played: 1, finished: 0 });
+    assert.deepEqual(filmSummary(await filmPage('solaris')), { sent: 1, cancelled: 0, opened: 1, lent: 1, finished: 0, responses: 0 });
   });
 
   test("a person's films: their own tickets only, opened, played and finished, newest first", async () => {

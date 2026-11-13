@@ -186,7 +186,11 @@ test('two browsers pressing Play at once on one link: one has the tape, the othe
   assert.equal(loan.session_hash, sha256(winner.jar.get('om_session')));
   assert.equal(await status(winner, master(slug)), 200);
   assert.equal(await status(loser, master(slug)), 403);
-  assert.equal((await admin.get(`/api/admin/tickets/${ticket.id}`)).data.screeningsUsed, 1);
+  // The link has the tape, on one loan and its one play. (1.x said screeningsUsed: 1;
+  // it went in slice 10.)
+  const t = (await admin.get(`/api/admin/tickets/${ticket.id}`)).data;
+  assert.deepEqual([t.linkState, t.loan.id], ['has', loan.id]);
+  assert.deepEqual(srv.db.prepare('SELECT id FROM screenings WHERE ticket_id = ?').all(ticket.id).map((r) => r.id), [t.loan.screeningId]);
 });
 
 // 1.x: any browser holding the link took over once the player went quiet. Taking over
@@ -255,7 +259,11 @@ test('a film whose rescan finds errors explains itself too, and starts no screen
   // Not even a fresh browser with the link: a screening here would be one used for nothing.
   const other = await holder(ticket);
   assert.equal((await other.post('/api/films/solaris/screenings')).data.error, 'unavailable');
-  assert.equal((await admin.get(`/api/admin/tickets/${ticket.id}`)).data.screeningsUsed, 1);
+  // Still the one loan, with its one play, and the clock running on it. (1.x said
+  // screeningsUsed: 1; it went in slice 10.)
+  const t = (await admin.get(`/api/admin/tickets/${ticket.id}`)).data;
+  assert.deepEqual([t.linkState, t.loan.live, t.loan.screeningId], ['unavailable', true, screeningId]);
+  assert.equal(srv.db.prepare('SELECT COUNT(*) AS n FROM screenings WHERE ticket_id = ?').get(ticket.id).n, 1);
 });
 
 test('a JSON body built to break String() or Number() gets a refusal, not a server error', async () => {

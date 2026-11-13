@@ -415,7 +415,23 @@ describe('while a tape is out, everyone but its borrower gets the same answer', 
     const lent = events.find((e) => e.type === 'lent');
     assert.deepEqual([lent.personName, lent.device, lent.ticketLabel, lent.at], [BORROWER_NAME, BORROWER_DEVICE, LABELS.lent, loan.taken_at]);
     const mine = (await admin.get(`/api/admin/tickets/${t.lent.id}`)).data;
-    assert.deepEqual([mine.openScreening.device, mine.firstPlayedAt], [BORROWER_DEVICE, loan.taken_at]);
+    // The borrower's device, on the link's loan (1.x said it as openScreening.device),
+    // and on the loan's play among the link's plays, which is what the link's page says
+    // ("Now … on {device}", and its Plays table).
+    assert.deepEqual([mine.loan.borrower.device, mine.firstPlayedAt], [BORROWER_DEVICE, loan.taken_at]);
+    const play = mine.screenings.find((s) => s.id === mine.loan.screeningId);
+    assert.deepEqual([play?.id, play?.device], [screeningId, BORROWER_DEVICE]);
+    // With the browser's session no longer naming it (as once the clean-up has deleted
+    // the session), the play's device is the one the loan kept.
+    const sessionDevice = srv.db.prepare('SELECT device FROM sessions WHERE id_hash = ?').get(loan.session_hash).device;
+    srv.db.prepare('UPDATE sessions SET device = NULL WHERE id_hash = ?').run(loan.session_hash);
+    try {
+      const again = (await admin.get(`/api/admin/tickets/${t.lent.id}`)).data;
+      assert.equal(again.screenings.find((s) => s.id === again.loan.screeningId)?.device, loan.device);
+      assert.equal(loan.device, BORROWER_DEVICE);
+    } finally {
+      srv.db.prepare('UPDATE sessions SET device = ? WHERE id_hash = ?').run(sessionDevice, loan.session_hash);
+    }
     // Slice 5: the loans list, the film, the link, Status and the owner's own preview
     // of the film page. A browser's loan: its device, and the member signed in there.
     const who = { kind: 'browser', device: BORROWER_DEVICE, signedInAs: { id: srv.db.prepare('SELECT id FROM people WHERE name = ?').get(BORROWER_NAME).id, name: BORROWER_NAME, disabled: false } };
@@ -440,7 +456,8 @@ describe('while a tape is out, everyone but its borrower gets the same answer', 
     assert.ok(loan.taken_at < Date.now() - HOUR && loan.due_at > Date.now());
     // A link that lent stays lent, and one that didn't waits: so the date tells nothing.
     const admins = (await admin.get(`/api/admin/tickets?film=${film.id}`)).data;
-    assert.deepEqual(admins.map((x) => x.state), ['ok', 'ok', 'ok'], 'none shows as expired while the tape is out');
+    // The one that lent has it, and the others wait (1.x's state said 'ok' for all three).
+    assert.deepEqual(admins.map((x) => x.linkState).toSorted(), ['has', 'waiting', 'waiting'], 'none shows as missed while the tape is out');
     await compare({ ticket: OUT(loan.due_at), play: 'out' });
   });
 

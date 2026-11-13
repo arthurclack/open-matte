@@ -70,7 +70,8 @@
 @media (hover: hover) and (pointer: fine) {
   .ui80 .ui-item:not([aria-current]):not(.is-on):not([aria-expanded='true']):hover { background: var(--ui-raised); }
 }
-.ui80 .ui-item:disabled { color: var(--ui-fg-3); cursor: not-allowed; }
+/* busy (look/busy.js) is drawn as disabled */
+.ui80 .ui-item:disabled, .ui80 .ui-item[aria-disabled='true'] { color: var(--ui-fg-3); cursor: not-allowed; }
 /* the pull-down's mark: a stepped triangle, drawn in whole pixels (look/ui.jsx Tri) */
 .ui80 .ui-tri { width: 10px; height: 6px; flex: none; fill: currentColor; shape-rendering: crispEdges; }
 
@@ -138,8 +139,10 @@
 .ui80 .ui-nav { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .ui80 .ui-nav__item { display: flex; align-items: center; min-height: 40px; padding: 0 12px; font: 500 15px/20px var(--ui-face); font-variant-ligatures: none; color: var(--ui-fg-2); text-decoration: none; border-radius: 0; background: none; border: 0; cursor: pointer; text-align: left; }
 .ui80 .ui-nav__item[aria-current]:not([aria-current='false']) { background: var(--ui-lit); color: var(--ui-lit-ink); }
-@media (hover: hover) and (pointer: fine) { .ui80 .ui-nav__item:not([aria-current]):hover { background: var(--ui-raised); color: var(--ui-fg); } }
+@media (hover: hover) and (pointer: fine) { .ui80 .ui-nav__item:not([aria-current]):not(:disabled):not([aria-disabled='true']):hover { background: var(--ui-raised); color: var(--ui-fg); } }
 .ui80 .ui-office__foot .ui-nav__item { color: var(--ui-fg-3); font-weight: 400; }
+/* busy (look/busy.js: Sign out while it asks) is drawn as disabled */
+.ui80 .ui-nav__item:disabled, .ui80 .ui-nav__item[aria-disabled='true'] { color: var(--ui-fg-3); opacity: 0.6; cursor: not-allowed; }
 
 /* the office's menu is a .ui-tabs: a column of items on a wide screen, one row of tabs on a narrow one */
 .ui80 .ui-office__nav > .ui-tabs .ui-tabs__row { flex-direction: column; gap: 8px; padding: 0; border: 0; overflow: visible; }
@@ -206,14 +209,16 @@
 @media (hover: hover) and (pointer: fine) {
   .ui80 .ui-btn:not([disabled]):not([aria-disabled='true']):hover { background: var(--ui-raised); }
   .ui80 .ui-btn--primary:not([disabled]):not([aria-disabled='true']):hover { background: var(--ui-lit-hover); border-color: var(--ui-lit-hover); }
-  .ui80 .ui-btn--quiet:not([disabled]):hover { background: none; text-decoration-color: currentColor; }
+  .ui80 .ui-btn--quiet:not([disabled]):not([aria-disabled='true']):hover { background: none; text-decoration-color: currentColor; }
 }
 .ui80 .ui-btn:not([disabled]):not([aria-disabled='true']):active { background: var(--ui-raised); }
 .ui80 .ui-btn--primary:not([disabled]):not([aria-disabled='true']):active { background: var(--ui-lit-press); border-color: var(--ui-lit-press); }
-.ui80 .ui-btn--quiet:not([disabled]):active { background: none; }
+.ui80 .ui-btn--quiet:not([disabled]):not([aria-disabled='true']):active { background: none; }
 /* unavailable: greyed out the way a period menu greys an item, a dotted edge and dimmer words, never lit */
 .ui80 .ui-btn[disabled], .ui80 .ui-btn[aria-disabled='true'] { background: transparent; color: var(--ui-fg-3); border: 1px dashed rgb(154 146 132 / 0.7); cursor: not-allowed; }
-.ui80 .ui-btn--quiet[disabled] { border-color: transparent; text-decoration-style: dotted; }
+.ui80 .ui-btn--quiet[disabled], .ui80 .ui-btn--quiet[aria-disabled='true'] { border-color: transparent; text-decoration-style: dotted; }
+/* a label that is a button, busy (the logo's upload: its file input is aria-disabled) */
+.ui80 .ui-btn:has(> input[aria-disabled='true']) { background: transparent; color: var(--ui-fg-3); border: 1px dashed rgb(154 146 132 / 0.7); cursor: not-allowed; }
 .ui80 .ui-btns { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 /* a label that is a button (a file input inside it stays reachable from the keyboard) */
 .ui80 .ui-btn:has(> input:focus-visible) { outline: 3px solid var(--ui-focus); outline-offset: 2px; box-shadow: 0 0 0 2px var(--ui-focus-gap); }
@@ -266,8 +271,8 @@
   background-repeat: no-repeat;
 }
 .ui80 :is(.ui-check, .ui-choice) input[type='radio']:checked { border-color: var(--ui-lit); background: radial-gradient(circle, var(--ui-lit) 0 4.5px, var(--ui-sunk) 5px); }
-.ui80 :is(.ui-check, .ui-choice) input[disabled] { border-style: dashed; border-color: var(--ui-fg-3); cursor: not-allowed; }
-.ui80 :is(.ui-check, .ui-choice):has(input[disabled]) { color: var(--ui-fg-3); cursor: not-allowed; }
+.ui80 :is(.ui-check, .ui-choice) input:is([disabled], [aria-disabled='true']) { border-style: dashed; border-color: var(--ui-fg-3); cursor: not-allowed; }
+.ui80 :is(.ui-check, .ui-choice):has(input:is([disabled], [aria-disabled='true'])) { color: var(--ui-fg-3); cursor: not-allowed; }
 .ui80 .ui-choice { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; margin: 0 0 8px; border: 1px solid var(--ui-rule); border-radius: 0; cursor: pointer; font: 400 16px/24px var(--ui-read); }
 .ui80 .ui-choice b { font-weight: 600; }
 .ui80 .ui-choice small { display: block; font-size: 14px; line-height: 20px; color: var(--ui-fg-3); margin-top: 2px; }
@@ -337,6 +342,10 @@
   .ui80 .ui-table--stack td.ui-title::before, .ui80 .ui-table--stack td:not([data-label])::before { content: none; }
   .ui80 .ui-table--stack td:empty { display: none; }
   .ui80 .ui-table-wrap:has(> .ui-table--stack) { overflow-x: visible; }
+  /* a link in a card is a finger's target: at least 32px tall, its words on the line
+     with the cell's label (a button is already: .ui-btn--small) */
+  .ui80 .ui-table--stack td { align-items: baseline; }
+  .ui80 .ui-table--stack td a:not(.ui-btn) { display: inline-block; min-height: 32px; padding-block: 5px; box-sizing: border-box; }
 }
 
 /* ---------- the status line at the foot of a screen ---------- */

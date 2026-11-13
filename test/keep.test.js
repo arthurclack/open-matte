@@ -352,7 +352,9 @@ describe('keeping', () => {
     comeDue(t.id);
     await refusedFor(laptop, 'spent');
     await refusedFor(tv, 'spent, for the borrower');
-    assert.equal((await adminTicket(t.id)).screeningsUsed, 1);
+    // Done: its one loan, the play the tv carried on, is over (1.x: screeningsUsed 1).
+    const done = await adminTicket(t.id);
+    assert.deepEqual([done.linkState, done.loan.screeningId, done.loan.live], ['done', screeningId, false]);
   });
 
   test('a waiting link can’t be kept while the tape is out on another link; once it is back it can, and then lends to its keeper', async () => {

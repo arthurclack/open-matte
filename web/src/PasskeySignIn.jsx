@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, formatDay } from './api.js';
-import { Line } from './look/ui.jsx';
+import { BusyButton, Line } from './look/ui.jsx';
 import { hostName } from './look/words.js';
 import MembershipCard from './MembershipCard.jsx';
 import { anotherBrowserMayHelp, browserProblem, serverProblem, signInWithPasskey, supportsPasskeys, useCeremonyOptions } from './passkeys.js';
@@ -105,7 +105,8 @@ function SignInButton({ onSignedIn, copyLabel, card }) {
       {(message || fetchError) && <Problem message={message || fetchError} />}
       <div className="ui-btns">
         {card ? (
-          <button type="button" className="fl-cardbtn" onClick={signIn} disabled={!options || busy || ceremony.spent}>
+          // Spent: the server took that challenge, and a new one is on its way.
+          <BusyButton type="button" className="fl-cardbtn" onClick={signIn} busy={busy || ceremony.spent} busyText={busy ? 'Signing in…' : undefined} disabled={!options}>
             {/* A picture of what the words say: the button's name is its words. */}
             <span className="fl-cardbtn__card" aria-hidden="true">
               <MembershipCard site={site} face="front" />
@@ -114,12 +115,12 @@ function SignInButton({ onSignedIn, copyLabel, card }) {
               <KeyMark />
               {busy ? 'Signing in…' : 'Sign in with a passkey'}
             </span>
-          </button>
+          </BusyButton>
         ) : (
-          <button type="button" className="ui-btn ui-btn--primary ui-btn--big" onClick={signIn} disabled={!options || busy || ceremony.spent}>
+          <BusyButton type="button" className="ui-btn ui-btn--primary ui-btn--big" onClick={signIn} busy={busy || ceremony.spent} busyText={busy ? 'Signing in…' : undefined} disabled={!options}>
             <KeyMark />
             {busy ? 'Signing in…' : 'Sign in with a passkey'}
-          </button>
+          </BusyButton>
         )}
         {fetchError && !ceremony.loading && (
           <button type="button" className="ui-btn" onClick={ceremony.reload}>

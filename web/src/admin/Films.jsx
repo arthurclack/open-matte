@@ -2,7 +2,7 @@ import { useContext, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatAgo, plural } from '../api.js';
 import { Sleeve } from '../look/objects.jsx';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { tapeCell } from './loanWords.js';
 import { AdminContext, ErrorNote, Fact, Head, Mark, MediaBadge, Table, useAction, useLoad } from './ui.jsx';
 
@@ -29,9 +29,9 @@ export default function Films({ children }) {
         title="Films"
         lede="Each folder in the media directory with a film.json is a film. New films start off the shelf."
         actions={
-          <button type="button" className="ui-btn ui-btn--primary" onClick={scan} disabled={action.busy}>
+          <BusyButton type="button" className="ui-btn ui-btn--primary" onClick={scan} busy={action.busy} busyText="Scanning…">
             {action.busy ? 'Scanning…' : 'Scan media folder'}
-          </button>
+          </BusyButton>
         }
       />
       {children}

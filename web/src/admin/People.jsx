@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, formatAgo, formatDay, formatDayTime, formatMonthYear } from '../api.js';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { ErrorNote, Head, LinkBox, Mark, Table, useAction, useLoad } from './ui.jsx';
 
 // The server answers these with a code; everything else it says in words.
@@ -180,9 +180,9 @@ function AddPerson() {
         </div>
       </div>
       <div className="ui-btns">
-        <button className="ui-btn ui-btn--primary" disabled={action.busy || !form.name.trim()}>
+        <BusyButton className="ui-btn ui-btn--primary" busy={action.busy} disabled={!form.name.trim()}>
           Make the card
-        </button>
+        </BusyButton>
       </div>
     </form>
   );

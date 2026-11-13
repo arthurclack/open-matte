@@ -26,7 +26,7 @@ img { display: block; max-width: 100%; }
 button, input, textarea, select { font: inherit; color: inherit; }
 h1, h2, h3 { font-family: var(--sans); font-weight: 600; line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
 p { margin: 0 0 1em; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 /* The focus block (look/ui.css) is on everything under .ui80, which is the whole page;
    this is the same for anything outside it. */
 :focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 2px; }

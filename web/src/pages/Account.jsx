@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, formatAgo, formatDay, formatDayTime } from '../api.js';
 import { enrollLink } from '../enrollLink.js';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { hostName } from '../look/words.js';
 import MembershipCard from '../MembershipCard.jsx';
 import { confirmSignOut, useSite } from '../site.jsx';
@@ -154,12 +154,12 @@ export default function Account() {
           </Line>
 
           <div className="ui-btns fl-account__out">
-            <button type="button" className="ui-btn" onClick={signOutHere} disabled={busy}>
+            <BusyButton type="button" className="ui-btn" onClick={signOutHere} busy={busy} busyText="Signing out…">
               Sign out
-            </button>
-            <button type="button" className="ui-btn" onClick={signOutEverywhere} disabled={busy}>
+            </BusyButton>
+            <BusyButton type="button" className="ui-btn" onClick={signOutEverywhere} busy={busy} busyText="Signing out…">
               Sign out everywhere
-            </button>
+            </BusyButton>
           </div>
           <p className="fl-list__meta">
             {others

@@ -10,15 +10,19 @@ The rules in [docs/access.md](docs/access.md), as the code in the latest release
 the `main` branch implements them. For example:
 
 - Playing a film, or fetching any of its playlists, segments, audio or subtitles,
-  without a ticket and a screening that the rules allow. A ticket for one film
+  without a link (a ticket), its loan and a Play that the rules allow. A ticket for one film
   unlocking another, or a file from outside a film's folder being served.
 - Using a ticket for one person without being signed in as them, or learning its film
   or its person from the link.
 - Signing in as someone without their passkey, creating a passkey without a valid
   setup or recovery link, or replaying a passkey response.
 - Reaching the admin without the admin password, or a person becoming an admin.
-- Getting round revoking a ticket, signing out, disabling a person, removing a
-  passkey, a screening limit, a start-by date, expiry or "one device at a time".
+- Getting round cancelling a link, signing out, disabling a person, removing a
+  passkey, taking a tape back, a tape's due-back date, one tape per film, a link
+  lending once, a start-by date or "one device at a time".
+- Learning who has a tape out, or anything of someone else's loan beyond "Out on loan"
+  and the date it's due back, from anywhere but the back office ([Never who has
+  it](docs/access.md#never-who-has-it)).
 - Something the docs say isn't recorded, logged or sent turning up where it
   shouldn't: ticket codes, link tokens or cookies in logs or a Referer; an address,
   name or title in Playback help's summary; a preview poster's address that fetches

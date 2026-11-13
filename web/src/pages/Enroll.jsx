@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api, formatDayTime } from '../api.js';
 import { enrollLink } from '../enrollLink.js';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { hostName } from '../look/words.js';
 import MembershipCard, { loadCardFonts } from '../MembershipCard.jsx';
 import { KeyMark, OpenInBrowser, Problem } from '../PasskeySignIn.jsx';
@@ -203,9 +203,9 @@ function EnrollLink({ token }) {
           <>
             <Problem message={serverProblem(ceremony.error, hostName(site))} />
             <div className="ui-btns">
-              <button type="button" className="ui-btn ui-btn--primary" onClick={ceremony.reload} disabled={ceremony.loading}>
+              <BusyButton type="button" className="ui-btn ui-btn--primary" onClick={() => ceremony.reload()} busy={ceremony.loading}>
                 Try again
-              </button>
+              </BusyButton>
             </div>
           </>
         ) : (
@@ -234,10 +234,11 @@ function EnrollLink({ token }) {
       )}
       {message && <Problem message={message} />}
       <div className="ui-btns">
-        <button type="button" className="ui-btn ui-btn--primary ui-btn--big" onClick={create} disabled={busy || ceremony.spent}>
+        {/* Spent: the server took that challenge, and a new one is on its way. */}
+        <BusyButton type="button" className="ui-btn ui-btn--primary ui-btn--big" onClick={create} busy={busy || ceremony.spent} busyText={busy ? 'Creating…' : undefined}>
           <KeyMark />
           {busy ? 'Creating…' : 'Create a passkey'}
-        </button>
+        </BusyButton>
       </div>
       {/* The fragment has gone from the address, so Copy link puts the whole link back together. */}
       {refusedHere && <OpenInBrowser refused link={`${window.location.origin}/enroll#${token}`} />}

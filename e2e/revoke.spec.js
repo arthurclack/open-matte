@@ -1,20 +1,21 @@
-// Take it back: cancelling the link that has the tape, while its film plays, takes
-// the tape back. The player stops at the next request it makes and says who took it
-// back, the page is gone as a cancelled link's is, a media request from that browser
-// is refused, and the lock screen forgets the film. Every browser; skips where the
-// browser can't decode H.264 and AAC, since it needs the film playing.
+// Take it back: while its film plays, the owner takes the tape back from the film's
+// page in the back office, which asks first, on the page, and says what the borrower
+// will see. The player stops at the next request it makes and says who took it back,
+// the page is gone as a cancelled link's is, a media request from that browser is
+// refused, the lock screen forgets the film, and the link is cancelled. Every browser;
+// skips where the browser can't decode H.264 and AAC, since it needs the film playing.
 //
 // (1.x: the progress report was answered 404, and the player might say "This tape is
 // no longer valid". Version 2 decides by the loan first, so the borrower is told
 // "taken back": docs/version-2.md, "What can happen to a tape". 1.x's second journey
 // here, a play given back mid-film, went with Give back: a loan's playback can't be.)
-import { admin, expect, film, heartbeats, media, playbackSupport, test, unique } from './fixtures.js';
+import { admin, asAdmin, expect, film, heartbeats, media, playbackSupport, test, unique } from './fixtures.js';
 
 // What the player says when the tape is taken back, wherever it hears of it: from its
 // progress report, or from a playlist or segment refused first (it then asks why).
 const TAKEN_BACK = /has taken this tape back\.$/;
 
-test('taking a tape back mid-film stops the player, which says so, and refuses its media', async ({ page }, testInfo) => {
+test('taking a tape back mid-film stops the player, which says so, and refuses its media', async ({ page, newContext }, testInfo) => {
   const ticket = await admin.issueTicket({ label: unique('Revoke', testInfo) });
   const reports = heartbeats(page);
 
@@ -32,15 +33,46 @@ test('taking a tape back mid-film stops the player, which says so, and refuses i
   const before = await media.session(page);
   if (before.supported) expect(before.metadata?.title).toBe(film.title);
 
-  await test.step('the owner cancels the link, which takes the tape back, and the next request the player makes is refused', async () => {
-    const cancelled = await admin.revoke(ticket.id);
-    expect(cancelled.tookBack).toBe(true);
+  await test.step('the owner takes the tape back on the film’s page, which asks first', async () => {
+    // The back office in a browser of its own: the friend's is never signed in to it.
+    const office = await newContext();
+    await asAdmin(office);
+    const desk = await office.newPage();
+    await desk.goto(`/admin/films/${film.id}`);
+    const tape = desk.getByRole('region', { name: 'The tape' });
+    await expect(tape).toContainText('Out to a browser, from a link anyone can use');
+    await expect(tape).toContainText(`Your note: ${ticket.label}`);
+    await tape.getByRole('button', { name: 'Take the tape back' }).click();
+    const question = tape.getByRole('group', { name: `Take ${film.title} back from that browser?` });
+    await expect(question).toBeVisible();
+    await expect(question).toContainText("It's back in straight away, and that browser's link stops working, as cancelling it would.");
+    await expect(question).toContainText('has taken this tape back.” Its page for the film then says “Nothing on the shelf here”, as for a cancelled link.');
+    // Keep it out changes nothing, and gives the focus back to the button.
+    await question.getByRole('button', { name: 'Keep it out' }).click();
+    await expect(tape.getByRole('button', { name: 'Take the tape back' })).toBeFocused();
+    expect((await admin.get(`/api/admin/tickets/${ticket.id}`)).linkState).toBe('has');
+
+    await tape.getByRole('button', { name: 'Take the tape back' }).click();
+    const taken = desk.waitForResponse((r) => /^\/api\/admin\/loans\/\d+\/take-back$/.test(new URL(r.url()).pathname));
+    await question.getByRole('button', { name: 'Take it back' }).click();
+    expect((await taken).status()).toBe(200);
+    await expect(desk.getByRole('status').filter({ hasText: `${film.title} is back in.` })).toHaveText(
+      `${film.title} is back in. You took it back from that browser, and the link it was out on is cancelled.`,
+    );
+    await expect(desk.locator('.of-tape__state')).toHaveText('In');
+    expect((await admin.get(`/api/admin/tickets/${ticket.id}`)).linkState).toBe('cancelled');
+  });
+
+  await test.step('the next request the player makes is refused, and it says who took the tape back', async () => {
     // The next progress report would come within 30 seconds; pausing sends one
     // at once, as a viewer pausing would. (If the film already ended, playing
-    // it again does the same.)
-    await page.locator('video').evaluate((v) => {
-      if (v.paused) v.play().catch(() => {});
-      else v.pause();
+    // it again does the same; if the player has already heard, from a request for
+    // more of the film, there is no video left to press.)
+    await page.locator('video').evaluateAll((videos) => {
+      for (const v of videos) {
+        if (v.paused) v.play().catch(() => {});
+        else v.pause();
+      }
     });
     await expect.poll(() => reports.filter((r) => r.status !== 200).map((r) => r.status)).toContain(409);
     await expect.poll(() => page.evaluate(() => window.__playerMessages), { message: 'the player says why it stopped' }).toContainEqual(

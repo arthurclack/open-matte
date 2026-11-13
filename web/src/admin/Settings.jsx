@@ -1,6 +1,6 @@
 import { useContext, useEffect, useId, useState } from 'react';
 import { api, formatBytes, formatDateTime, plural } from '../api.js';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { askHost, pickedBy } from '../look/words.js';
 import { signOutEveryoneWords } from './loanWords.js';
 import Branding from './Branding.jsx';
@@ -161,9 +161,9 @@ export default function Settings() {
           </span>
         </label>
         <div className="ui-btns of-gap-s">
-          <button className="ui-btn ui-btn--primary" disabled={action.busy}>
+          <BusyButton className="ui-btn ui-btn--primary" busy={action.busy}>
             Save settings
-          </button>
+          </BusyButton>
         </div>
       </form>
 
@@ -188,9 +188,9 @@ export default function Settings() {
           link won't take it out again. A tape out to a member on their own link stays theirs.
         </p>
         <div className="ui-btns">
-          <button type="button" className="ui-btn ui-btn--danger" onClick={expireAll} disabled={everyone.busy}>
+          <BusyButton type="button" className="ui-btn ui-btn--danger" onClick={expireAll} busy={everyone.busy}>
             Sign out every friend and member
-          </button>
+          </BusyButton>
         </div>
       </section>
 
@@ -307,13 +307,13 @@ function TmdbSettings({ settings, onSaved }) {
         </select>
       </div>
       <div className="ui-btns">
-        <button className="ui-btn ui-btn--primary" disabled={action.busy}>
+        <BusyButton className="ui-btn ui-btn--primary" busy={action.busy} busyText="Checking…">
           {action.busy ? 'Checking…' : 'Save'}
-        </button>
+        </BusyButton>
         {t.source === 'settings' && (
-          <button type="button" className="ui-btn ui-btn--danger" onClick={removeKey} disabled={action.busy}>
+          <BusyButton type="button" className="ui-btn ui-btn--danger" onClick={removeKey} busy={action.busy} busyText="Checking…">
             Remove key
-          </button>
+          </BusyButton>
         )}
       </div>
       {/* TMDB's logo and notice, as on the site's footer (site.jsx), since the back office
@@ -419,9 +419,9 @@ function Backups() {
         </ul>
       )}
       <div className="ui-btns">
-        <button type="button" className="ui-btn" onClick={backUpNow} disabled={action.busy}>
+        <BusyButton type="button" className="ui-btn" onClick={backUpNow} busy={action.busy} busyText="Backing up…">
           {action.busy ? 'Backing up…' : 'Back up now'}
-        </button>
+        </BusyButton>
       </div>
       <p className="ui-field__hint of-gap-s">
         Saved in <span className="of-mono">{data.dir}</span> inside the app. See docs/deploying.md for where that is on the server, and how to restore.
@@ -523,12 +523,12 @@ function Retention({ settings, onSaved }) {
       </p>
       <p className="of-p of-dim of-small">{lastClearedText(data.lastRun)}</p>
       <div className="ui-btns">
-        <button className="ui-btn ui-btn--primary" disabled={!dirty || action.busy}>
+        <BusyButton className="ui-btn ui-btn--primary" busy={action.busy} disabled={!dirty}>
           Save
-        </button>
-        <button type="button" className="ui-btn" onClick={clearNow} disabled={action.busy || nothing}>
+        </BusyButton>
+        <BusyButton type="button" className="ui-btn" onClick={clearNow} busy={action.busy} disabled={nothing}>
           Clear now
-        </button>
+        </BusyButton>
       </div>
     </>,
     { onSubmit: save },

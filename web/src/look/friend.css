@@ -66,10 +66,11 @@
   display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; padding: 0 20px;
   background: var(--ui-lit); color: var(--ui-lit-ink); font: 500 16px/22px var(--ui-face); font-variant-ligatures: none;
 }
-.ui80 .fl-cardbtn:active:not(:disabled) .fl-cardbtn__label { background: var(--ui-lit-press); }
-@media (hover: hover) and (pointer: fine) { .ui80 .fl-cardbtn:hover:not(:disabled) .fl-cardbtn__label { background: var(--ui-lit-hover); } }
-.ui80 .fl-cardbtn:disabled { cursor: not-allowed; }
-.ui80 .fl-cardbtn:disabled .fl-cardbtn__label { background: transparent; color: var(--ui-fg-3); border: 1px dashed rgb(154 146 132 / 0.7); }
+.ui80 .fl-cardbtn:active:not(:disabled):not([aria-disabled='true']) .fl-cardbtn__label { background: var(--ui-lit-press); }
+@media (hover: hover) and (pointer: fine) { .ui80 .fl-cardbtn:hover:not(:disabled):not([aria-disabled='true']) .fl-cardbtn__label { background: var(--ui-lit-hover); } }
+/* busy (look/busy.js) is drawn as disabled */
+.ui80 .fl-cardbtn:disabled, .ui80 .fl-cardbtn[aria-disabled='true'] { cursor: not-allowed; }
+.ui80 .fl-cardbtn:disabled .fl-cardbtn__label, .ui80 .fl-cardbtn[aria-disabled='true'] .fl-cardbtn__label { background: transparent; color: var(--ui-fg-3); border: 1px dashed rgb(154 146 132 / 0.7); }
 @media (max-width: 899px) { .ui80 .fl-cardbtn { width: min(100%, 420px); } }
 @media (forced-colors: active) { .ui80 .fl-cardbtn__label { border: 1px solid ButtonText; } }
 
@@ -165,7 +166,7 @@
 /* the card's words start clear of the sleeve lying over its edge */
 @media (min-width: 1100px) { .ui80 .fl-pickcell .ob--pick > .ob__body > .ob__sheet > .ob__ink { padding-left: 42px; } }
 .ui80 .fl-info { grid-area: info; min-width: 0; }
-.ui80 .fl-info h1 { font: 600 36px/40px var(--sans); letter-spacing: -0.015em; margin: 0 0 8px; text-wrap: balance; overflow-wrap: anywhere; }
+.ui80 .fl-info .fl-title { font: 600 36px/40px var(--sans); letter-spacing: -0.015em; margin: 0 0 8px; text-wrap: balance; overflow-wrap: anywhere; }
 .ui80 .fl-original { margin: 0 0 4px; color: var(--text-2); font-style: italic; }
 .ui80 .fl-meta { margin: 0; color: var(--text-2); }
 .ui80 .fl-about { grid-area: about; margin-top: 16px; min-width: 0; }
@@ -230,7 +231,7 @@
     padding-top: 16px; padding-bottom: 48px;
   }
   .ui80 .fl-sleeve > .ob { --w: 96px; }
-  .ui80 .fl-info h1 { font-size: 28px; line-height: 32px; margin-bottom: 6px; }
+  .ui80 .fl-info .fl-title { font-size: 28px; line-height: 32px; margin-bottom: 6px; }
   .ui80 .fl-meta, .ui80 .fl-original { font-size: 15px; line-height: 22px; }
   .ui80 .fl-pickcell { margin: 24px 0 0; }
   .ui80 .fl-counter { margin-top: 28px; }
@@ -278,7 +279,9 @@
   .ui80 .fl-bar--osd .cue-style-panel { left: 16px; right: 16px; width: auto; }
 }
 
-/* the end of the film: STOP on its strip, then the choices in plain type */
+/* the end of the film: STOP on its strip, then the choices in plain type. While the
+   theatre is open the page's h1 is the film's title, hidden, ahead of it (Film.jsx), so
+   the choices' h2 follows it in the page's order as on the screen. */
 .ui80 .fl-bar--stop { padding-bottom: 0; }
 .ui80 .fl-end { padding: 20px 0 24px; }
 .ui80 .fl-end h2 { font: 600 24px/30px var(--sans); margin: 0 0 6px; }

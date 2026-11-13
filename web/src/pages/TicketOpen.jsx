@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import PasskeySignIn, { NewPasskeys } from '../PasskeySignIn.jsx';
 import { supportsPasskeys } from '../passkeys.js';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { hostName } from '../look/words.js';
 import { confirmSignOut, useSite } from '../site.jsx';
 import { NarrowPage } from './tape.jsx';
@@ -120,9 +120,9 @@ export default function TicketOpen() {
           </Line>
         )}
         <div className="ui-btns">
-          <button type="button" className="ui-btn ui-btn--primary" onClick={signOutHere} disabled={busy}>
+          <BusyButton type="button" className="ui-btn ui-btn--primary" onClick={signOutHere} busy={busy} busyText="Signing out…">
             {busy ? 'Signing out…' : 'Sign out'}
-          </button>
+          </BusyButton>
         </div>
       </NarrowPage>
     );

@@ -1,5 +1,5 @@
 // Keyboard only: the film page (Tab to Play, Enter, focus on the video, Space
-// pauses), the name menu (Enter opens it, Escape closes it, focus back on its
+// pauses, the end's choices in the page's order), the name menu (Enter opens it, Escape closes it, focus back on its
 // button), and the admin's sign-in and Settings. Every browser; Space only where
 // the film plays, and not in WebKit. The name menu's person is signed in through
 // the API with a software passkey, so it runs in every browser too.
@@ -13,6 +13,7 @@ import {
   playbackSupport,
   signInAsAdmin,
   signedInPerson,
+  tabKey,
   tabTo,
   test,
   unique,
@@ -59,6 +60,35 @@ test('Space pauses the film once the video has focus', async ({ page, browserNam
   await expect
     .poll(() => page.locator('video').evaluate((v) => v.paused && !v.ended), { timeout: 3000, message: 'Space pauses' })
     .toBe(true);
+});
+
+// The end of the film (slice 10): its choices are drawn straight under the picture, and
+// come there in the page's order too, after the film's title (the page's h1, hidden
+// while the theatre is open) and before the film's details. Tab goes from them on into
+// the details, never past them to the foot of the page. The test film is eight seconds
+// long, so it plays to its end.
+test('at the film’s end, its choices follow the film’s title in the page’s order, as drawn, and Tab goes on from them into the page', async ({ page }, testInfo) => {
+  await playFromKeyboard(page, testInfo);
+  const support = await playbackSupport(page);
+  test.skip(!support.canPlay, support.why);
+  const end = page.getByRole('heading', { level: 2, name: "That's the end." });
+  await expect(end).toBeFocused({ timeout: 30_000 });
+  const heads = await page.locator('article.fl-page').locator('h1, h2').evaluateAll((els) => els.map((e) => `${e.tagName} ${e.textContent.trim()}`));
+  expect(heads.slice(0, 2)).toEqual([`H1 ${film.title}`, "H2 That's the end."]);
+  expect(await page.getByRole('heading', { level: 1 }).count(), 'one h1').toBe(1);
+  const order = await page.evaluate(() => {
+    const choices = document.querySelector('.fl-end');
+    const details = document.querySelector('.fl-film');
+    return {
+      before: Boolean(choices.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING),
+      above: choices.getBoundingClientRect().bottom <= details.getBoundingClientRect().top + 1,
+    };
+  });
+  expect(order, 'the choices come before the details, in the page and on the screen').toEqual({ before: true, above: true });
+  await page.getByRole('button', { name: /^Keep it until / }).focus();
+  await page.keyboard.press(tabKey(page));
+  const next = await page.evaluate(() => ({ inPage: Boolean(document.activeElement?.closest('.fl-theatre, .fl-film')), inFoot: Boolean(document.activeElement?.closest('footer')) }));
+  expect(next, 'Tab from the last choice stays in the page under it').toEqual({ inPage: true, inFoot: false });
 });
 
 // Signs a new person in with a software passkey, through the API, and opens the front page.

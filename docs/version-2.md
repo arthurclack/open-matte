@@ -73,6 +73,7 @@ Yours. These are not reopened here.
 | 12 Nov 2026 | Questions 16, 17, 13 and 7, answered as recommended. **16 (b):** taking a tape back from a browser where a member is signed in also cancels that member's never-lent links for the film (built with slices 2 and 3, `takeBackLoan`; listed in `alsoCancelled`). **17 (a):** a cancelled member link says so to anyone who opens it, as 1.x. **13 (b):** a signed-in friend can hand a tape back with a response at any time while they have it. **7: yes**, members see that a film on the members' shelf is out and when it is due back, never who has it. Questions 13, 16 and 17 left the table under To decide on 12 Nov 2026, with slice 4, and question 7 with slice 5, the same day. |
 | 12 Nov 2026 | Questions 10, 11 and 18, answered as recommended. **10 (a):** the line saying what you can see begins "{Host} can see when this link is opened, when the tape is taken out and played, …", signed in or not; the rest is word for word. **11 (a), and both tables as proposed:** on a friend's pages what you sent them is still "a tape" wherever that doesn't claim the tape is out; pages for a tape that is out say "link" for the link; the back office says "link" for links and "tape" for the film's copy. **18 (c):** the give and release buttons show a link's "Picked for you" note with "Take the note away" ticked, and the route takes `pickNote` in the same step; until then the route keeps the note. These leave "To decide" empty. |
 | 13 Nov 2026 | Questions 19, 20 and 21, answered as recommended. **19 (a):** a cancelled link's notice says "{Host} has cancelled that link." whether or not its tape was taken back; the borrower is told by the player and the film page. **20 (b):** one `BusyButton` (`aria-disabled` while busy, presses ignored) for every busy button in the app, 1.1.0's included, in one change in slice 10. **21 (a):** each browser writes dates and times in its own words. |
+| 13 Nov 2026 | Question 22, answered as recommended. **(a):** the two boxes saved as you tick them (a film's Show to members, and the shop's name next to the logo) are busy as a button is: `aria-disabled` while they save, the focus kept, and a tick meanwhile changes nothing. |
 
 "The mock-up" rows are things the mock-up added to the roadmap
 (`.claude/design/vhs/app/notes.md`, "What's new beyond the roadmap"). They were not
@@ -121,8 +122,8 @@ on, were answered on 11 Nov 2026 and are under [Settled](#settled). Questions 13
 with slice 4, and 7 with slice 5. Questions 10, 11 and 18 were answered on 12 Nov 2026
 as well. Questions 12 to 15 came out of the plan's review, 16 and 17 out of the review
 of slices 2 and 3, 18 out of the review of slices 4 to 6, and 19 to 21 out of the review
-of slices 7 to 9 (12 Nov 2026): none of them stops a slice, and the pages are built as
-we recommend. Mock-up files are cited from `.claude/design/vhs/app/`.
+of slices 7 to 9 (12 Nov 2026), and 22 out of the review of slice 10 (13 Nov 2026):
+none of them stops a slice, and the pages are built as we recommend. Mock-up files are cited from `.claude/design/vhs/app/`.
 
 | # | Question | Options | We recommend | Waits |
 |---|---|---|---|---|
@@ -714,7 +715,7 @@ Bare line numbers in this table are in `server/routes/admin.js`.
 | Route | Change |
 |---|---|
 | `GET /api/admin/films`, `/films/:id` | + `tape: { state: 'in' \| 'out' \| 'off', loan }` and `links: { live, waiting, total }`. `off` is a film off the shelf, whatever its tape; `loan` is the live loan in every state, as `/api/admin/loans` gives it, so a film taken off the shelf with its tape out still says who has it. `live` links are not cancelled and have the tape or could still take it; `waiting` are the live ones that haven't lent (the send form's warning); `total` is every link sent. The detail adds `lending: { sent, cancelled, opened, lent, finished, responses }`, counted from links, loans and responses, never from events, as `viewingOf` is (`server/routes/admin.js:105-121`). `tickets.active` (`:173-179`) went with slice 9. |
-| `GET /api/admin/loans` (new) | `?live=1&film=&person=&ticket=`; answers `{ loans }`, newest first, and 400 for a filter that isn't one, by its value or by its name (`film[]=1`, `films=1`). `person` is the loan's own member. Each: `{ id, film, ticket: { id, label }, borrower: { kind: 'person', person } \| { kind: 'browser', device, signedInAs }, takenAt, dueAt, endedAt, endedHow, live, playingNow, position, finished, response, otherLinks }`. `person` and `signedInAs` are `{ id, name, disabled }`; `signedInAs` is there only while that browser's session row exists, and after the clean-up the device stands alone. `live` goes by the one test; for a loan that is over with no end written yet, `endedAt` and `endedHow` are what `closeStale` will write, because reading writes nothing. `response` is `{ id, kind, message, createdAt, readAt }` or null. `otherLinks`, on a live loan and empty otherwise, for the take-back confirmation (question 14): `{ id, label, kind: 'person' \| 'anyone', linkState, cancelledToo }`. `cancelledToo` ones are exactly what the take-back would list in `alsoCancelled`; the rest are links anyone can use that the borrower's browsers also hold and that could still lend, which stay. |
+| `GET /api/admin/loans` (new) | `?live=1&film=&person=&ticket=`; answers `{ loans }`, newest first, and 400 for a filter that isn't one, by its value or by its name (`film[]=1`, `films=1`). `person` is the loan's own member. Each: `{ id, film, ticket: { id, label }, borrower: { kind: 'person', person } \| { kind: 'browser', device, signedInAs }, takenAt, dueAt, endedAt, endedHow, live, playingNow, position, finished, response, otherLinks, screeningId }`, `screeningId` being the loan's play among its link's plays (slice 10: the link's page finds the play, and its device, by it). `person` and `signedInAs` are `{ id, name, disabled }`; `signedInAs` is there only while that browser's session row exists, and after the clean-up the device stands alone. `live` goes by the one test; for a loan that is over with no end written yet, `endedAt` and `endedHow` are what `closeStale` will write, because reading writes nothing. `response` is `{ id, kind, message, createdAt, readAt }` or null. `otherLinks`, on a live loan and empty otherwise, for the take-back confirmation (question 14): `{ id, label, kind: 'person' \| 'anyone', linkState, cancelledToo }`. `cancelledToo` ones are exactly what the take-back would list in `alsoCancelled`; the rest are links anyone can use that the borrower's browsers also hold and that could still lend, which stay. |
 | `POST /api/admin/loans/:id/take-back` (new) | Body `{ ticketId }`, which must match. 200 is `{ loan, ticket, alsoCancelled }`, the loan as the list gives it: the ids of a member's other links it cancelled: the loan's member, or for a browser's loan the member signed in on that browser (question 16, answer b; empty when nobody is). 409 `not-out`. |
 | `adminTicket` (`:351-405`) | + `loan` (the link's one loan, out or over, as `/api/admin/loans` gives it, or null), `loanDays` (the link's own, or null for the shop's default: sent back as it came it changes nothing), `pickNote`, `effectiveStartBy` and `startByPaused` (slice 6: the date the link goes by, null once it has been played or with no date, and whether the tape is out with someone else right now, so that its time stands still and that date moves with the clock; `startBy` stays the date as you set it, which a form sends back as it came), and `linkState`, the state table's back office column: `unopened`, `opened` (both `in`), `waiting`, `has` (`lent`), `done` (`spent`), `missed` (`expired`), `cancelled` (`revoked`), `off` (`unpublished`), `unavailable`. The 1.x fields stay until slice 9, in 1.x's words (from slice 2): `state` is `ok` for a link that is `in`, `waiting` or `lent` and `used_up` for one that is `spent`; `expiresAt` and `openScreening` are the loan's due time and playback while the link has the tape; `screeningsUsed` counts its plays. |
 | `POST /api/admin/tickets` (`:445-472`) | + `loanDays` (1 to 30, or null for the default) and `pickNote` (up to 2,000 characters; a longer one is a 400 and nothing is made, where `label` is cut to its 200). `screeningLimit` and `daysAfterFirstPlay` are accepted and ignored until slice 9, then refused; the same on `PATCH`, which 1.1.0's link page still sends them to. Logs `ticket-sent`, which is not "last activity" on a link: one nobody has touched still shows none. |
@@ -1980,21 +1981,167 @@ had a tape. 1,093 unit tests became 1,106, all passing on Node 26. What changed:
 
 ### 10. Journeys, docs, rehearsal, 2.0.0
 
-- [ ] The browser journeys below, in all four projects, twice running; the docs below,
-  the changelog with its Upgrading note, the version.
-- [ ] Left by the review of slices 7 to 9: busy buttons (question 20); the end's heading
+- [x] The browser journeys below, in all four projects, twice running (three, on 13 Nov 2026).
+- [x] The docs below, the changelog with its Upgrading note, the version.
+- [x] Left by the review of slices 7 to 9: busy buttons (question 20); the end's heading
   after the film's h1 in the page's order; the Ledger's table links at least 32px tall
   on a phone; `adminTicket`'s 1.x fields and the film page's `viewing` (slice 9's "Not
   done").
 - [ ] A rehearsal on a copy of the live shop's backup ([Checking a
   backup](deploying.md#checking-a-backup), `docs/deploying.md:313-349`): the preview's
   report read with you, then the upgrade, then a loan from Play to hand-back.
+- [ ] The tag: `CHANGELOG.md`'s heading "2.0.0 — Unreleased" dated in the same change
+  that tags v2.0.0, so the changelog agrees with the tag `docs/deploying.md` checks out.
 - [ ] After the tag, both servers are upgraded by the same five steps, each from its
   own backup: the shop, and the demo. Each upgrade waits for your go-ahead.
 
 **Done when** the rehearsal ends with a tape lent and handed back on the copy, and
 2.0.0 is tagged. The tag and the release are pushes to a public repository, so each
 waits for your go-ahead.
+
+Docs written on 13 Nov 2026, not yet committed, against the code as it stood in the
+working tree that day (the journeys, the busy buttons and slice 9's "Not done" were
+being built beside them). Each claim was read against `server/` and `web/`; every
+relative link and anchor in the repository's Markdown resolves (a script checked 187).
+What was written:
+
+- **`docs/access.md`**, rewritten for version 2 and titled "Tickets, loans and
+  people". It keeps 1.1.0's rule that the page says the code's names (ticket,
+  screening, and now loan), with the pages' words in bold, so its anchors stay. Words
+  (link and loan, and the two meanings of tape); the records (loans and responses);
+  Tickets (a link lends once, Due back after, no play limit, a start-by date that gets
+  back the time the tape was out with someone else, Picked for you, cancel and
+  restore); both tables; rule 5; Opening a link (spent, and opening never takes the
+  tape); Link previews (spent previews as the shop); Keeping a ticket (only before
+  Play, with the tape in; give, release and Sign out browsers wait); Films shown to
+  members (in or out, never who); Screenings rewritten as **Loans**, with **Never who
+  has it**; a new **Responses** section; Media requests; Signing in and out and
+  Disabling people (which tapes go back); what is recorded (the loan events, loans and
+  responses) and How long it's kept (loans for good, responses until deleted, a
+  session kept while a loan it took is open). The new warning is in Loans and Media
+  requests: trying a link in a private window takes the tape.
+- **`CHANGELOG.md`**: "2.0.0 — Unreleased", with its Upgrading note in the order of
+  [Upgrading](#upgrading-an-existing-shop): back up, preview and read the report, update
+  when nobody is watching, the migration (and what a failure leaves), check Films and
+  Tapes; what becomes of each kind of link and play, what a friend part-way through a
+  film sees, the settings (Time to come back retired; Due back after); going back is a
+  restore. Then Added, Changed and Removed.
+- **`docs/deploying.md`**: Before you update gains the preview step; a new section,
+  Previewing an upgrade (on a computer, and the plan's `docker run` on the server);
+  After an update (a failed migration, what to check after 2.0.0); Backups (they hold
+  friends' responses and your notes); After restoring an older backup (a tape returned
+  since is out again, a tape lent since is in and its link lends again, links, notes
+  and responses since are gone); Rolling back (to 1.1.0, and what 2.0.0 loses);
+  Status, the rate limits (returning a tape), moving to a new server, and the
+  examples' release, `v2.0.0`.
+- **`README.md`**: What it does, links and loans in place of plays and limits, and
+  every other line 2.0 made false (the opening, what friends need, running it locally,
+  backups, the fonts).
+- **`docs/roadmap.md`**: the 2.0 boxes ticked (the website's look from its commits of
+  10 and 11 Nov), "Still to decide" answered from the settled rows as "Decided", and
+  what is out of 2.0 left as later.
+- **`web/src/look/README.md`**: a section for version 2's printed things (the two-line
+  sticker, the out sticker, the pick note, the till slip, the STOP strip, the paused
+  strip's date), and the files, colour rules, classes, shell and `BusyButton` brought
+  up to date.
+- **Beyond the list**, because 2.0 had made them false: `docs/installing.md` (the first
+  link, which takes the tape and must be returned) and `docs/import-format.md`.
+- **The version**: 2.0.0 in `package.json` and `package-lock.json`. No test pins the
+  number: `test/booth.test.js` reads it from `package.json`.
+
+Not confirmed in the code, or left:
+
+- **The preview on the server** (`docker run … deploy-app node scripts/upgrade-preview.mjs`)
+  was not run: no Docker here. It rests on the image having Node 26, `/tmp` writable
+  and user 1000, and `server/db.js` needing only Node's own modules, which is so.
+- **The busy buttons and the back office's 1.x fields** were written up as the working
+  tree had them on 13 Nov, while they were being built: the changelog's "A busy button
+  keeps the focus" and its last Removed line, and `BusyButton` in the look's README.
+  Checked against the code by the review below, and mended where they claimed more.
+- **`SECURITY.md`** listed "a screening limit, … expiry" among the things to report
+  getting round. The review below brought it up to date.
+- **The website** (`site/`) was not read for 2.0 and not changed.
+
+Built on 13 Nov 2026, not yet committed: the third box, what the review of slices 7 to
+9 left. 1,106 unit tests became 1,116, all passing on Node 26.
+
+- **Busy buttons (question 20).** `web/src/look/busy.js` has the rules: `busyProps`
+  (`aria-disabled` while busy, a press ignored and its form not sent), the page's one
+  status region (`#om-busy`, there from the first busy button drawn), and which button
+  was pressed last, the only one that speaks. `BusyButton` (`look/ui.jsx`, with
+  `useBusyNews`) is the button; `PlayTile`, the telly's Resume, the name menu and the
+  logo's upload use the helpers. A button that becomes `disabled` while it has the
+  focus (Save, with nothing left to save) keeps it the same way until it moves on.
+  Busy that starts with no press (Play from the front page's Resume) says nothing.
+  `test/busy-buttons.test.js` scans every page for a button still `disabled` while its
+  request runs; `e2e/busy.spec.js` is the browser's part.
+- **The end's heading after the film's h1.** As built, the player drew the end's
+  choices through a portal into a band after the film's details, moved up the screen
+  with CSS `order`. The headings were in order, but the keyboard's wasn't: the review
+  below undid it.
+- **Table links at least 32px tall on a phone**: every stacked back office table
+  (`.ui-table--stack`), not only the Ledger. The review measured it at 320 and 390
+  pixels: the smallest link 22 to 32px on the Ledger and 18 to 32 on Tapes, nothing
+  past either side, and a row about 22 to 24px taller (a Ledger row has two links),
+  not the 10px first noted.
+- **1.x's fields out of the back office's API.** A link lost `state`, `expiresAt`,
+  `openScreening`, `screeningsUsed`, `screeningsLeft`, `screeningLimit` and
+  `daysAfterFirstPlay`, and a film's page its `viewing`. The unit tests that read them
+  were rewritten to `linkState`, `loan` and `lending`, none deleted. A loan gained
+  `screeningId` (in `/api/admin/loans`, and so on a link), so that a link's page finds
+  the loan's play among its plays, and its device, as `openScreening` told it.
+
+Reviewed on 13 Nov 2026, from three sides: the docs against the code, the journeys
+(each run twice in full, and three rules broken one at a time in a scratch copy, each
+caught by its journey), and the busy buttons and pages in Chromium, old build against
+new, at 1280, 390 and 320. 1,116 unit tests became 1,117, all passing. What changed:
+
+- **Two buttons that send a request had no busy state**, so a double press sent two:
+  the player's **Watch here instead** (now a `BusyButton`, busy while Play's request
+  runs, and the film page's `play` does nothing while one is under way) and the back
+  office's **Sign out** ("Signing out…"; `.ui-nav__item` is drawn busy). The static
+  test counts them, and a journey holds Sign out.
+- **The name menu's Sign out dropped the focus to the page**, as 1.1.0's did: the item
+  that had it went with the list. Choosing an item now gives the focus back to the
+  menu's button, as Escape does and as a menu button should, and the button keeps it
+  while it is busy and after a failure. A journey holds it.
+- **The two boxes saved as they are ticked** dropped the focus too: they are busy as a
+  button is now, `aria-disabled`, with a tick meanwhile ignored and the box drawn as it
+  was (question 22, built as we recommend). The static test no longer lets them be
+  `disabled`, and a journey holds Show to members.
+- **The end of the film, in the page's order.** The portal and CSS `order` went: the
+  end is drawn in the player again, straight after the picture. While the theatre is
+  open the page's h1 is the film's title, hidden, ahead of it, and the title under the
+  picture is the same words in a paragraph, in the same type. The page's order is now
+  the order it is drawn in, at every width, and Playback help's h2 follows the h1 too.
+  A journey holds it (journey 11).
+- **The look.** The telly's Resume, busy, is dimmed as Play is (1.1.0 never dimmed it);
+  the logo's upload, a label, is drawn busy; `.visually-hidden` has the usual -1px
+  margin, so the status region at the foot of the page adds no pixel of scroll.
+- **Tests.** `test/never-who.test.js` pins the device a link's page shows (the loan's
+  play, found by `screeningId`, among its plays), and the loan's own device when the
+  browser's session no longer names one. Journey 1's Play sent anyway must be refused
+  as `out`, not just with a 409; journey 3's press with no response must send nothing
+  and leave the tape out. `e2e/busy.spec.js` uses the fixtures' `asAdmin`.
+- **Docs.** The changelog's busy line claimed every button: it now says every button
+  that sends a request, the two boxes and the name menu, which is so. Its API line has
+  `screeningId`, and so does the table above. Upgrading's step 3 and the first risk say
+  what 1.1.0's Tapes can't show (a friend paused part-way is "Active", like any link
+  played) and point to the preview's report. `SECURITY.md` lists 2.0's rules (taking a
+  tape back, the due-back date, one tape per film, a link lending once, never who has
+  it) in place of play limits and expiry. `docs/installing.md` clones v2.0.0, and says
+  a test link taken back is cancelled, not spent. `docs/access.md` says "waiting setup
+  or recovery link" where it meant those, now that a waiting link is a film link.
+- **Not changed, and why.** `e2e/busy.spec.js` still waits 300 ms to see that presses
+  while busy send nothing: a wait for something not to happen can't fail a good run,
+  and nothing the page sends could be ordered after a duplicate to wait on instead.
+  `useAction` doesn't refuse a second run while busy: busy buttons already ignore the
+  press, and a guard there would refuse an action started inside another.
+  `form.requestSubmit()` with a busy submitter still submits, as with a disabled one;
+  nothing in the app calls it.
+
+Not run: real Safari, or an iPhone (only Playwright's Chromium, Firefox and WebKit, and
+the installed Chrome); the preview under Docker on the server.
 
 ## Tests
 
@@ -2115,16 +2262,76 @@ lock for the project's two films, `tapes-<project>`, in `e2e/fixtures.js`; the f
 draft of this line had a lock for each film), and `issueTicket` stops sending
 `screeningLimit` (`e2e/fixtures.js:80`).
 
-1. **Lend and return.** One browser plays, a second sees "Out on loan" with no Play, the
-   first returns it with the confirmation, the second plays, the first sees spent.
-2. **Take it back** (replaces `e2e/revoke.spec.js`): the player stops with the take-back
-   line and the page is gone.
-3. **Hand it back** as a member with a passkey; the response shows under Responses.
-4. **One member, two devices** (replaces `e2e/takeover.spec.js`): "Watch here instead".
-5. **Picked for you** on the send form and the friend's page; the staff pick unchanged.
-6. **A spent link** in a fresh browser shows the notice.
-7. Rewritten: `e2e/shell.spec.js:56-64` (plays left) and `:191-205`, the keep journey in
-   `e2e/passkeys.spec.js`, and `e2e/account.spec.js`.
+As built (slice 10, 13 Nov 2026), in the order this list first had them, and two more:
+
+1. **Lend and return** (`e2e/loans.spec.js`, every browser). Two links, two browsers:
+   both open the film and see what Play would do; the first presses Play; the second,
+   reloaded, sees "Out on loan." and "Due back by …" with no Play, nothing of the
+   other link, and a Play sent anyway is answered 409 `out`; the first presses Return it now
+   and Return it on the page's question; the second, reloaded, has Play and takes the
+   tape; the first, reloaded, says "Returned on …" and "This link has done its job",
+   with no Play and no "Out on loan".
+2. **Take it back** (`e2e/revoke.spec.js`, every browser that plays the film). The
+   owner takes the tape back on the film's page in the back office, in a browser of its
+   own: the tape panel says who has it ("a browser, from a link anyone can use", with
+   the link's label), Take the tape back asks first on the page, Keep it out changes
+   nothing and gives the focus back, Take it back says "… is back in. You took it back
+   from that browser, and the link it was out on is cancelled." Then, as before: the
+   player's next request is answered 409, it says "{Host} has taken this tape back.",
+   the page is "Nothing on the shelf here", the media is refused, the lock screen
+   forgets the film.
+3. **Hand it back** (`e2e/passkeys.spec.js`, Chromium and Chrome: the virtual
+   authenticator is the Chrome DevTools Protocol's, so Firefox and WebKit skip as the
+   rest of that file does). A member set up from their setup link signs out, opens the
+   link sent to them, signs in with the passkey there and presses Play; Hand it back
+   takes the focus, says only the owner reads it, and pressed with no response says
+   "Not handed back yet.", sends nothing and leaves the tape out; then Loved it and a message, and "Handed back" says what was
+   said. In the back office the Responses tab is named "Responses, N unread" (N is the
+   shop's, which other journeys share), the response shows "Not read yet", the member,
+   the film, the message and how early; Mark as read says so, the tab shows the count
+   the page read after it, and the focus is on Delete.
+4. **One member, two devices** (`e2e/takeover.spec.js`): checked as it was, unchanged.
+5. **Picked for you** (`e2e/picked.spec.js`, every browser). The film's staff pick is
+   written on its page; a link for one member is sent from the film's send form with a
+   note (the field's hint says it's kept apart from the staff pick); the member's film
+   page has the note and the staff pick, each in its own figure, and the front page
+   says "A note from … is with it" without the note; the staff pick is as written.
+   Question 18: a link for anyone, with a note, sent from the form (its hint says
+   whoever has the link reads it); a guest reads the note; on the link's page the note
+   shows with Take the note away ticked; Give asks "… The “Picked for you” note is taken
+   away." and says it was; the member it went to has no note, and the staff pick is
+   unchanged. The staff pick is put back as it was before the journey lets go of the
+   tapes.
+6. **A spent link** (`e2e/shell.spec.js`): checked as it was, unchanged.
+7. **The rewritten ones**: `e2e/shell.spec.js`, the keep journeys of
+   `e2e/passkeys.spec.js` and `e2e/account.spec.js`, checked as they were.
+8. **The front page with a tape out** (`e2e/loans.spec.js`, every browser; question 7).
+   The film is shown to members for the journey only, and put back as it was. Signed in
+   with nothing out, it's on "On the shelf for members", "In the shop". A browser not
+   signed in takes it on a link anyone can use and finds it under "Out to this
+   browser", with Return it now and a receipt "Out to this browser", and no Hand it
+   back. The member's shelf then says "Out on loan, back …", nothing of the label or a
+   browser. A link sent to the member puts it under "Picked for you", out on loan, and
+   off the members' shelf; a link for the other film opened there is under "On this
+   device". The guest's Return it now on the front page opens the film's page with the
+   question asked and the focus on it; returned, the member's link is "In the shop";
+   their Play puts it "On your card", with Hand it back, Return it now and a receipt
+   "Out to {name}".
+9. **Signing out names the tape that goes back** (`e2e/shell.spec.js`, question 5):
+   the question, dismissed, names it; accepted, the browser is signed out, its link
+   opened afresh says "That link has been used.", and a new link has Play.
+10. **Busy buttons** (`e2e/busy.spec.js`, every browser; questions 20 and 22): with its
+    request held and then refused, the button keeps the focus, is `aria-disabled`, a
+    second press sends nothing, the status region says it is busy, and after the error
+    it works again with the focus still on it. Status's Refresh, the back office's
+    Sign out, a film's Show to members (a box: a second tick changes nothing), the
+    friend's Play and Return it, and the name menu's Sign out, which gives the focus
+    back to the menu's button. None of the held requests reaches the server.
+11. **The end of the film in the page's order** (`e2e/keyboard.spec.js`, every browser
+    that plays the film): played to its end, the end's heading takes the focus, the
+    page's headings are the film's title (h1) then "That's the end." (h2), the choices
+    come before the film's details in the page as on the screen, and Tab from the last
+    of them goes on into the page, not to its foot.
 
 Begun with slices 2 and 3, on 11 Nov 2026, in Chromium only; the rest is slice 10's.
 Run as they were, 19 of the 64 journeys failed, nearly all because they share one film
@@ -2186,6 +2393,39 @@ With that mended, the chromium and webkit projects ran three times: 107 passed a
 skipped each time, each skip the journey's own stated one, none failed. Firefox and
 Chrome were not run as projects.
 
+Slice 10 (13 Nov 2026) wrote journeys 1, 3, 5, 8 and 9 above, moved journey 2's
+take-back onto the film's page in the back office, and checked 4, 6 and 7 against the
+pages as built, which needed nothing. `e2e/fixtures.js` gained `asAdmin` (the back
+office in a browser of its own, signed in without the form) and `admin.get`. With
+`e2e/busy.spec.js`, written beside them for question 20, that makes 73 journeys in each
+of the four projects, 292 in all. The first full run (`npm run e2e`: chromium, firefox,
+webkit and the installed Chrome) had 241 pass, 50 skip and one fail: the busy
+journey's film page in WebKit, "what the Content-Security-Policy blocked", one console
+line, "Refused to apply a stylesheet…". Repeated on its own it failed about one run in
+fifteen. It was the journeys' guard, not the app: WebKit reports its own drop-down
+menu's styles (`BROWSERS_OWN`) when it gets round to drawing the player's menus, which
+can be during the guard's last 50 ms wait; the console line came in just before the
+guard stopped watching and the event that sets it aside just after, so the line was
+left alone. The guard now hears a report of the browser's own even after it stops
+watching (it can only set a line aside, never fail one); repeated forty times the
+journey passed forty. Then three full runs in a row: 242 passed and 50 skipped each
+time, about three and a half minutes each, none failed and none flaky. Each skip is the
+journey's own stated one: virtual passkeys need the Chrome DevTools Protocol (Firefox
+and WebKit skip them), some journeys run in one project or one engine only (an edit to
+what every browser shares, Back and Forward, how hls.js runs, the card's ink measured
+once, WebKit's own drawing of SVG filters), a browser that can't play the film or whose
+own HLS player doesn't say when a request is refused, and WebKit's video taking no
+Space and giving no screenshots of the card.
+
+The review of slice 10 (13 Nov 2026) added three journeys to `e2e/busy.spec.js` and
+one to `e2e/keyboard.spec.js` (journeys 10 and 11 above): 77 in each project, 308 in
+all. Its first full run had 256 pass, 50 skip and 2 fail, both the new back office
+Sign out journey (Firefox and Chrome): Status's page can have a "Tapes" link of its own
+(it did while another journey's tape was out), and the journey now looks for the one
+in the navigation. Then two
+full runs in a row: 258 passed and 50 skipped each time, none failed and none flaky,
+about three and a half minutes each, the skips as before.
+
 ## Docs to update
 
 - **`docs/access.md`**: the Words table gains link and loan, and "tape" its second
@@ -2202,11 +2442,15 @@ Chrome were not run as projects.
 - **`README.md`**, What it does (`README.md:55`): links and loans in place of plays and
   limits. **`docs/roadmap.md`**: the 2.0 boxes, and "Still to decide" answered from
   here. **`web/src/look/README.md`**: the new states and printed things.
+- **`SECURITY.md`** (added by slice 10's review): what's in scope, in 2.0's rules, with
+  [Never who has it](access.md#never-who-has-it).
 
 ## Risks
 
 - **The upgrade can cut someone off.** With two friends part-way through one film, one
-  stops. The preview names them; updating when nobody is watching avoids it.
+  stops. The preview names them. Updating when nobody is playing (no "Playing now" on
+  1.1.0's Tapes) stops nobody mid-film, but a friend paused part-way still counts, and
+  shows on Tapes only as "Active": the preview is the list to go by.
 - **A shop's data the fixtures didn't foresee** could fail a `CHECK`: a row edited by
   hand, such as "0 days after first play", which no screen can make. No 1.x data can
   break a unique index. The migration rolls back and the server won't start on 2.0.

@@ -2,7 +2,8 @@ import { useCallback, useContext, useEffect, useId, useRef, useState } from 'rea
 import { api } from '../api.js';
 import MembershipCard from '../MembershipCard.jsx';
 import { ShopName } from '../look/objects.jsx';
-import { Line } from '../look/ui.jsx';
+import { busyProps } from '../look/busy.js';
+import { BusyButton, Line, useBusyNews } from '../look/ui.jsx';
 import { AdminContext, DoneNote, ErrorNote, useAction } from './ui.jsx';
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -211,17 +212,17 @@ function Colors({ settings, onSaved }) {
       )}
       <ErrorNote error={check?.error} />
       <div className="ui-btns">
-        <button className="ui-btn ui-btn--primary" disabled={action.busy || !unsaved || !valid || refused}>
+        <BusyButton className="ui-btn ui-btn--primary" busy={action.busy} disabled={!unsaved || !valid || refused}>
           Save colours
-        </button>
+        </BusyButton>
         {unsaved && (
-          <button type="button" className="ui-btn" onClick={() => setEdit(null)} disabled={action.busy}>
+          <BusyButton type="button" className="ui-btn" onClick={() => setEdit(null)} busy={action.busy}>
             Cancel
-          </button>
+          </BusyButton>
         )}
-        <button type="button" className="ui-btn" onClick={() => setEdit(DEFAULT_COLORS)} disabled={action.busy || isDefault}>
+        <BusyButton type="button" className="ui-btn" onClick={() => setEdit(DEFAULT_COLORS)} busy={action.busy} disabled={isDefault}>
           Back to Open Matte's colours
-        </button>
+        </BusyButton>
       </div>
     </form>
   );
@@ -320,6 +321,7 @@ function BrandImage({ kind, noun, image, onSaved, removeText, help, preview, chi
   const action = useAction();
   const url = `/api/admin/branding/${kind}`;
   const Noun = noun[0].toUpperCase() + noun.slice(1);
+  const pressed = useBusyNews(uploading, 'Uploading…');
 
   async function upload(e) {
     const file = e.target.files[0];
@@ -358,12 +360,13 @@ function BrandImage({ kind, noun, image, onSaved, removeText, help, preview, chi
       <div className="ui-btns">
         <label className="ui-btn">
           {uploading ? 'Uploading…' : image ? `Replace the ${noun}` : `Upload a ${noun}`}
-          <input type="file" accept={IMAGE_TYPES.join(',')} onChange={upload} disabled={action.busy} />
+          {/* Busy as a BusyButton is (look/busy.js): the focus stays on it while the image goes up. */}
+          <input type="file" accept={IMAGE_TYPES.join(',')} onChange={upload} {...busyProps({ busy: action.busy, onClick: pressed() })} />
         </label>
         {image && (
-          <button type="button" className="ui-btn ui-btn--danger" onClick={remove} disabled={action.busy}>
+          <BusyButton type="button" className="ui-btn ui-btn--danger" onClick={remove} busy={action.busy}>
             Remove
-          </button>
+          </BusyButton>
         )}
       </div>
       <p className="ui-field__hint of-gap-s">{help}</p>
@@ -376,7 +379,10 @@ function BrandImage({ kind, noun, image, onSaved, removeText, help, preview, chi
 function LogoWithName({ settings, onSaved }) {
   const action = useAction();
 
+  // Busy as a BusyButton is (look/busy.js): it keeps the focus while it saves, and a
+  // press meanwhile changes nothing (the box is drawn as it was).
   async function toggle(e) {
+    if (action.busy) return;
     const r = await action.run(() => api.patch('/api/admin/settings', { logoWithName: e.target.checked }));
     if (r) onSaved(r);
   }
@@ -385,7 +391,7 @@ function LogoWithName({ settings, onSaved }) {
     <>
       <ErrorNote error={action.error} />
       <label className="ui-check">
-        <input type="checkbox" checked={settings.logoWithName} onChange={toggle} disabled={action.busy} />
+        <input type="checkbox" checked={settings.logoWithName} onChange={toggle} aria-disabled={action.busy || undefined} />
         <span>Show the shop's name next to the logo</span>
       </label>
     </>

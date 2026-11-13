@@ -8,6 +8,252 @@ A release has an **Upgrading** note when updating to it takes more than copying 
 new code and rebuilding: a backup first, a setting to choose, or a migration you can't
 undo without a restore. Read it before you update.
 
+## 2.0.0 — Unreleased
+
+One tape, one borrower. Each film on the shelf is now one tape, and only one person can
+have it out at a time. You send a friend a link, and nothing happens to the tape until
+they press Play. Play takes it out, and from then it's theirs until the date it's due
+back: they can watch it as often as they like. Anyone else with a link sees "Out on
+loan" and that date, never who has it. It's 2.0, not 1.x, because two people can no
+longer watch the same film at once.
+
+### Upgrading
+
+2.0.0 is the first release since 1.0.0 with a migration, and the first whose migration
+can end something a friend is doing. Take these steps in this order.
+
+1. **Back up first**, and copy the backup off the server: **Settings → Backups → Back
+   up now**, then the `scp` in [Before you
+   update](docs/deploying.md#before-you-update).
+2. **Preview the upgrade on that copy, and read its report.** On your computer, in a
+   copy of this release's code (`git checkout v2.0.0`), with Node 22.13 or later and
+   nothing else (no `npm install`):
+
+   ```bash
+   node scripts/upgrade-preview.mjs ~/open-matte-backups/open-matte-2026-11-13-153012.db
+   ```
+
+   It copies that one file to a temporary folder, upgrades the copy as the server
+   would, prints what that did and deletes the copy: the file you give it is only
+   read. The report lists the tapes that would be out and who would have each, the
+   plays that would be cut off, the links that would be spent once their loan ends
+   though 1.x would have let them play again, the links already spent, the links that
+   lend once more, and the loan lengths capped at 30 days. It's as of the backup: the
+   real upgrade decides by the clock when the server starts, so a Play pressed in
+   between can change it. With no Node on a computer, [Previewing an
+   upgrade](docs/deploying.md#previewing-an-upgrade) runs it on the server.
+3. **Update while nobody is watching.** In 1.1.0's back office, **Tapes** marks a
+   tape that is **Playing now**: updating when there's none stops nobody mid-film. A
+   friend who has paused part-way shows there as **Active**, like any link that has
+   been played (only the link's own page says **Paused**), and can still lose the tape
+   or have their link spent early (below): step 2's report names them.
+4. **Update**, as in [docs/deploying.md](docs/deploying.md#updating). The server runs
+   migration 8 as it starts, in one transaction, and takes the database to schema 8.
+   If it fails, nothing has changed: the database is still schema 7, the log says why,
+   and 1.1.0 still opens it, so go back to 1.1.0's code (no restore needed) and report
+   it.
+5. **Check Films and Tapes**: each film is in, or out with one borrower. **Status**
+   shows schema 8.
+
+What the upgrade makes of what is there. It only adds: no row 1.1.0 wrote is changed.
+
+- **A link nobody has played** waits for its first Play, and lends once: for the days
+  it said after the first play, at most 30, or with none for the shop's **Due back
+  after** (3 days). Its start-by date is kept, missed or not.
+- **A play under way that its holder can still carry on** becomes its film's loan, due
+  at the end of that play's time to come back, or when its link expires if that's
+  sooner. The borrower is the link's member, or the browser holding the play, and the
+  place they'd reached is kept.
+- **Two or more people part-way through the same film**: one keeps the tape, the one
+  playing now, or else the one heard from last. For the others, the player stops at
+  its next report and the page says "Out on loan". Their link lends once when the tape
+  is back, from the beginning: the place they had reached isn't carried over. The
+  preview names them.
+- **A friend part-way through a film on a link that 1.1.0 would have let play again**
+  (plays left, no limit, or days left) keeps the tape for that play only: it's due at
+  the end of its time to come back, and then the link is spent. A link good for 14
+  days, started yesterday, is due back tomorrow, not in 13 days. The preview names
+  these links: send a new one to anyone who should have longer.
+- **A play its holder could no longer carry on** (the browser signed out or expired,
+  or signed out of the link, or the member's card turned off) gets no loan, and its
+  link lends once, from the beginning.
+- **A link played before, with plays left or no limit, and nothing open** lends once
+  more: for its days, at most 30, or the shop's 3, counted from the new Play. That can
+  be longer than 1.1.0 would have given.
+- **A link used up, or past its days after the first play**, cancelled or not, is
+  spent. Restoring one can't make it lend.
+- **Kept links, labels, members, passkeys, sessions and the Ledger** are as they were.
+  A link's label is your note, and is never copied into "Picked for you".
+- **Settings.** **Time to come back** is retired: its stored value stays and is never
+  read. Loans last **Due back after, for new links (days)**, in Settings: 3 by
+  default, from 1 to 30.
+
+**Going back needs a restore.** 1.1.0, like every release since 1.0.0, refuses a
+schema 8 database, and stops at start saying so. To go back, restore the backup from
+step 1, as in [Rolling back](docs/deploying.md#rolling-back). Loans, responses,
+"Picked for you" notes and links made since that backup are lost.
+
+### Added
+
+- **Loans: one tape per film.** A film's links are sent freely, several for one film
+  if you like, and sending one takes nothing.
+  - **Play takes the tape**, if it's in. The check and the take are one step, so two
+    people can't both take it: the second is told it's out.
+  - **It's theirs until it's due back**: 1 to 30 days from the moment Play is pressed,
+    chosen for each link as you send it (**Due back after**), starting from the shop's
+    days in Settings. They can watch it as often as they like until then, and
+    watching it to the end keeps it, with **Play from the start**.
+  - **Out on loan.** Anyone else with a link sees "Out on loan" and the date it's due
+    back, never who has it, and can't press Play. Members see the same on the shelf
+    for members: in the shop, or out on loan and back when.
+  - **It comes back** when it's due, when the borrower presses **Return it now**
+    (asked on the page first), or when you take it back. A browser that took it out on
+    a link anyone can use gives it back when it's signed out, and a member gives back
+    theirs when you turn their card off. The film's next Play takes it.
+- **The counter, in version 2's states.** Before Play, a two-line sticker: "Play takes
+  it out." over the date it would be due back, and a line saying so. Out with someone
+  else: "Out on loan." over "Back" and the date. Yours: "It's yours until…", the small
+  telly to carry on, Return it now and, for a member on their own link, Hand it back.
+  The paused strip says when it's due back, and the end of the film is STOP on the
+  machine's blue strip, with Keep it until the due date, Return it now and Hand it
+  back. Your own preview says who has the tape, since when and until when.
+- **The receipt**, printed when Play takes the tape: a strip torn off the till roll,
+  in a dot-matrix face (Doto), with when it was taken out, to whom, when it's due back
+  and "Watch it as often as you like until then." It's on the front page in full, and
+  folded under "Your receipt" on the film's page. Doto comes from your server, under
+  the SIL Open Font License; the licences file names it.
+- **Handing it back.** A member who has a tape on their own link can hand it back with
+  one of four responses ("Loved it", "Still thinking about it", "Not for me", "Let's
+  talk") and an optional message, at any time while it's theirs. Only you see it, and
+  the form says so; **Return it without a note** says nothing. Not on a link anyone
+  can use, which may have been forwarded.
+- **Picked for you**: a note from you to whoever has a link, written when you send it
+  or later on the link's page, up to 2,000 characters. The film's page shows it on a
+  sheet off the shop's notepad, apart from the staff pick: editing one never changes
+  the other.
+- **The front page, in sections.** **On your card**: what you have out on your own
+  links, when each is due back, the telly to carry on and the receipt. **Out to this
+  browser**: the same for a tape taken out here on a link anyone can use. **Picked for
+  you**: the other tapes on your card. **On this device**: the other tapes this
+  browser opened from links. Then **On the shelf for members**.
+- **The back office.**
+  - **Films** has a Tape column: in, out with whom and until when, or off the shelf.
+    A film's page (its first tab is now **Tape and links**) says who has the tape,
+    since when, on which link, when it's due back and what they're doing now.
+  - **Take the tape back** asks on the page first, saying what the borrower will see,
+    which of their other links for the film go with it, and which links anyone can use
+    their browser also holds, each with a box to cancel it too.
+  - **The send form** warns, and only warns, when the film is out, already has links
+    waiting, or the member already has a link for it.
+  - **Tapes** starts with **Out now** (each film out, who has it, since when, due
+    back, Take the tape back), then **Links sent**, each with its state: not opened
+    yet, opened, waiting (the tape is out), has the tape, done, start-by missed,
+    cancelled or taken back.
+  - **A link's page** has its loan, and while it has the tape, Take the tape back.
+    Changing its **Due back after** moves the due-back date, earlier or later, never
+    into the past.
+  - **Members** lists the tapes each has out, and a member's page their loans and
+    what they said.
+  - **Responses**, a section of its own, with the unread ones counted on its tab,
+    **Mark as read** and **Delete**.
+  - **The Ledger** has a **Loans** filter. Lent and back in are printed on strips of
+    the till roll, with how it came back.
+  - **Status** says how many tapes are out and which is due back next, and when the
+    server last wrote down tapes that had come back. The status line at the foot of
+    every screen counts the tapes out.
+- **Start-by dates stand still while the tape is out with someone else.** The time it
+  was out on other links since a link was sent is given back once it's in again, to
+  the minute, so a link can't run out while nobody could use it. Status and a link's
+  page say when a date is standing still.
+- **`scripts/upgrade-preview.mjs`**: what upgrading a backup to 2.0 would do, before
+  you do it (see Upgrading).
+- **API.** `POST /api/films/:slug/return` (Return it now and Hand it back, with the
+  loan's `takenAt`), `GET /api/admin/loans`, `POST /api/admin/loans/:id/take-back`,
+  and `GET /api/admin/responses` with `POST …/:id/read` and `DELETE …/:id`, the API's
+  first `DELETE`, sent as JSON with an empty body.
+
+### Changed
+
+- **A link lends once.** When its tape comes back, however it comes back, the link is
+  spent: its page says the tape is back, and it won't take it out again. Opening a
+  spent link in a browser that doesn't hold it shows a notice on the front page ("That
+  link has been used."), makes no session and doesn't name the film, and its preview
+  in a chat app shows the shop. To let someone watch again, send a new link.
+- **New words for links.** What you send is a link, and the tape is the film's one
+  copy: **Send a link** (was Lend a tape), "N links ready", **Sent**, **Lent** for
+  Play taking the tape, **Cancel the link** (was Take the tape back, which is now only
+  for a link that has the tape out), **Restore the link**, **Due back after**, and
+  "Links keep working". A friend's pages still call what you sent them a tape wherever
+  that doesn't claim the tape is out ("Your tapes", "A tape from" your shop). The line
+  telling friends what you can see now begins "{Host} can see when this link is
+  opened, when the tape is taken out and played", the rest as before. A cancelled
+  link's notice says "{Host} has cancelled that link." Routes, links, the API's field
+  names, the database, settings keys and the log's event kinds keep their names, as
+  [docs/access.md](docs/access.md#words) lists.
+- **One device at a time is now among one member's own devices.** A member can carry
+  on watching on another of their devices, as before. A second browser on a link
+  anyone can use sees "Out on loan", and never takes over, even from a paused tape.
+- **Signing out sends a browser's tape back.** A tape out to a browser on a link
+  anyone can use goes back to the shop, and its link is spent, when that browser is
+  signed out, by itself, by Sign out everywhere, by **Sign out every friend and
+  member**, by turning a card off, by taking back the keys or by signing in as someone
+  else. A tape out to a member on their own link stays theirs, on every device they
+  sign in on. Each question before signing out names the tapes that would go back. A
+  browser with a tape out keeps its session until a day after the tape is due back,
+  whatever `VIEWER_SESSION_DAYS` says.
+- **A link can't change hands while it has the tape.** Keeping a link is only before
+  Play, while the tape is in. Giving a link to someone, letting anyone use it and
+  **Sign out browsers** wait until its tape is back; the buttons say why. Giving or
+  releasing a link with a "Picked for you" note shows the note, with **Take the note
+  away** ticked.
+- **Restore the link** works only for a link that never lent.
+- **Trying a link yourself takes the tape.** Your own previews never take one, and
+  the film's page there says so. Opened in a private window or another browser, as
+  the page suggests, Play takes the tape out as it would for a friend: return it from
+  that page afterwards.
+- **The API.** Play answers with `takenAt`, `dueBack` and `toBrowser`, and is refused
+  with the state's name (`out`, `spent`, `expired`, `unavailable`). A film page's
+  `access.ticket` has one set of keys in every state (`state`, `tape`, `loanDays`,
+  `startBy`, `dueBack`, `loan`, `returned`, `pickNote`, `inAccount`). Progress reports
+  can be refused with `returned`, `due` or `taken-back`, and `/api/tickets/open` with
+  410 `ticket-spent`. `/api/me` lists what this browser has out first, with
+  `browserLoans`, and the members' shelf with `tape` and `dueBack`. `/api/site` and
+  Settings have `loanDays` in place of `resumeWindowHours`, which a save may still
+  send and which is then ignored. `POST` and `PATCH /api/admin/tickets` take
+  `loanDays` and `pickNote`, and refuse `screeningLimit` and `daysAfterFirstPlay`
+  (400). The back office's films have `tape` and `links`, a film's page `lending`, the
+  members' list `tapesOut` and `liveLinks`, and a loan, in `GET /api/admin/loans` and
+  on a link, its play's `screeningId` (which of the link's plays is the loan's).
+- **Status** gives "the tape is out with someone else" as the reason a media request
+  was refused while the tape is out with another borrower.
+- **A busy button keeps the focus.** While its request is under way, every button in
+  the app that sends one, the friend's and the back office's, is shown as unavailable
+  and ignores presses, but keeps the focus where 1.1.0 dropped it, and the page's
+  status says "Just a moment…" or what it's doing. So do the two boxes saved as you
+  tick them (**Show to members**, and the shop's name next to the logo). Choosing an
+  item in the name menu, Sign out among them, gives the focus back to the menu's
+  button.
+- **The clean-up** never touches loans or responses, and keeps a browser's session
+  while a tape it took is out with no end written yet. Loans are kept for good, and
+  responses until you delete them.
+
+### Removed
+
+- **Play limits**: **Plays** on the send form, "2 plays left" by Play, and used-up
+  links.
+- **Days after the first play**, and **Time to come back** with its countdown and the
+  "Come back by" sticker: one due-back date replaces all three.
+- **Give back**, on a link's page, and its route, `POST
+  /api/admin/screenings/:id/void`, which now answers 404 like any route that isn't
+  there. A play given back in 1.x still says so in a link's plays.
+- **"Active tapes"** on Films, and `tickets` in `GET /api/admin/films`.
+- `expiresAt`, `openScreening`, `screeningLimit`, `screeningsUsed`, `screeningsLeft`,
+  `daysAfterFirstPlay` and `firstPlayedAt` from a film page's `access.ticket` and
+  `/api/me`, and `resumableUntil` from Play's answer. In the back office's API, a
+  link's 1.x `state`, `expiresAt`, `openScreening`, `screeningsUsed`, `screeningsLeft`,
+  `screeningLimit` and `daysAfterFirstPlay` (its `linkState` and `loan` say it now),
+  and a film's `viewing` (its `lending` says it).
+
 ## 1.1.0 — 2026-11-10
 
 ### Added

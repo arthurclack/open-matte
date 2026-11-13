@@ -781,6 +781,7 @@ export function createAccess(db, settings) {
   //   live        by the one test, at this moment;
   //   endedAt     when it came back and how. For a loan that is over with no end
   //   endedHow    written yet, what closeStale will write: reads never write;
+  //   screeningId the loan's one playback, among its link's plays;
   //   playingNow  a device reported in within the last 75 seconds, on a live loan;
   //   response    what the borrower said handing it back, or null;
   //   otherLinks  on a live loan, for the take-back's confirmation (above).
@@ -808,6 +809,8 @@ export function createAccess(db, settings) {
         endedAt,
         endedHow,
         live: isLive,
+        // Its playback: one of the link's plays, as a link's page lists them.
+        screeningId: l.screening_id,
         playingNow: isLive && l.active_until > now,
         position: l.position_seconds,
         finished: l.finished_at != null && l.voided_at == null,

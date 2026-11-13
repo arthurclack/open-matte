@@ -2,7 +2,7 @@ import { useContext, useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatDay, formatDayTime } from '../api.js';
 import { Sleeve, Sticker } from '../look/objects.jsx';
-import { Line } from '../look/ui.jsx';
+import { BusyButton, Line } from '../look/ui.jsx';
 import { hostName } from '../look/words.js';
 import { scrollBehavior } from '../motion.js';
 import { borrowerLines, inTime, linkStateNote, linkStateWords, loanNow, takeBackWords } from './loanWords.js';
@@ -150,12 +150,12 @@ export function TakeBack({ loan, title, startAsking = false, onTaken, hint = tru
           </Line>
         )}
         <div className="ui-btns">
-          <button type="button" className="ui-btn ui-btn--danger" onClick={take} disabled={action.busy}>
+          <BusyButton type="button" className="ui-btn ui-btn--danger" onClick={take} busy={action.busy} busyText="Taking it back…">
             {action.busy ? 'Taking it back…' : w.take}
-          </button>
-          <button type="button" className="ui-btn" onClick={() => setAsking(false)} disabled={action.busy}>
+          </BusyButton>
+          <BusyButton type="button" className="ui-btn" onClick={() => setAsking(false)} busy={action.busy} busyText="Taking it back…">
             {w.keep}
-          </button>
+          </BusyButton>
         </div>
       </div>
     </div>

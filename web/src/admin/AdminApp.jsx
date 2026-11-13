@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useMatch } from 'react-router-dom';
 import { api, formatTime, plural } from '../api.js';
 import { InkFilters, ShopName } from '../look/objects.jsx';
-import { Line, TabRow } from '../look/ui.jsx';
+import { BusyButton, Line, TabRow } from '../look/ui.jsx';
 import { embeddedSite } from '../site.jsx';
 import Activity from './Activity.jsx';
 import FilmDetail from './FilmDetail.jsx';
@@ -26,6 +26,7 @@ const BOOTH_FRESH_MS = 60_000;
 export default function AdminApp() {
   const [state, setState] = useState('checking'); // checking | in | out
   const [signOutError, setSignOutError] = useState(null);
+  const [signingOut, setSigningOut] = useState(false);
   // The shop's name and logo, for the brand, as the server wrote them into the page.
   // A page that saves them (Settings) passes the new ones to setSite.
   const [site, setSite] = useState(embeddedSite);
@@ -100,14 +101,18 @@ export default function AdminApp() {
   // The back office only looks signed out once the server has ended the session. If
   // it never heard, the cookie still works: on a borrowed computer, the next person
   // to open the back office would be in.
+  // A BusyButton while it asks (question 20): a second press sends nothing.
   async function signOut() {
     setSignOutError(null);
+    setSigningOut(true);
     try {
       await api.post('/api/admin/logout');
     } catch {
       setSignOutError('Check your connection and try again.');
+      setSigningOut(false);
       return;
     }
+    setSigningOut(false);
     setState('out');
   }
 
@@ -148,9 +153,9 @@ export default function AdminApp() {
             <a className="ui-nav__item" href="/">
               View the shop
             </a>
-            <button type="button" className="ui-nav__item" onClick={signOut}>
+            <BusyButton type="button" className="ui-nav__item" onClick={signOut} busy={signingOut} busyText="Signing out…">
               Sign out
-            </button>
+            </BusyButton>
           </div>
         </nav>
         <main className="ui-office__main ui-raster admin-main" id="main">
@@ -279,9 +284,9 @@ function Login({ site, onSignedIn }) {
               aria-invalid={error?.wrong || undefined}
             />
           </div>
-          <button className="ui-btn ui-btn--primary ui-btn--wide" disabled={busy || !password}>
+          <BusyButton className="ui-btn ui-btn--primary ui-btn--wide" busy={busy} busyText="Signing in…" disabled={!password}>
             Sign in
-          </button>
+          </BusyButton>
         </form>
       </div>
     </main>
